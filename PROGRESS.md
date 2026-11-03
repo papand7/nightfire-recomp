@@ -31,6 +31,22 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - Graphics styles, first milestone (sdk branch vulkan)
+
+- sdk gpu/style.*: Original, Enhanced, Toon, Retro and mods/presets/*.toml presets, graphics.toml (read again when
+  edited), the settings window's Graphics Style tab (Reset to defaults; unavailable features shown disabled).
+  Format: docs/graphics_styles.md.
+- vulkan.cpp: a scene pass before the first 2D draw on the frame's screen target (HUD and menus untouched): AO, bloom,
+  tone mapping, grading, sharpen, vignette, grain; toon bands, depth and colour outlines, halftone; retro blocks,
+  colour bits, Bayer dither. 3D-only texture filtering overrides; retro vertex snapping (DrawConstants::style, all
+  backends zero it). GPU timestamps in the XBE_PERF lines. An in-engine shot for XBE_PAD_CMD runs.
+- sdk gpu/texture_pack.*: mods/textures/<content hash>.png replacements (any size) and dumps; tested with a 4x picture
+  on the title screen.
+- Tested (RTX 5060, validation on, 0 errors): the styles switched live in Paris gameplay, 60 fps in each. GPU per
+  frame about 2.1 ms in all; scene pass 0.13 ms enhanced, 0.08 toon, 0.06 retro.
+- Not yet: modern lighting, shadows, normal/PBR materials, parallax, tessellation, TAA (need normals, positions and
+  lights from the vertex programs: docs/graphics_styles.md); on-foot levels unchecked.
+
 ### 2026-11-04 - Vulkan renderer, first milestone (sdk branch vulkan)
 
 - `sdk/runtime/gpu/vulkan.cpp`: Vulkan 1.3 backend (renderer = "vulkan", settings window "Vulkan (experimental)"),
