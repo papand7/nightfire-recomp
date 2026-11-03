@@ -50,6 +50,16 @@ grain = 0.15
 Presets are data only: no shaders or scripts are loaded from them. A file that is not TOML or has an unknown base is
 left out, with the reason in the log.
 
+## Shader mod: the scene pass
+
+`mods/shaders/scene_post.hlsl` beside the exe replaces the built-in scene pass (vulkan.cpp, kScenePostHlsl, a good
+starting point) and is read again within a second of a change, so a look can be tuned while playing. It is a
+trusted local mod: HLSL compiled by DXC at run time, nothing else is run. If it does not compile, the log says why
+and the built-in pass draws until the file changes. Interface: entry points `vs` (a full screen triangle, from
+`SV_VertexID`) and `ps`; `cbuffer P : register(b1) { float4 p[8]; }` as listed above kScenePostHlsl (mode, the
+style's values, target size, host pixels per console pixel); `t0` the scene's colour, `t1` its depth (D24, read as
+float; `p[7].x` 0 when there is none), `s0` linear and `s1` point samplers, both clamped.
+
 ## Texture packs
 
 - **Dump**: Graphics Style > Textures > *Dump the game's textures* writes each 2D texture the game uploads, once, to
@@ -63,6 +73,9 @@ left out, with the reason in the log.
 Dumped textures are the game's: keep them out of any public repository.
 
 ## Not available yet
+
+Measured (Vulkan, XBE_PERF): in Paris gameplay all 3D draws, about 450 a frame, are the title's vertex programs; none
+is fixed function. Modern lighting therefore needs the normals recovered from the vertex programs first.
 
 Shown disabled in the menu: modern lighting, new shadows, normal maps and PBR materials, height maps and parallax,
 tessellation, TAA. They need what the console's vertex programs do not hand the renderer: per-pixel normals and

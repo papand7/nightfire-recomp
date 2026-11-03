@@ -31,6 +31,17 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - Graphics styles: on foot, tuning, shader mod
+
+- On foot (The Exchange, reached by pad commands from Paris's failure): all four styles switched live, 60 fps, HUD
+  untouched. Enhanced's filmic curve now keeps mid grey and white (it brightened the night); bloom 0.2 at 0.85;
+  Toon keeps 30% of the texture's own shading, 5 bands.
+- mods/shaders/scene_post.hlsl replaces the scene pass, read again on change; a broken one falls back to the
+  built-in (tested). The settings window driven by scripted presses (Back + Start, d-pad, Reset to defaults saved).
+- D3D12 after the shared vertex shader change: 60 fps in Paris, no shader errors.
+- Paris gameplay: all ~450 3D draws a frame are vertex programs, none fixed function (new XBE_PERF line). Next for
+  modern lighting: recover view-space normals and positions from the vertex programs (shaders.cpp).
+
 ### 2026-11-04 - Graphics styles, first milestone (sdk branch vulkan)
 
 - sdk gpu/style.*: Original, Enhanced, Toon, Retro and mods/presets/*.toml presets, graphics.toml (read again when
