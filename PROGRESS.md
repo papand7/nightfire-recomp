@@ -31,6 +31,22 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - Vulkan renderer, first milestone (sdk branch vulkan)
+
+- `sdk/runtime/gpu/vulkan.cpp`: Vulkan 1.3 backend (renderer = "vulkan", settings window "Vulkan (experimental)"),
+  the D3D11 console path on dynamic rendering and push descriptors; d3d_common's and shaders.cpp's HLSL compiled to
+  SPIR-V by DXC at run time (dxcompiler.dll copied beside the exes; Vulkan-Headers and DXC fetched by CMake), SPIR-V
+  kept in shadercache.bin, VkPipelineCache in pipelinecache_vk.bin. Falls back to D3D12 when it cannot start.
+  Not yet: MSAA, F3 captures, renderer extensions. XBE_VK_DEBUG=1 turns on the validation layer.
+- Tested on Windows (RTX 5060, validation on): title, menus, intro movies, Driving.xbe's Paris mission (movie, van
+  sniper, Aston Martin chase); no validation errors. Paris gameplay 60.0 fps on both Vulkan and D3D12 (XBE_PERF);
+  movies 30 (their own rate).
+- 120 fps: the game waits on the console's 60 Hz vertical blank itself; pacing the host faster (tried) still gives 60.
+  Past 60 needs frame interpolation or game-speed work, not a renderer change.
+- Also: a silent mixer when XAudio2 has no device (a remote session hung in the Paris movie without it), and
+  XBE_PAD_SCRIPT / XBE_PAD_CMD (harness pad scripts on Windows, off by default) for unattended runs.
+- Next: on-foot levels and HUD/menus compared frame by frame with D3D12; MSAA; launcher packaging of dxcompiler.dll.
+
 ### 2026-10-31 - README: graphics settings compared, ultrawide, the menu, Discord
 
 - Harry's 3440x1440 shots (Alpine level) on one spot: the view drifted between them (up to 73 px) and snow and guards
