@@ -34,6 +34,8 @@ void MenuMouse(int port, input::Pad& p);
 void MouseAsStick();
 void AimDownSights(uint32_t count);  // default.xbe: after its pad reader (src/game/aim.cpp)
 bool AimingDownSights();  // player 1, or the gun still on its way back
+void LanFrame();  // default.xbe: each frame, this copy's players for LAN play (src/game/lan_play.cpp)
+bool LanPuppet(uint32_t obj);  // a character another copy's player drives (src/game/lan_play.cpp)
 // LAN play's check that the copies compute the same game (core/netplay.h): default.xbe's players (src/game/netplay.cpp)
 uint64_t NetStateHash();
 bool PlayerFree();  // default.xbe: Bond under the player's own control (not a keypad, a missile, a cutscene)

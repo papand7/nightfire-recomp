@@ -47,7 +47,7 @@ X86_FUNC(sub_000DE720) {
         }
     }
     __imp__sub_000DE720(ctx, base);
-    if (players == kControls) nf::AimDownSights(count);
+    if (players == kControls) nf::AimDownSights(count), nf::LanFrame();
     nf::MouseAsStick();
 }
 

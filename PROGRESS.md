@@ -31,6 +31,22 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - LAN play step 2: client/server network core (NF_LAN)
+- `src/game/lan_play.cpp`: UDP client/server, the host the authority. Each copy plays its own players natively (no
+  input delay) and sends their state 30 times a second; the host relays everyone's state back 30 times a second.
+  Remote players are puppet bots drawn 100 ms in the past, interpolated between snapshots (extrapolated up to 250 ms),
+  on the host's clock (clients ping twice a second). A LAN match's bot count is the number of remote players.
+- Removed NF_LAN_TEST (the step 1 diagnostic: a puppet standing in front of player 1 and following the camera).
+- Puppets no longer shoot: their projectiles are refused at the spawner 0x211F0 (arg 1 the shooter). Blocking the
+  target (0x37C10) alone left bots firing through their animation's fire event (0x17C50 -> 0x18302).
+- The port is retried for 15 s and a client rejoins after 2 s of silence: the game relaunches itself after the title.
+- Tested: two copies on this PC (`.local/vk/lan_match.sh`), each a one-player Quick Game. With NF_LAN_TRACE=1, each
+  copy's puppet stood where the other copy's player was; round trip 3-6 ms. Before the spawner fix, both players were
+  "Defeated by Kiko" (the puppet); after it, no deaths in 75 s.
+- Not done: the map and options are not synced (each copy picks its own), shots/damage/deaths over the network, puppet
+  animation (they slide), players joining mid-match, the server browser and Host Game menus, more than 6 remote
+  players, several players per copy (sent, but untested).
+
 ### 2026-11-04 - Aim down sights (aim_down_sights, on by default)
 - More Settings has an "Aim Down Sights" row (Off/On, the page's tenth shared row). Seen on screen: the row toggles, A keeps it (log "aim down sights 0", settings.toml `aim_down_sights = false`), B leaves it as it was.
 - L (the right mouse button) no longer enters the game's manual aim (view held, red crosshair moved by the stick):
