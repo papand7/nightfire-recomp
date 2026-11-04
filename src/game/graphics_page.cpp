@@ -4,7 +4,7 @@
 // game's own. A keeps the page's values and goes back, B goes back without, as on AV Options.
 //
 // Every row drives a value the renderers use: the quality preset (gpu::ApplyQuality's set: anisotropic filtering,
-// FXAA, ambient occlusion, bloom), the shader style and its options (gpu/style.h, drawn by the Vulkan renderer),
+// FXAA or SMAA, ambient occlusion, bloom), reflections, the shader style and its options (gpu/style.h, drawn by the Vulkan renderer),
 // sharpening, render scale and the renderer itself (app::Settings, saved in settings.toml); the style's values in
 // graphics.toml. What only Vulkan draws reads "Needs Vulkan" under the Direct3D renderers. Changing a value the
 // quality preset sets makes it Custom; choosing a preset sets them all; the style is apart from the preset.
@@ -33,7 +33,8 @@ constexpr uint32_t kEnhPage = 1, kToonPage = 2, kRetroPage = 3;  // which rows t
 // the Graphics page's rows
 constexpr uint32_t kQuality = 0x1000FC21, kStyle = 0x1000FC22, kStyleOptions = 0x1000FC23, kFilter = 0x1000FC24,
                    kAo = 0x1000FC25, kBloom = 0x1000FC26, kAa = 0x1000FC27, kSharpen = 0x1000FC28,
-                   kScale = 0x1000FC29, kRenderer = 0x1000FC2A, kPack = 0x1000FC2B, kDefaults = 0x1000FC2C;
+                   kScale = 0x1000FC29, kRenderer = 0x1000FC2A, kPack = 0x1000FC2B, kDefaults = 0x1000FC2C,
+                   kReflect = 0x1000FC2D;
 // the style pages' rows
 constexpr uint32_t kExposure = 0x1000FC31, kTonemap = 0x1000FC32, kContrast = 0x1000FC33, kSaturation = 0x1000FC34,
                    kVignette = 0x1000FC35, kGrain = 0x1000FC36, kSceneSharpen = 0x1000FC37;
@@ -49,7 +50,8 @@ const std::vector<MenuRow> kGfxRows = {
     {kFilter, nf::kMenuChoice, "Texture Filtering", "How sharp textures stay at an angle: as the game draws them, or anisotropic."},
     {kAo, nf::kMenuChoice, "Ambient Occlusion", "Soft shade in corners and creases, from the scene's depth."},
     {kBloom, nf::kMenuChoice, "Bloom", "A glow around lights and bright surfaces."},
-    {kAa, nf::kMenuChoice, "Anti-Aliasing", "Smooths jagged edges: FXAA on the finished picture, or MSAA on the scene."},
+    {kReflect, nf::kMenuChoice, "Reflections", "Glass mirrors what is on screen (screen-space reflections)."},
+    {kAa, nf::kMenuChoice, "Anti-Aliasing", "SMAA smooths the scene's edges, the HUD stays sharp; FXAA the whole picture."},
     {kSharpen, nf::kMenuChoice, "Sharpening", "Contrast adaptive sharpening of the finished picture."},
     {kScale, nf::kMenuChoice, "Render Scale", "The 3D picture's size against the screen's: lower is faster, higher smoother."},
     {kRenderer, nf::kMenuChoice, "Renderer", "Vulkan draws the styles and effects; changes at the next start."},
@@ -108,6 +110,7 @@ float ReadOption(X86Context& ctx, uint32_t player, uint32_t id, const Options& o
 const Options kOffOn = {{"Off", 0}, {"On", 1}};
 const Options kFilters = {{"As the Game", 0}, {"2x", 2}, {"4x", 4}, {"8x", 8}, {"16x", 16}};
 const Options kAoLevels = {{"Off", 0}, {"Low", 1}, {"High", 2}};
+const Options kReflectLevels = {{"Off", gpu::kReflectOff}, {"Low", gpu::kReflectLow}, {"High", gpu::kReflectHigh}};
 const Options kSharpenLevels = {{"Off", 0}, {"Low", 25}, {"Medium", 50}, {"High", 75}};
 const Options kScales = {{"50%", 50}, {"67%", 67}, {"75%", 75}, {"100%", 100}, {"125%", 125}, {"150%", 150}, {"200%", 200}};
 const Options kExposures = {{"Darker", 0.9f}, {"Normal", 1.05f}, {"Brighter", 1.2f}, {"Bright", 1.35f}};
@@ -135,9 +138,11 @@ const char* kQualityNames[] = {"Low", "Medium", "High", "Ultra", "Custom"};
 
 bool Vulkan() { return gpu::StyleRendererActive(); }
 
-// the anti-aliasing choice: 0 off, 1 FXAA, 2 to 4 MSAA 2x 4x 8x (the Direct3D renderers draw MSAA)
+// the anti-aliasing choice: 0 off, 1 FXAA, 2 to 4 MSAA 2x 4x 8x (the Direct3D renderers draw MSAA), 5 SMAA (Vulkan)
+constexpr uint32_t kAaSmaa = 5;
 std::vector<std::pair<const char*, uint32_t>> AaItems() {
     std::vector<std::pair<const char*, uint32_t>> v = {{"Off", 0}, {"FXAA", 1}};
+    if (Vulkan()) v.push_back({"SMAA", kAaSmaa});
     if (!Vulkan()) v.insert(v.end(), {{"MSAA 2x", 2}, {"MSAA 4x", 3}, {"MSAA 8x", 4}});
     return v;
 }
@@ -181,7 +186,7 @@ void Request(const gpu::GraphicsStyle& st) {
 void EnterGraphics(X86Context& ctx, uint32_t player) {
     const app::Settings& s = app::Get();
     gpu::GraphicsStyle st = Current();
-    g_entered_quality = uint32_t(gpu::MatchQuality(st, s.aniso, s.fxaa));
+    g_entered_quality = uint32_t(gpu::MatchQuality(st, s.aniso, s.fxaa, s.smaa));
     nf::MenuChoice(ctx, player, kQuality,
                    {{"Low", 0}, {"Medium", 1}, {"High", 2}, {"Ultra", 3}, {"Custom", 4}}, g_entered_quality);
     if (Vulkan()) {
@@ -190,13 +195,15 @@ void EnterGraphics(X86Context& ctx, uint32_t player) {
         nf::MenuChoice(ctx, player, kStyle, items, shown);
         ShowOptions(ctx, player, kAo, kAoLevels, float(st.quality_ao));
         ShowOptions(ctx, player, kBloom, kOffOn, st.quality_bloom ? 1.0f : 0.0f);
+        ShowOptions(ctx, player, kReflect, kReflectLevels, float(st.reflections));
     } else {
         nf::MenuChoice(ctx, player, kStyle, {{"Original (Needs Vulkan)", 0xFF}}, 0xFF);
         nf::MenuChoice(ctx, player, kAo, {{"Needs Vulkan", 0xFF}}, 0xFF);
         nf::MenuChoice(ctx, player, kBloom, {{"Needs Vulkan", 0xFF}}, 0xFF);
+        nf::MenuChoice(ctx, player, kReflect, {{"Needs Vulkan", 0xFF}}, 0xFF);
     }
     ShowOptions(ctx, player, kFilter, kFilters, float(s.aniso));
-    uint32_t aa = s.msaa && !Vulkan() ? 1 + std::min<uint32_t>(s.msaa, 3) : s.fxaa ? 1 : 0;
+    uint32_t aa = s.msaa && !Vulkan() ? 1 + std::min<uint32_t>(s.msaa, 3) : s.smaa && Vulkan() ? kAaSmaa : s.fxaa ? 1 : 0;
     nf::MenuChoice(ctx, player, kAa, AaItems(), aa);
     ShowOptions(ctx, player, kSharpen, kSharpenLevels, float(s.sharpen));
     ShowOptions(ctx, player, kScale, kScales, float(s.render_percent));
@@ -226,27 +233,30 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
             st.preset = presets[style].name;
             st.quality = keep.quality, st.quality_ao = keep.quality_ao, st.quality_bloom = keep.quality_bloom;
             st.texture_pack = keep.texture_pack, st.dump_textures = keep.dump_textures;
+            st.reflection_strength = keep.reflection_strength, st.reflections_auto = keep.reflections_auto;
         }
         st.quality_ao = int(ReadOption(ctx, player, kAo, kAoLevels));
         st.quality_bloom = ReadOption(ctx, player, kBloom, kOffOn) > 0;
+        st.reflections = int(ReadOption(ctx, player, kReflect, kReflectLevels));
         st.texture_pack = ReadOption(ctx, player, kPack, kOffOn) > 0;
     }
-    bool fxaa = aa == 1;
+    bool fxaa = aa == 1, smaa = Vulkan() ? aa == kAaSmaa : app::Get().smaa;
     uint32_t msaa = aa >= 2 && aa <= 4 ? aa - 1 : 0;
     // a preset chosen here sets its rows, whatever they show; else the rows make the preset (or Custom)
     if (quality != g_entered_quality && quality < uint32_t(gpu::kQualityCustom)) {
         int ao;
         bool bloom;
-        gpu::QualityValues(int(quality), aniso, fxaa, ao, bloom);
+        gpu::QualityValues(int(quality), aniso, fxaa, smaa, ao, bloom);
         if (fxaa) msaa = 0;
         if (Vulkan()) st.quality_ao = ao, st.quality_bloom = bloom;
     }
-    st.quality = gpu::MatchQuality(st, aniso, fxaa);
+    st.quality = gpu::MatchQuality(st, aniso, fxaa, smaa);
     {
         std::lock_guard<std::recursive_mutex> lock(app::UiLock());
         app::Settings& s = app::Get();
         s.aniso = aniso;
         s.fxaa = fxaa;
+        s.smaa = smaa;
         if (!Vulkan()) s.msaa = msaa;
         s.sharpen = sharpen;
         s.render_percent = scale;
@@ -254,10 +264,10 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
         app::Save();
     }
     Request(st);
-    LOGR("nightfire: Graphics kept: quality %s, style %s, filtering %u, AO %d, bloom %d, FXAA %d, sharpen %u, scale "
-         "%u%%, renderer %u, packs %d",
+    LOGR("nightfire: Graphics kept: quality %s, style %s, filtering %u, AO %d, bloom %d, reflections %d, FXAA %d, "
+         "SMAA %d, sharpen %u, scale %u%%, renderer %u, packs %d",
          kQualityNames[st.quality], st.preset.empty() ? "edited" : st.preset.c_str(), aniso, st.quality_ao,
-         st.quality_bloom, fxaa, sharpen, scale, renderer, st.texture_pack);
+         st.quality_bloom, st.reflections, fxaa, smaa, sharpen, scale, renderer, st.texture_pack);
 }
 
 void RestoreDefaults(X86Context& ctx, uint32_t player) {
@@ -269,9 +279,10 @@ void RestoreDefaults(X86Context& ctx, uint32_t player) {
         std::lock_guard<std::recursive_mutex> lock(app::UiLock());
         app::Settings& s = app::Get();
         app::Settings d;
-        s.aniso = d.aniso, s.fxaa = d.fxaa, s.msaa = d.msaa, s.sharpen = d.sharpen, s.render_percent = d.render_percent;
+        s.aniso = d.aniso, s.fxaa = d.fxaa, s.smaa = d.smaa, s.msaa = d.msaa, s.sharpen = d.sharpen,
+        s.render_percent = d.render_percent;
         app::Save();
-        st.quality = gpu::MatchQuality(st, s.aniso, s.fxaa);
+        st.quality = gpu::MatchQuality(st, s.aniso, s.fxaa, s.smaa);
     }
     Request(st);
     // the rows show it (the request is taken at the next frame: the page is filled from the values set here)

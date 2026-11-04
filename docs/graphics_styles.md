@@ -31,6 +31,7 @@ look). Every value is clamped to its range; unknown keys and wrong types are log
 | `bands` 2-12, `outline` 0-6 (console pixels), `outline_color` [r, g, b] 0-1, `internal_edges`, `edge_threshold` 0.02-1, `halftone` 0-1 | toon |
 | `pixel` 1-8, `color_bits` 2-8, `dither`, `retro_tint` 0-1, `vertex_snap` | retro |
 | `texture_pack`, `dump_textures` | texture packs, below |
+| `reflections` (`off`, `low`, `high`), `reflection_strength` 0-1, `reflections_auto` | reflections, below |
 
 ## Custom presets
 
@@ -56,9 +57,42 @@ left out, with the reason in the log.
 starting point) and is read again within a second of a change, so a look can be tuned while playing. It is a
 trusted local mod: HLSL compiled by DXC at run time, nothing else is run. If it does not compile, the log says why
 and the built-in pass draws until the file changes. Interface: entry points `vs` (a full screen triangle, from
-`SV_VertexID`) and `ps`; `cbuffer P : register(b1) { float4 p[8]; }` as listed above kScenePostHlsl (mode, the
+`SV_VertexID`) and `ps`; `cbuffer P : register(b1) { float4 p[10]; }` as listed above kScenePostHlsl (mode, the
 style's values, target size, host pixels per console pixel); `t0` the scene's colour, `t1` its depth (D24, read as
-float; `p[7].x` 0 when there is none), `s0` linear and `s1` point samplers, both clamped.
+float; `p[7].x` 0 when there is none), `t2` and `t3` the reflection mask and its depth (`p[8].x` 0 when there is
+none), `s0` linear and `s1` point samplers, both clamped.
+
+## Reflections
+
+Graphics Style > **Reflections**, or the game's Graphics page > Reflections (Off, Low, High). Screen-space
+reflections, drawn in every style but Retro (Original takes them without the rest of the scene pass):
+
+- **Which surfaces**: each reflective draw is drawn a second time into a mask (its own vertex and pixel shader, so
+  its coverage and alpha test hold) with its depth, the nearest reflective surface kept. Found by itself
+  (`reflections_auto`): alpha-blended (source alpha, one less source alpha), depth-tested 3D draws whose texture's
+  alpha is see-through all over and even, as window glass is (a smoke puff's or a leaf's alpha spans the range, a
+  cut-out's is 0 or 1). Listed: `mods/reflections.toml` beside the exe, read again within a second of a change:
+
+  ```toml
+  [textures]
+  "0123456789abcdef" = 0.7   # a texture's key (as mods/textures/dump names it) = its strength 0-1
+  "fedcba9876543210" = 0     # 0: never reflects, even when found as glass
+  ```
+
+  A listed texture drawn opaque (a polished floor) reflects all over; a blended one where its alpha covers.
+- **How**: in the scene pass, from each pixel of the mask a ray mirrored about the surface's slope (from the mask's
+  depth) is marched through the scene's depth, 20 steps (Low) or 48 (High), and what it meets is mixed in, more at a
+  grazing view. The view angle is taken as 60 degrees vertical; the game's own is in its matrices.
+- **Limits**: only what is on screen can be mirrored (a reflection fades towards the picture's edges, and what is
+  behind the camera or hidden behind something is not there); no sky or environment fallback; a mod's
+  `scene_post.hlsl` draws none unless it reads the mask (`t2`, `t3`, `p[8]`, `p[9]` as listed above kScenePostHlsl).
+
+## SMAA
+
+Settings window > Graphics > **SMAA**, or the game's Graphics page > Anti-Aliasing > SMAA (Vulkan). SMAA 1x (Ultra
+preset, luma edges; Jimenez et al., MIT, fetched by the build) over the 3D scene before the HUD, so text and HUD stay
+sharp, unlike FXAA, which is drawn over the finished picture. Not drawn in Retro. Quality High and Ultra take SMAA
+under Vulkan, FXAA under Direct3D.
 
 ## Texture packs
 

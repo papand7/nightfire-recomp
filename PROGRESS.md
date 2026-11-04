@@ -31,6 +31,25 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - Reflections, SMAA, W-buffer depth in the scene pass
+
+- Screen-space reflections (Vulkan; Off/Low/High in the game's Graphics page and the settings window; graphics.toml
+  reflections, reflection_strength, reflections_auto). Reflective draws are drawn again into an RGBA16F mask with
+  their own shaders (coverage, the distance and its screen gradient from the interpolated W, so the slope is exact);
+  the scene pass marches a mirrored ray through the depth. Found by themselves: window glass (blended, a texture whose
+  alpha is evenly see-through) and metal (draws the game gives an environment cube map); mods/reflections.toml lists
+  more by texture key. Test switch XBE_SSR_TEST: 1 every opaque surface reflects, 2 the mask, 3 the slopes, 4 ray hits.
+- Learned: NightFire alpha-blends nearly all world geometry (opaque textures, blending left on), so "opaque" comes
+  from the texture's alpha; and its depth is a W-buffer (linear, whole units). The scene pass read every depth as
+  perspective Z, which made all distances nearly equal: AO and Toon's depth outlines were doing next to nothing. Now
+  read as W (viewz); AO's effect after the fix not yet compared in a still scene.
+- SMAA 1x (Ultra, luma edges; iryoku/smaa fetched by CMake, MIT, notice in THIRD_PARTY.txt) on the scene before the HUD;
+  Anti-Aliasing > SMAA; quality High/Ultra take SMAA under Vulkan, FXAA under Direct3D. "SMAA ready" in the log, no
+  validation run yet.
+- Evidence: captures/ (private) mask, slope and hit views in Fort Knox MP; test mode on the Paris road mirrors the lamps.
+  Glass auto-detection not yet seen on real glass (none in the rooms reached).
+- Next: a level with windows to tune the glass rule; AO before/after in a still scene; validation layers run.
+
 ### 2026-11-04 - Split screen checked
 
 - Multiplayer split screen works on Vulkan: Join Game, codenames, Quick Game, 2 and 4 player matches at 60 fps, each
