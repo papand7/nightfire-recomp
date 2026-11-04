@@ -31,6 +31,15 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - Soft particles (optional)
+
+- New option soft_particles (settings window > Particles; Graphics page > Particles: Original / Soft; graphics.toml):
+  blended 3D draws that test but do not write depth are drawn with a variant of their pixel shader that fades them
+  where the scene behind is near, against a copy of the depth target made at the frame's first one (the copy is
+  bound to a texture stage the draw leaves free). Alpha blended: alpha faded; added: colour and alpha.
+- Tested (The Exchange, Vulkan): 76-91 particle draws a frame made soft, 60.0 frames a second, no validation errors.
+  Not yet seen side by side on smoke against a wall (the scripted route reaches no smoke).
+
 ### 2026-11-04 - HD texture packs made on the player's PC (hd_pack)
 
 - New tool sdk/tools/hd_pack (tools\hd_pack.exe beside the game, with Real-ESRGAN's ncnn Vulkan build and its

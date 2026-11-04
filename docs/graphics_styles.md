@@ -87,6 +87,16 @@ reflections, drawn in every style but Retro (Original takes them without the res
   behind the camera or hidden behind something is not there); no sky or environment fallback; a mod's
   `scene_post.hlsl` draws none unless it reads the mask (`t2`, `t3`, `p[8]`, `p[9]` as listed above kScenePostHlsl).
 
+## Particles
+
+Graphics Style > **Particles**, or the game's Graphics page > Particles (Original, Soft); graphics.toml
+`soft_particles`, `particle_fade` (0.005-0.2, the fade's depth in parts of the particle's distance). Vulkan, every style
+but Retro. A particle is a 3D draw blended over the scene (alpha blended, or added) that tests depth but does not
+write it, and is no glass or reflective surface; it is drawn with its own pixel shader, faded where the scene behind
+is near (the depth target copied once a frame at the first one; a W-buffer read as the distance), so smoke, flashes
+and sparks melt into walls and floors instead of cutting through them in hard lines. Their pictures are upgraded as
+any texture is, by the texture pack (hd_pack). More or longer-lived particles need the game's own code (not yet).
+
 ## SMAA
 
 Settings window > Graphics > **SMAA**, or the game's Graphics page > Anti-Aliasing > SMAA (Vulkan). SMAA 1x (Ultra
@@ -115,7 +125,8 @@ levels to upgrade (a movie's frames, pictures that change within a second, are n
 tools\hd_pack.exe [--scale 2|4] [--pbr] [--model x4plus|anime] [--force]
 ```
 
-Each dumped picture is upscaled 4x by Real-ESRGAN (`toolsealesrgan`, its ncnn Vulkan build: any Vulkan GPU, no
+Each dumped picture is upscaled 4x by Real-ESRGAN (`tools
+ealesrgan`, its ncnn Vulkan build: any Vulkan GPU, no
 install) in one run, padded with its own opposite edges first so repeating textures meet without seams, its alpha
 upscaled apart; `--scale 2` halves the result. `--pbr` adds `<key>_n.png` (normal map, height in alpha) and
 `<key>_r.png` (roughness) generated from the picture. Pictures already done are skipped, so it can be run again after

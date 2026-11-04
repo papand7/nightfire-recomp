@@ -42,7 +42,7 @@ constexpr uint32_t kEnhPage = 1, kToonPage = 2, kRetroPage = 3, kMorePage = 4;  
 constexpr uint32_t kQuality = 0x1000FC21, kStyle = 0x1000FC22, kStyleOptions = 0x1000FC23, kFilter = 0x1000FC24,
                    kAo = 0x1000FC25, kBloom = 0x1000FC26, kAa = 0x1000FC27, kSharpen = 0x1000FC28,
                    kScale = 0x1000FC29, kRenderer = 0x1000FC2A, kPack = 0x1000FC2B, kDefaults = 0x1000FC2C,
-                   kReflect = 0x1000FC2D;
+                   kReflect = 0x1000FC2D, kParticles = 0x1000FC2E;
 // the style pages' rows
 constexpr uint32_t kExposure = 0x1000FC31, kTonemap = 0x1000FC32, kContrast = 0x1000FC33, kSaturation = 0x1000FC34,
                    kVignette = 0x1000FC35, kGrain = 0x1000FC36, kSceneSharpen = 0x1000FC37;
@@ -63,6 +63,7 @@ const std::vector<MenuRow> kGfxRows = {
     {kAo, nf::kMenuChoice, "Ambient Occlusion", "Soft shade in corners and creases, from the scene's depth."},
     {kBloom, nf::kMenuChoice, "Bloom", "A glow around lights and bright surfaces."},
     {kReflect, nf::kMenuChoice, "Reflections", "Glass mirrors what is on screen (screen-space reflections)."},
+    {kParticles, nf::kMenuChoice, "Particles", "Soft: smoke, flashes and sparks fade into walls instead of cutting."},
     {kAa, nf::kMenuChoice, "Anti-Aliasing", "SMAA smooths the scene's edges, the HUD stays sharp; FXAA the whole picture."},
     {kSharpen, nf::kMenuChoice, "Sharpening", "Contrast adaptive sharpening of the finished picture."},
     {kScale, nf::kMenuChoice, "Render Scale", "The 3D picture's size against the screen's: lower is faster, higher smoother."},
@@ -230,11 +231,13 @@ void EnterGraphics(X86Context& ctx, uint32_t player) {
         ShowOptions(ctx, player, kAo, kAoLevels, float(st.quality_ao));
         ShowOptions(ctx, player, kBloom, kOffOn, st.quality_bloom ? 1.0f : 0.0f);
         ShowOptions(ctx, player, kReflect, kReflectLevels, float(st.reflections));
+        Choice(ctx, player, kParticles, {{"Original", 0}, {"Soft", 1}}, st.soft_particles ? 1 : 0);
     } else {
         Choice(ctx, player, kStyle, {{"Original (Needs Vulkan)", 0xFF}}, 0xFF);
         Choice(ctx, player, kAo, {{"Needs Vulkan", 0xFF}}, 0xFF);
         Choice(ctx, player, kBloom, {{"Needs Vulkan", 0xFF}}, 0xFF);
         Choice(ctx, player, kReflect, {{"Needs Vulkan", 0xFF}}, 0xFF);
+        Choice(ctx, player, kParticles, {{"Needs Vulkan", 0xFF}}, 0xFF);
     }
     ShowOptions(ctx, player, kFilter, kFilters, float(s.aniso));
     uint32_t aa = s.msaa && !Vulkan() ? 1 + std::min<uint32_t>(s.msaa, 3) : s.smaa && Vulkan() ? kAaSmaa : s.fxaa ? 1 : 0;
@@ -268,10 +271,12 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
             st.quality = keep.quality, st.quality_ao = keep.quality_ao, st.quality_bloom = keep.quality_bloom;
             st.texture_pack = keep.texture_pack, st.dump_textures = keep.dump_textures;
             st.reflection_strength = keep.reflection_strength, st.reflections_auto = keep.reflections_auto;
+            st.soft_particles = keep.soft_particles, st.particle_fade = keep.particle_fade;
         }
         st.quality_ao = int(ReadOption(ctx, player, kAo, kAoLevels));
         st.quality_bloom = ReadOption(ctx, player, kBloom, kOffOn) > 0;
         st.reflections = int(ReadOption(ctx, player, kReflect, kReflectLevels));
+        st.soft_particles = ChoiceValue(ctx, player, kParticles) == 1;
         st.texture_pack = ReadOption(ctx, player, kPack, kOffOn) > 0;
     }
     bool fxaa = aa == 1, smaa = Vulkan() ? aa == kAaSmaa : app::Get().smaa;
