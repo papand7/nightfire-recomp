@@ -14,6 +14,7 @@ extern bool skip_intro;
 extern bool rounded_font;  // the fonts drawn from Sour Gummy Black, not the game's letters (src/common/fonts.cpp)
 extern bool skip_paris;  // a new game's START goes to the menus, not into Paris (src/game/start.cpp)
 extern bool hide_hud;  // no HUD, for screenshots (src/game/hud.cpp, src/driving/hud.cpp)
+extern bool aim_down_sights;  // L raises the gun and zooms in, not the game's manual aim (src/game/aim.cpp)
 extern uint32_t fov_percent;  // the 3D views' field of view, percent of the game's (src/game/view.cpp, src/driving/view.cpp)
 float Ultrawide();            // how much wider than 16:9 the frame is shown, 1 on a 16:9 or 4:3 screen
 float FovScale();             // fov_percent as a factor, 0.5 to 1.5
@@ -31,6 +32,8 @@ void MenuCursor(int size, std::vector<uint32_t>& bgra, int& hot_x, int& hot_y); 
 std::vector<achievements::Def> AchievementSet();  // src/common/achievement_set.cpp
 void MenuMouse(int port, input::Pad& p);
 void MouseAsStick();
+void AimDownSights(uint32_t count);  // default.xbe: after its pad reader (src/game/aim.cpp)
+bool AimingDownSights();  // player 1, or the gun still on its way back
 // LAN play's check that the copies compute the same game (core/netplay.h): default.xbe's players (src/game/netplay.cpp)
 uint64_t NetStateHash();
 bool PlayerFree();  // default.xbe: Bond under the player's own control (not a keypad, a missile, a cutscene)

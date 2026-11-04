@@ -97,7 +97,7 @@ constexpr uint32_t kZoomTarget = 0x864, kZoomMost = 0x868;  // the player's; the
 
 void WheelZoom(uint32_t actor) {
     int notches = g_zoom_notches.exchange(0);
-    if (!notches || ViewZoom() >= kZoomedBelow) return;
+    if (!notches || !nf::Zoomed()) return;
     float most = std::min(GetF(actor + kZoomMost), 50.0f);
     if (!(most > 1.0f)) return;  // a sight that does not zoom
     float target = std::clamp(GetF(actor + kZoomTarget) * std::pow(kNotchStep, float(notches)), 1.0f, most);
@@ -124,7 +124,7 @@ X86_FUNC(sub_000A9CF0) {
     kernel::G<uint8_t>(actor + kLooked) = 1;  // looking, as 0xB7610 marks the stick's: else the view eases back level
     if (x == 0 && y == 0) return;
     float zoom = ViewZoom();
-    bool zoomed = zoom < kZoomedBelow;
+    bool zoomed = nf::Zoomed();  // aiming down the sights: slower as zoomed in, not a scope's quarter more
     static bool was_zoomed = false;
     if (zoomed != was_zoomed) {
         was_zoomed = zoomed;
@@ -145,7 +145,7 @@ namespace nf {
 // Bond under the player's own control on foot (0xA9CF0 turned player 1 within two frames): not at a keypad, steering
 // a missile or a turret, in a cutscene
 bool PlayerFree() { return g_direct <= 2; }
-bool Zoomed() { return ViewZoom() < kZoomedBelow; }
+bool Zoomed() { return ViewZoom() < kZoomedBelow && !AimingDownSights(); }
 void ScopeZoom(int notches) { g_zoom_notches += notches; }
 
 // after 0xDE720 filled the controls: where the mouse does not turn the player itself, it plays the right stick

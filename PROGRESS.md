@@ -31,6 +31,19 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - Aim down sights (aim_down_sights, on by default)
+- L (the right mouse button) no longer enters the game's manual aim (view held, red crosshair moved by the stick):
+  `src/game/aim.cpp` clears the controls' slot 19 after 0xDE720, so the weapon state's manual-aim bit never sets and
+  shots go through the middle. Instead the zoom target is 1.3 (0xB7190), the first person gun is moved to the middle
+  after 0xBD740 (eased in and out) and the crosshair sprite is hidden (0xB6190). Scoped weapons keep the game's scope.
+  The mouse slows by the zoom only (not a scope's extra quarter) and the wheel does not zoom while aiming.
+- Option `aim_down_sights` in the settings window and settings.toml (`NF_ADS=0/1`); a More Settings row exists but is
+  uncommitted with the menu colours work. `NF_ADS_TEST=1` aims player 1 for 240 frames of each 480.
+- Evidence: split-screen Quick Game: aiming zooms in, the crosshair goes, the pistol sits centred just below the middle;
+  off, the red manual-aim crosshair is back. Not yet seen in a full-screen single player level with a gun, nor with
+  the toggle option (controls +3) or a controller.
+- Next: tune the gun offset per weapon if some sit badly.
+
 ### 2026-11-04 - LAN play, step 1: a bot driven from outside (puppet)
 - Plan (the user's): host-authoritative LAN play, a server browser and Host Game in the game's own menus, more than
   4 players, several local split-screen players joining one server. Remote players will be the match's bot
