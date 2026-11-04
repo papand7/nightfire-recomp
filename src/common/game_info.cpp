@@ -231,4 +231,6 @@ const app::GameInfo app::kGame = {
     .default_keys = Keys,                 // a shooter's keys on foot, a driving layout in Driving.xbe
     .texture_bound = TextureBound,        // the button pictures as the keys, the fonts with smooth edges
     // optional, after these: .wheel (what a steering wheel's force feedback follows)
+    .menu_up = nf::MenuUp,                // the menus: the cursor shown, the mouse a pointer (src/common/menu_mouse.cpp)
+    .menu_cursor = nf::MenuCursor,        // its picture: the menus' orange pointer
 };

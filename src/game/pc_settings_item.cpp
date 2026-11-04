@@ -14,6 +14,8 @@
 // (.local/menu_re.md has the record formats and how they were found.)
 #include <cstring>
 #include <mutex>
+#include <atomic>
+#include <unordered_map>
 #include <vector>
 
 #include "app/app.h"
@@ -22,6 +24,7 @@
 #include "kernel/memory.h"
 #include "xdk/hle.h"
 #include "game/menu_page.h"
+#include "common/nightfire.h"
 
 namespace nf {
 bool PcPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint32_t msg, uint32_t arg);  // pc_settings_page
@@ -244,10 +247,71 @@ uint32_t Patched(uint32_t stream) {
 }
 }  // namespace
 
+// ---- the menus' geometry for the mouse: every widget record of every page of the files the builder has read
+namespace {
+std::mutex g_geo_lock;
+std::unordered_map<uint32_t, std::vector<nf::MenuWidget>> g_geo;  // page id to its widgets
+uint32_t g_geo_stream = 0, g_geo_len = 0;
+std::atomic<uint32_t> g_page_widget{0}, g_page_id{0};  // the page last entered (message 0x4C)
+
+void Learn(uint32_t stream) {
+    uint32_t at = 4;
+    for (;;) {
+        uint32_t op = R32(stream + at);
+        if (op == kOpEnd) break;
+        uint32_t n = RecordSize(op);
+        if (!n || at > 0x400000) return;
+        at += n;
+    }
+    if (stream == g_geo_stream && at == g_geo_len) return;
+    g_geo_stream = stream, g_geo_len = at;
+    std::vector<uint8_t> b(at);
+    std::memcpy(b.data(), kernel::HostPtr(stream), at);
+    std::lock_guard lock(g_geo_lock);
+    uint32_t page = 0;
+    nf::MenuWidget* last = nullptr;
+    for (size_t p = 4; p + 4 <= b.size();) {
+        uint32_t op = Get32(b, p), n = RecordSize(op);
+        if (!n) break;
+        if (op == kOpPage) {
+            page = Get32(b, p + 4);
+            g_geo[page].clear();
+            last = nullptr;
+        } else if (op == kOpWidget && page) {
+            int16_t v[4];
+            std::memcpy(v, &b[p + 0xA], 8);
+            g_geo[page].push_back({Get32(b, p + 4), b[p + 8], v[0], v[1], v[2], v[3], 0});
+            last = &g_geo[page].back();
+        } else if (op == kOpAttr && last && b[p + 4] == kMsgAddText) {
+            last->entries++;
+        }
+        p += n;
+    }
+}
+}  // namespace
+
+namespace nf {
+bool MenuGeometry(uint32_t& page, std::vector<MenuWidget>& widgets, uint32_t& focused) {
+    // the page the game last entered (its 0x4C, in the dispatcher below); the menu context's +0x1B8 keeps the
+    // pause screen's and level pages' ids, not the front end's
+    page = g_page_id;
+    uint32_t w = g_page_widget;
+    if (!w || w >= 0x84000000u) return false;
+    uint32_t f = R32(w + 0xAC);  // the focused widget (0x959E0 reads it there)
+    focused = f && f < 0x84000000u ? R32(f + 0x18) : 0;
+    std::lock_guard lock(g_geo_lock);
+    auto it = g_geo.find(page);
+    if (it == g_geo.end()) return false;
+    widgets = it->second;
+    return true;
+}
+}  // namespace nf
+
 // the page builder (cdecl, 7 arguments): it reads [0x25FB08] only while it runs
 X86_EXTERN_FUNC(__imp__sub_00093960);
 X86_FUNC(sub_00093960) {
     uint32_t stream = R32(kStreamPtr), copy = stream ? Patched(stream) : 0;
+    if (copy || stream) Learn(copy ? copy : stream);
     if (copy) W32(kStreamPtr, copy);
     __imp__sub_00093960(ctx, base);
     if (copy) W32(kStreamPtr, stream);
@@ -257,6 +321,10 @@ X86_FUNC(sub_00093960) {
 X86_EXTERN_FUNC(__imp__sub_0008E320);
 X86_FUNC(sub_0008E320) {
     uint32_t widget = R32(ctx.esp + 8), message = R32(ctx.esp + 0xC);
+    if (widget && message == 0x4C && (R32(widget + 0x18) >> 28) == 4) {  // a page entered: the mouse's geometry
+        g_page_widget = widget;
+        g_page_id = R32(widget + 0x18);
+    }
     if (widget && (nf::PcPageMessage(ctx, R32(ctx.esp + 4) & 0xFF, widget, message, R32(ctx.esp + 0x14)) ||
                    nf::GraphicsPageMessage(ctx, R32(ctx.esp + 4) & 0xFF, widget, message, R32(ctx.esp + 0x14)))) {
         ctx.eax = 1;

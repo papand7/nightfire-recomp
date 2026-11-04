@@ -11,6 +11,8 @@ extern const bool kDriving = true;
 // EA's in-game menus (Paused and its tabs, Mission Failed, the controller-removed menu): the HUD's byte +0x2B0, set
 // by 0xDCAE0 (0xDCBBB) when one opens (START 0xE0278, a pad removed 0xE00F0, the mission's end 0xDF2E0) and cleared
 // at 0xD9091 (.local/driving_input_re.md)
+bool MenuGeometry(uint32_t&, std::vector<MenuWidget>&, uint32_t&) { return false; }
+
 bool MenuUp() {
     uint32_t hud = kernel::R32(0x23F44C);
     return hud && kernel::G<uint8_t>(hud + 0x2B0) != 0;

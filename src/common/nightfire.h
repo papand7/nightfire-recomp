@@ -17,6 +17,15 @@ float Ultrawide();            // how much wider than 16:9 the frame is shown, 1 
 float FovScale();             // fov_percent as a factor, 0.5 to 1.5
 // a menu has the controller (each exe's hooks.cpp): the mouse then plays A, B and the d-pad (MenuMouse)
 bool MenuUp();
+// the menu up's widgets as its menu file lays them out (640 x 480, the console's 2D) and the one focused, for the
+// mouse (default.xbe: src/game/pc_settings_item.cpp; Driving.xbe's EA menus have none: false)
+struct MenuWidget {
+    uint32_t id, type;
+    int16_t x, y, w, h;
+    uint32_t entries;  // a list's text entries in the file (the pause screen's choices), 0 for others
+};
+bool MenuGeometry(uint32_t& page, std::vector<MenuWidget>& widgets, uint32_t& focused);
+void MenuCursor(int size, std::vector<uint32_t>& bgra, int& hot_x, int& hot_y);  // GameInfo::menu_cursor
 std::vector<achievements::Def> AchievementSet();  // src/common/achievement_set.cpp
 void MenuMouse(int port, input::Pad& p);
 void MouseAsStick();

@@ -47,3 +47,23 @@ reflections, refresh rate, gamma.
 - **Page limit**: the front end's file takes three pages more than its own (PC Settings + two); a fourth crashed the
   menu code on the first page change (a null write under 0x8F3F0). Enhanced, Toon and Retro options therefore share
   one page: their rows sit on the same lines and the others are hidden with 0x2B.
+
+## The mouse in the menus
+
+src/common/menu_mouse.cpp. While a menu is up (GameInfo::menu_up) the mouse is a pointer: the cursor shown (an
+orange arrow, GameInfo::menu_cursor, sized to the window) and free; in play it is hidden and held for mouse look.
+Each page's rows are its menu file's widget records (nf::MenuGeometry: learned in the builder hook, the page from
+the game's 0x4C "entered" message, the focused widget at the page widget + 0xAC), in the console's 640 x 480; the
+cursor is mapped there through the shown frame (app::FramePoint). Hovering a row presses the d-pad a step at a time
+until the game's own focus is there (its highlight, sound and help line); a page with nothing focused yet gets one
+press to wake it. Left click: A on an item or button, left or right on a choice's or slider's value (the side of its
+middle clicked); on a label, focus only. Right click: B. Wheel: the d-pad. Moving the d-pad hands the focus back to
+it until the mouse moves again.
+
+Tested (scripted pointer, XBE_PAD_CMD's `PTR x y`, `CLICKL`, `CLICKR`): main menu hover and click into PC Settings,
+PC Settings to Graphics, a value changed by a click, right click back without keeping.
+
+Not yet: a list is one widget (the pause screen's choices, codename and mission lists: hovering focuses the list,
+the wheel moves through it, a click is A on its chosen entry); sliders change a step a click (no dragging);
+Driving.xbe's EA menus have no geometry (left click A on what is focused, as before); the cursor itself is the
+system's and does not show in in-engine shots.
