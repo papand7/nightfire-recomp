@@ -3,6 +3,7 @@
 // levels; Driving.xbe: EA's front end and the driving levels)
 #include <cstdint>
 
+#include <string>
 #include <vector>
 
 #include "core/achievements.h"
@@ -36,6 +37,18 @@ void MenuMouse(int port, input::Pad& p);
 void MouseAsStick();
 void AimDownSights(uint32_t count);  // default.xbe: after its pad reader (src/game/aim.cpp)
 bool AimingDownSights();  // player 1, or the gun still on its way back
+// LAN play from the menus (src/game/lan_play.cpp): hosts found on this network, hosting, joining, leaving
+struct LanServer {
+    std::string label;  // "PC - map, players"
+    uint32_t ip;        // network order
+    uint16_t port;
+};
+void NetSearch(bool on);
+std::vector<LanServer> NetServers();
+void NetHost();
+void NetJoin(uint32_t ip, uint16_t port);
+void NetStop();
+bool NetOn();
 void LanFrame(X86Context& ctx);  // default.xbe: each frame, this copy's players for LAN play (src/game/lan_play.cpp)
 bool LanPuppet(uint32_t obj);  // a character another copy's player drives (src/game/lan_play.cpp)
 // LAN play's check that the copies compute the same game (core/netplay.h): default.xbe's players (src/game/netplay.cpp)

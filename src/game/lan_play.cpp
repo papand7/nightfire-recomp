@@ -20,6 +20,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <deque>
@@ -78,7 +79,7 @@ int SlotOf(uint32_t obj) {
 // ---- the network --------------------------------------------------------------------------------------------------
 
 constexpr uint32_t kMagic = 0x314C464E;  // "NFL1"
-enum : uint8_t { kHello = 1, kWelcome, kState, kSnap, kPing, kPong, kInfo, kLobby };
+enum : uint8_t { kHello = 1, kWelcome, kState, kSnap, kPing, kPong, kInfo, kLobby, kQuery, kServer };
 constexpr uint16_t kPort = 27787;
 constexpr int kRate = 30;                // states and snapshots a second
 constexpr int64_t kDelay = 100;          // ms in the past remote players are drawn
@@ -100,6 +101,12 @@ struct Named {          // a player in the lobby: who and as what
     char name[16];
 };
 constexpr uint32_t kSettings = 0x260030, kSettingsSize = 0x40;  // the match's options (the MP block's, 0x260030-6F)
+struct ServerInfo {     // a host's answer to a search (kQuery, broadcast to the port)
+    char host[24];      // the PC's name
+    char map[24];
+    uint8_t players, pad;
+    uint16_t port;
+};
 struct Header {
     uint32_t magic;
     uint8_t type, peer, count, pad;
@@ -138,6 +145,10 @@ uint8_t g_settings[kSettingsSize];
 bool g_have_settings = false;
 uint32_t g_starts = 0;                    // the host's count of matches started from the lobby
 std::atomic<bool> g_send_now{false};
+std::string g_server_name, g_map_name;    // the host's PC and the lobby's map (its answer to a search)
+uint16_t g_port = 0;
+std::atomic<bool> g_quit{false};
+std::thread g_thread;
 
 #ifdef _WIN32
 SOCKET g_sock = INVALID_SOCKET;
@@ -207,6 +218,19 @@ void Receive() {
         Header h;
         std::memcpy(&h, buf, sizeof h);
         if (h.magic != kMagic) continue;
+        if (h.type == kQuery) {
+            if (!g_host) continue;
+            ServerInfo info{};
+            std::lock_guard<std::mutex> lock(g_lock);
+            std::strncpy(info.host, g_server_name.c_str(), sizeof info.host - 1);
+            std::strncpy(info.map, g_map_name.c_str(), sizeof info.map - 1);
+            size_t players = g_local_names.size();
+            for (auto& [peer, names] : g_infos)
+                if (g_clients.count(peer)) players += names.size();
+            info.players = uint8_t(players), info.port = g_port;
+            SendRaw(from, kServer, &info, sizeof info, 1);
+            continue;
+        }
         if (h.type == kInfo || h.type == kLobby) {
             std::lock_guard<std::mutex> lock(g_lock);
             const char* p = buf + sizeof h;
@@ -285,7 +309,7 @@ void Receive() {
 
 void Loop() {
     int64_t next = Now(), last_ping = 0, last_hello = -10000, last_lobby = 0;
-    for (;;) {
+    while (!g_quit) {
         Receive();
         int64_t now = Now();
         if (now >= next) {
@@ -334,50 +358,162 @@ void Loop() {
 }
 #endif
 
+// a session: hosting (the port) or joining (the host's address); ended by End (the menus: Netplay)
+bool Begin(bool host, uint32_t ip, uint16_t port) {
+#ifdef _WIN32
+    static bool wsa = [] {
+        WSADATA w;
+        return WSAStartup(MAKEWORD(2, 2), &w) == 0;
+    }();
+    (void)wsa;
+    {
+        std::lock_guard<std::mutex> lock(g_lock);
+        g_remotes.clear(), g_latest.clear(), g_infos.clear(), g_lobby.clear(), g_clients.clear(), g_slot_of.clear();
+        g_have_settings = false, g_starts = 0, g_heard_host = Now();
+        char name[64] = {};
+        DWORD n = sizeof name;
+        if (!GetComputerNameA(name, &n)) std::strcpy(name, "NightFire");
+        g_server_name = name;
+    }
+    g_host = host, g_me = host ? 0 : -1, g_port = port;
+    g_host_addr = {};
+    g_host_addr.sin_family = AF_INET;
+    g_host_addr.sin_port = htons(port);
+    g_host_addr.sin_addr.s_addr = ip;
+    g_quit = false;
+    g_on = true;
+    g_thread = std::thread([port] {
+        // the port is retried a while: the game relaunches itself (the copy before still has it as it hands over)
+        SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        sockaddr_in me{};
+        me.sin_family = AF_INET;
+        me.sin_addr.s_addr = htonl(INADDR_ANY);
+        me.sin_port = htons(g_host ? port : 0);
+        for (int i = 0; bind(sock, (sockaddr*)&me, sizeof me) != 0; i++) {
+            if (i == 60 || g_quit) {
+                LOGR("nightfire: LAN: UDP port %u could not be opened (%d)", port, WSAGetLastError());
+                closesocket(sock);
+                return;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        }
+        u_long nb = 1;
+        ioctlsocket(sock, FIONBIO, &nb);
+        g_sock = sock;
+        char addr[32] = {};
+        inet_ntop(AF_INET, &g_host_addr.sin_addr, addr, sizeof addr);
+        if (g_host) LOGR("nightfire: LAN: hosting on UDP port %u", port);
+        else LOGR("nightfire: LAN: joining %s:%u", addr, port);
+        Loop();
+        g_sock = INVALID_SOCKET;
+        closesocket(sock);
+    });
+    return true;
+#else
+    (void)host, (void)ip, (void)port;
+    LOGR("nightfire: LAN: not in this build");
+    return false;
+#endif
+}
+
+void End() {
+    if (!g_on) return;
+#ifdef _WIN32
+    g_quit = true;
+    if (g_thread.joinable()) g_thread.join();
+#endif
+    g_on = false, g_host = false, g_me = -1;
+    LOGR("nightfire: LAN: session ended");
+}
+
+// NF_LAN=host or NF_LAN=<address> at the start (diagnostics; the menus' Netplay otherwise)
 void Start() {
     static bool started = false;
     if (started) return;
     started = true;
     const char* e = std::getenv("NF_LAN");
     if (!e || !*e) return;
-#ifdef _WIN32
-    WSADATA wsa;
-    WSAStartup(MAKEWORD(2, 2), &wsa);
-    g_host = std::strcmp(e, "host") == 0;
     uint16_t port = kPort;
     if (const char* p = std::getenv("NF_LAN_PORT"); p && *p) port = uint16_t(std::atoi(p));
-    if (!g_host) {
-        g_host_addr.sin_family = AF_INET;
-        g_host_addr.sin_port = htons(port);
-        if (inet_pton(AF_INET, e, &g_host_addr.sin_addr) != 1) {
-            LOGR("nightfire: LAN: '%s' is not an address", e);
-            return;
-        }
+    bool host = std::strcmp(e, "host") == 0;
+    uint32_t ip = 0;
+#ifdef _WIN32
+    if (!host && inet_pton(AF_INET, e, &ip) != 1) {
+        LOGR("nightfire: LAN: '%s' is not an address", e);
+        return;
     }
-    g_on = true;
-    std::string host = e;
-    std::thread([port, host] {
-        // the port is retried a while: the game relaunches itself (the copy before still has it as it hands over)
-        g_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+#endif
+    Begin(host, ip, port);
+}
+
+// ---- the search: hosts on this network (a broadcast to the port, and this PC), from the Netplay page --------------
+struct Server {
+    ServerInfo info;
+    uint32_t ip;
+    int64_t heard;
+};
+std::vector<Server> g_servers;
+bool g_searching = false;
+
+void Search() {
+#ifdef _WIN32
+    static SOCKET s = INVALID_SOCKET;
+    static int64_t last = -10000;
+    if (!g_searching) {
+        if (s != INVALID_SOCKET) closesocket(s), s = INVALID_SOCKET;
+        return;
+    }
+    if (s == INVALID_SOCKET) {
+        WSADATA w;
+        WSAStartup(MAKEWORD(2, 2), &w);
+        s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        BOOL yes = TRUE;
+        setsockopt(s, SOL_SOCKET, SO_BROADCAST, (const char*)&yes, sizeof yes);
         sockaddr_in me{};
         me.sin_family = AF_INET;
-        me.sin_addr.s_addr = htonl(INADDR_ANY);
-        me.sin_port = htons(g_host ? port : 0);
-        for (int i = 0; bind(g_sock, (sockaddr*)&me, sizeof me) != 0; i++) {
-            if (i == 60) {
-                LOGR("nightfire: LAN: UDP port %u could not be opened (%d)", port, WSAGetLastError());
-                return;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(250));
-        }
+        bind(s, (sockaddr*)&me, sizeof me);
         u_long nb = 1;
-        ioctlsocket(g_sock, FIONBIO, &nb);
-        if (g_host) g_me = 0, LOGR("nightfire: LAN: hosting on UDP port %u", port);
-        else LOGR("nightfire: LAN: joining %s:%u", host.c_str(), port);
-        Loop();
-    }).detach();
-#else
-    LOGR("nightfire: LAN: not in this build");
+        ioctlsocket(s, FIONBIO, &nb);
+        g_servers.clear();
+        last = -10000;
+    }
+    int64_t now = Now();
+    if (now - last > 1000) {
+        last = now;
+        Header h{kMagic, kQuery, 0, 0, 0, uint32_t(now)};
+        sockaddr_in to{};
+        to.sin_family = AF_INET;
+        to.sin_port = htons(kPort);
+        for (uint32_t ip : {htonl(INADDR_BROADCAST), htonl(INADDR_LOOPBACK)}) {
+            to.sin_addr.s_addr = ip;
+            sendto(s, (const char*)&h, sizeof h, 0, (const sockaddr*)&to, sizeof to);
+        }
+    }
+    char buf[256];
+    sockaddr_in from{};
+    int len = sizeof from;
+    for (int n; (n = recvfrom(s, buf, sizeof buf, 0, (sockaddr*)&from, &len)) >= int(sizeof(Header) + sizeof(ServerInfo));) {
+        Header h;
+        std::memcpy(&h, buf, sizeof h);
+        if (h.magic != kMagic || h.type != kServer) continue;
+        Server sv{};
+        std::memcpy(&sv.info, buf + sizeof h, sizeof sv.info);
+        sv.info.host[23] = sv.info.map[23] = 0;
+        // this PC's own answer comes from the loopback and its network address: one entry, by port and name
+        sv.ip = from.sin_addr.s_addr, sv.heard = now;
+        bool known = false;
+        for (Server& o : g_servers)
+            if (o.info.port == sv.info.port && !std::strcmp(o.info.host, sv.info.host)) o.info = sv.info, o.heard = now, known = true;
+        if (!known) {
+            g_servers.push_back(sv);
+            char a[32] = {};
+            inet_ntop(AF_INET, &from.sin_addr, a, sizeof a);
+            LOGR("nightfire: LAN: found %s at %s:%u (%s, %u players)", sv.info.host, a, sv.info.port, sv.info.map,
+                 sv.info.players);
+        }
+    }
+    g_servers.erase(std::remove_if(g_servers.begin(), g_servers.end(), [&](const Server& o) { return now - o.heard > 3500; }),
+                    g_servers.end());
 #endif
 }
 
@@ -447,6 +583,30 @@ void LobbyFrame(X86Context& ctx);
 }
 
 namespace nf {
+void NetSearch(bool on) { g_searching = on; }
+std::vector<LanServer> NetServers() {
+    std::vector<LanServer> out;
+    for (const Server& sv : g_servers) {
+        std::string label = sv.info.host;  // "PC - map, 2 players": the map once chosen, the players once joined
+        if (sv.info.map[0] && std::strcmp(sv.info.map, "?")) label += std::string(" - ") + sv.info.map;
+        if (sv.info.players)
+            label += (sv.info.map[0] && std::strcmp(sv.info.map, "?") ? ", " : " - ") + std::to_string(sv.info.players) +
+                     (sv.info.players == 1 ? " player" : " players");
+        out.push_back({label, sv.ip, sv.info.port});
+    }
+    return out;
+}
+void NetHost() {
+    End();
+    Begin(true, 0, kPort);
+}
+void NetJoin(uint32_t ip, uint16_t port) {
+    End();
+    Begin(false, ip, port);
+}
+void NetStop() { End(); }
+bool NetOn() { return g_on; }
+
 // a character driven from the network (its weapon is not the game's to fire: src/game/aim.cpp skips its update)
 bool LanPuppet(uint32_t obj) {
     if (!g_on) return false;
@@ -459,7 +619,25 @@ bool LanPuppet(uint32_t obj) {
 // each frame, after 0xDE720 read the controls (src/game/controls.cpp): this copy's players' state for the network
 void LanFrame(X86Context& ctx) {
     Start();
+    Search();
+    NetplayPageFrame(ctx);
     LobbyFrame(ctx);
+    if (g_on && g_host) {  // the map's name for searches (the maps' table 0x17C6A0: 0x18 each, +4 its text, +0xC its id)
+        static uint32_t shown = ~0u;
+        uint32_t map = R32(0x260040);
+        if (map != shown) {
+            shown = map;
+            std::string name = "?";
+            for (uint32_t i = 0; i < 8; i++)
+                if (R32(0x17C6A0 + i * 0x18 + 0xC) == map) {
+                    uint32_t eax = ctx.eax, text = kernel::CallGuest(ctx, 0x6D460, {R32(0x17C6A0 + i * 0x18 + 4), 0});
+                    ctx.eax = eax;
+                    if (text) name.assign(&kernel::G<char>(text), strnlen(&kernel::G<char>(text), 23));
+                }
+            std::lock_guard<std::mutex> lock(g_lock);
+            g_map_name = name;
+        }
+    }
     if (!g_on) return;
     uint32_t humans = std::min<uint32_t>(R32(kHumans), 4);
     std::vector<Body> local;

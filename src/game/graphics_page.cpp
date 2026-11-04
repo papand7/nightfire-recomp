@@ -37,7 +37,7 @@ using nf::MenuRow;
 // page change): Enhanced, Toon and Retro options and Settings' More Settings share one page, their rows on the
 // same lines, the others hidden, its title rewritten in place for the set shown (SetSharedTitle)
 constexpr uint32_t kGfxPage = 0x4000FC20, kStylePage = 0x4000FC30;
-constexpr uint32_t kEnhPage = 1, kToonPage = 2, kRetroPage = 3, kMorePage = 4;  // which rows the shared page shows
+constexpr uint32_t kEnhPage = 1, kToonPage = 2, kRetroPage = 3, kMorePage = 4, kNetPage = 5;  // the shared page's rows
 // the Graphics page's rows
 constexpr uint32_t kQuality = 0x1000FC21, kStyle = 0x1000FC22, kStyleOptions = 0x1000FC23, kFilter = 0x1000FC24,
                    kAo = 0x1000FC25, kBloom = 0x1000FC26, kAa = 0x1000FC27, kSharpen = 0x1000FC28,
@@ -108,6 +108,13 @@ const std::vector<MenuRow> kMoreRows = {
     {kLanguage, nf::kMenuChoice, "Language", "The game's language, at the next start.", 7},
     {kKeys, nf::kMenuChoice, "Keys and Wheel", "Key bindings and a steering wheel: A opens the settings window.", 8},
     {kAds, nf::kMenuChoice, "Aim Down Sights", "L (right mouse) raises the gun and zooms in, not the red manual aim crosshair.", 9},
+};
+// Netplay's rows (the main menu's Netplay item): host, the games found on this network, join the one chosen
+constexpr uint32_t kNetHost = 0x1000FC91, kNetServer = 0x1000FC92, kNetJoin = 0x1000FC93;
+const std::vector<MenuRow> kNetRows = {
+    {kNetHost, nf::kMenuChoice, "Host Game", "Start a game others on this network can join, then choose its options.", 0},
+    {kNetServer, nf::kMenuChoice, "Game", "The games found on this network: PC, map, players.", 1},
+    {kNetJoin, nf::kMenuChoice, "Join Game", "Join the game chosen above.", 2},
 };
 constexpr int16_t kFirstY = 78, kStep = 22;
 
@@ -476,9 +483,10 @@ const std::vector<MenuRow>& RowsOf(uint32_t page) {
            : page == kEnhPage  ? kEnhRows
            : page == kToonPage ? kToonRows
            : page == kMorePage ? kMoreRows
+           : page == kNetPage  ? kNetRows
                                : kRetroRows;
 }
-constexpr uint32_t kSharedSets[] = {kEnhPage, kToonPage, kRetroPage, kMorePage};
+constexpr uint32_t kSharedSets[] = {kEnhPage, kToonPage, kRetroPage, kMorePage, kNetPage};
 uint32_t g_style_rows = kEnhPage;  // the set the shared page was opened for
 uint32_t Wid(uint32_t id) {
     for (uint32_t set : kSharedSets)
@@ -495,8 +503,8 @@ const MenuRow* SharedRow(uint32_t line) {
 // the shared page's texts: strings of its own (the title's trailing space keeps it apart from the Graphics row's
 // "Style Options"; the rows' are blanks as long as the longest label), rewritten for the set shown before the page
 // opens
-constexpr char kStyleTitle[] = "Style Options ", kMoreTitle[] = "More Settings ";
-static_assert(sizeof(kStyleTitle) == sizeof(kMoreTitle));
+constexpr char kStyleTitle[] = "Style Options ", kMoreTitle[] = "More Settings ", kNetTitle[] = "Netplay       ";
+static_assert(sizeof(kStyleTitle) == sizeof(kMoreTitle) && sizeof(kStyleTitle) == sizeof(kNetTitle));
 constexpr size_t kLabelBytes = 32;
 const char* SharedLabel(uint32_t line) {
     static std::string labels[kSharedRows];
@@ -504,8 +512,8 @@ const char* SharedLabel(uint32_t line) {
     return labels[line].c_str();
 }
 void SetSharedTexts(uint32_t set) {
-    std::memcpy(kernel::HostPtr(nf::MenuString(kStyleTitle)), set == kMorePage ? kMoreTitle : kStyleTitle,
-                sizeof(kStyleTitle));
+    std::memcpy(kernel::HostPtr(nf::MenuString(kStyleTitle)),
+                set == kMorePage ? kMoreTitle : set == kNetPage ? kNetTitle : kStyleTitle, sizeof(kStyleTitle));
     g_style_rows = set;
     for (uint32_t line = 0; line < kSharedRows; line++) {
         const MenuRow* r = SharedRow(line);
@@ -549,21 +557,91 @@ void OpenGraphicsPage(X86Context& ctx, uint32_t player) {
     LOGR("nightfire: Graphics page opened");
 }
 
+// ---- Netplay: the session ends as the page opens (back from a lobby leaves the game), the search runs while it is
+// open; Host Game hosts and Join Game joins the game chosen, each going on to the game's own join page (40000019),
+// then the lobby (src/game/lan_play.cpp)
+constexpr uint32_t kJoinPage = 0x40000019;
+uint32_t g_net_player = 0;
+bool g_net_open = false;
+std::vector<std::string> g_net_labels;  // the Game row's items as shown
+std::vector<nf::LanServer> g_net_shown;
+
+void ShowServers(X86Context& ctx, uint32_t player) {
+    g_net_shown = nf::NetServers();
+    g_net_labels.clear();
+    for (const auto& sv : g_net_shown) g_net_labels.push_back(sv.label);
+    std::vector<std::pair<const char*, uint32_t>> items;
+    for (size_t i = 0; i < g_net_labels.size(); i++) items.push_back({g_net_labels[i].c_str(), uint32_t(i)});
+    if (items.empty()) items.push_back({"Searching...", 0});
+    Choice(ctx, player, kNetServer, items, 0);
+}
+void EnterNet(X86Context& ctx, uint32_t player) {
+    nf::NetStop();
+    nf::NetSearch(true);
+    g_net_open = true, g_net_player = player;
+    Choice(ctx, player, kNetHost, {{"Start", 0}}, 0);
+    ShowServers(ctx, player);
+    Choice(ctx, player, kNetJoin, {{"Join", 0}}, 0);
+    LOGR("nightfire: Netplay opened: searching this network");
+}
+bool NetActivate(X86Context& ctx, uint32_t player, uint32_t on) {
+    if (on == Wid(kNetHost)) {
+        nf::NetSearch(false), g_net_open = false;
+        nf::NetHost();
+        MenuGoTo(ctx, player, kJoinPage);
+        LOGR("nightfire: Netplay: hosting");
+        return true;
+    }
+    if (on == Wid(kNetJoin) || on == Wid(kNetServer)) {
+        uint32_t i = ChoiceValue(ctx, player, kNetServer);
+        if (i >= g_net_shown.size()) {
+            MenuHelp(ctx, player, "No game found yet on this network.");
+            return true;
+        }
+        nf::LanServer sv = g_net_shown[i];
+        nf::NetSearch(false), g_net_open = false;
+        nf::NetJoin(sv.ip, sv.port);
+        MenuGoTo(ctx, player, kJoinPage);
+        LOGR("nightfire: Netplay: joining %s", sv.label.c_str());
+        return true;
+    }
+    return true;  // A elsewhere: nothing
+}
+
 void OpenMorePage(X86Context& ctx, uint32_t player) {
     SetSharedTexts(kMorePage);
     MenuGoTo(ctx, player, kStylePage);
     LOGR("nightfire: More Settings opened");
 }
 
+void OpenNetplayPage(X86Context& ctx, uint32_t player) {
+    SetSharedTexts(kNetPage);
+    MenuGoTo(ctx, player, kStylePage);
+}
+
+// each frame (nf::LanFrame): the games found shown as they come and go, outside the menu's update
+void NetplayPageFrame(X86Context& ctx) {
+    if (!g_net_open) return;
+    std::vector<nf::LanServer> now = nf::NetServers();
+    bool same = now.size() == g_net_shown.size();
+    for (size_t i = 0; same && i < now.size(); i++) same = now[i].label == g_net_shown[i].label;
+    if (same) return;
+    uint32_t eax = ctx.eax;
+    ShowServers(ctx, g_net_player);
+    ctx.eax = eax;
+}
+
 bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint32_t msg, uint32_t arg) {
     uint32_t id = R32(widget + 0x18);
     if (IsPage(id)) {
+        if (msg == 0x4D && id == kStylePage && g_net_open) nf::NetSearch(false), g_net_open = false;
         if (msg == 0x4C) {
             if (id == kGfxPage) {
                 EnterGraphics(ctx, player);
             } else {
                 ShowStyleRows(ctx, player);
-                if (g_style_rows == kMorePage) EnterMore(ctx, player);
+                if (g_style_rows == kNetPage) EnterNet(ctx, player);
+                else if (g_style_rows == kMorePage) EnterMore(ctx, player);
                 else EnterStyle(ctx, player, g_style_rows);
             }
         }
@@ -589,6 +667,7 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
                 MenuBack(ctx, player);
                 return true;
             }
+            if (id == kStylePage && g_style_rows == kNetPage) return NetActivate(ctx, player, on);
             if (id == kStylePage && g_style_rows == kMorePage && on == Wid(kKeys)) {
                 // key bindings and the wheel: the settings window, over the page
                 std::lock_guard<std::recursive_mutex> lock(app::UiLock());

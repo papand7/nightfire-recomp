@@ -31,6 +31,21 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - Netplay in the main menu; Multiplayer is Split Screen
+- The main menu reads NightFire / Split Screen / Netplay / Codenames / Settings / Quit Game (six rows 22 apart).
+  Split Screen is the game's Multiplayer item relabelled (it ends any LAN session); Netplay is a clone of the
+  Codenames item, put before it so the menu's order holds.
+- The Netplay page is a row set of the shared page (the front end takes no fourth added page): Host Game, Game (the
+  games found on this network: PC name, map once chosen, players) and Join Game. Opening it ends any session and
+  searches: a broadcast to UDP 27787 (and the loopback) once a second, hosts answer with their PC name, map and
+  players; the list follows from the frame. Host Game hosts and Join Game joins the chosen game, each going on to the
+  game's own join page (40000019), then the lobby.
+- `src/game/lan_play.cpp`: sessions start and end at run time (nf::NetHost, NetJoin, NetStop; NF_LAN still works).
+- Tested (`.local/vk/netplay.sh`, two copies, no NF_LAN): the main menu showed the six items; copy 2's Netplay page
+  found copy 1 ("DESKTOP-... ") after it chose Host Game; Join Game took it to the lobby; the host's start put both
+  in the same match (07000023).
+- Not tested: two PCs on a real network (broadcast across machines), a host leaving while clients wait.
+
 ### 2026-11-04 - LAN play step 3: the lobby (host's options, player list, host starts)
 - The multiplayer summary page (40000049, handler 0x891E0) is the LAN lobby: map, scenario, weapon set, limits and
   friendly fire, and a Playing list with every copy's players by name. The host sets the options through the game's
