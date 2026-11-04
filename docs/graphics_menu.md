@@ -1,7 +1,7 @@
 # Graphics menu (the game's own menus)
 
-Main menu > PC Settings > **Graphics**, and in a level Pause > PC SETTINGS > **Graphics**. Built by
-`src/game/graphics_page.cpp` with the same builder as PC Settings (`nf::BuildPage`, `src/game/pc_settings_page.cpp`):
+Main menu > Settings > **Graphics**, and in a level Pause > SETTINGS > **Graphics**. Built by
+`src/game/graphics_page.cpp` with the same builder as Settings (`nf::BuildPage`, `src/game/pc_settings_page.cpp`):
 a copy of the AV Options page's records (title, rows, choice arrows, help line, prompts, sounds) with our ids, so
 it draws and moves as Eurocom's pages do. No ImGui.
 
@@ -44,7 +44,7 @@ reflections, refresh rate, gamma.
   focused widget), 0x4E focus gained. Widget messages through 0x72820 (player, id, msg, a, b): choices 0x17 clear,
   0x10 add (text, value), 0x1E select by value, 0x35 read; sliders 0x27/0x69/0x2E/0x40; 0x2B hide (1) or show (0);
   0x18 text. Page change 0x92C40 on the player's menu context 0x25F1D0 + player * 0x1D8: 0x44 to a page, 0x5F back.
-- **Page limit**: the front end's file takes three pages more than its own (PC Settings + two); a fourth crashed the
+- **Page limit**: the front end's file takes three pages more than its own (Settings + two); a fourth crashed the
   menu code on the first page change (a null write under 0x8F3F0). Enhanced, Toon and Retro options therefore share
   one page: their rows sit on the same lines and the others are hidden with 0x2B.
 
@@ -60,8 +60,8 @@ press to wake it. Left click: A on an item or button, left or right on a choice'
 middle clicked); on a label, focus only. Right click: B. Wheel: the d-pad. Moving the d-pad hands the focus back to
 it until the mouse moves again.
 
-Tested (scripted pointer, XBE_PAD_CMD's `PTR x y`, `CLICKL`, `CLICKR`): main menu hover and click into PC Settings,
-PC Settings to Graphics, a value changed by a click, right click back without keeping.
+Tested (scripted pointer, XBE_PAD_CMD's `PTR x y`, `CLICKL`, `CLICKR`): main menu hover and click into Settings,
+Settings to Graphics, a value changed by a click, right click back without keeping.
 
 Not yet: a list is one widget (the pause screen's choices, codename and mission lists: hovering focuses the list,
 the wheel moves through it, a click is A on its chosen entry); sliders change a step a click (no dragging);

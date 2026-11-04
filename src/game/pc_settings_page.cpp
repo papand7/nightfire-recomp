@@ -1,4 +1,4 @@
-// PC Settings as a page of the game's own menus (default.xbe), from Edit Codename's list (Controller Setup, Driving
+// Settings as a page of the game's own menus (default.xbe), from Edit Codename's list (Controller Setup, Driving
 // Controller, Advanced Options, Multiplayer Options, AV Options, Save Codename) and the main menu's item.
 //
 // The page is the AV Options page (0x40000031) cloned into the menu file the page builder reads (src/game/
@@ -209,7 +209,7 @@ void Enter(X86Context& ctx, uint32_t player) {
     auto caps = Numbered({"30", "60", "120", "144", "240", "Unlimited"});
     if (cap == kAsIs) caps.push_back({SizeText({s.fps_cap, 0}) , kAsIs});
     Choice(ctx, player, kCap, caps, cap);
-    LOGR("nightfire: PC Settings page entered");
+    LOGR("nightfire: Settings page entered");
 }
 
 void Keep(X86Context& ctx, uint32_t player) {
@@ -240,7 +240,7 @@ void Keep(X86Context& ctx, uint32_t player) {
     if (cap != kAsIs) s.fps_cap = kCaps[std::min<uint32_t>(cap, std::size(kCaps) - 1)];
     app::Save();
     if (apply) app::ApplyDisplay();
-    LOGR("nightfire: PC Settings kept: field of view %u%%, mouse %u%%, invert %d, skip intro %d, sharp text %d, "
+    LOGR("nightfire: Settings kept: field of view %u%%, mouse %u%%, invert %d, skip intro %d, sharp text %d, "
          "aspect %u, display %u, %ux%u, vsync %d, cap %u",
          nf::fov_percent, s.mouse_sensitivity, s.mouse_invert_y, nf::skip_intro, s.sharp_2d, s.aspect,
          uint32_t(s.display_mode), s.width, s.height, s.vsync, s.fps_cap);
@@ -330,12 +330,12 @@ void OpenPcPage(X86Context& ctx, uint32_t player) {
     ctx.eax = eax;
 }
 
-// the PC Settings page made from AV Options' records (a page in the menu file, src/game/pc_settings_item.cpp): its
+// the Settings page made from AV Options' records (a page in the menu file, src/game/pc_settings_item.cpp): its
 // page widget, title, prompt line, help box and pictures kept, its rows dropped, and ours made from its music slider
 // (with its grey track), subtitles choice and Restore Defaults button rows (each a label and a value widget with one
 // id), one under another; the focus moves between them by where they are
 std::vector<uint8_t> PcPage(const std::vector<uint8_t>& av, uint32_t (*record_size)(uint32_t)) {
-    return BuildPage(av, record_size, kPage, "PC Settings", kRows, kFirstY, kRowStep);
+    return BuildPage(av, record_size, kPage, "Settings", kRows, kFirstY, kRowStep);
 }
 
 std::vector<uint8_t> BuildPage(const std::vector<uint8_t>& av, uint32_t (*record_size)(uint32_t), uint32_t page_id,
@@ -445,7 +445,7 @@ X86_FUNC(sub_000759D0) {
         W32(ctx.esp + 8, ListCopy());
         W32(ctx.esp + 0xC, kEntries + 1);
         static bool said = false;
-        if (!said) said = true, LOGR("nightfire: PC Settings added to Edit Codename's list");
+        if (!said) said = true, LOGR("nightfire: Settings added to Edit Codename's list");
     }
     __imp__sub_000759D0(ctx, base);
 }
@@ -500,7 +500,7 @@ X86_EXTERN_FUNC(__imp__sub_0006D460);
 X86_FUNC(sub_0006D460) {
     uint32_t h = R32(ctx.esp + 4);
     if (h == kLabelHandle || h == kHelpHandle || h == kPauseLabel) {
-        ctx.eax = Str(h == kLabelHandle ? "PC Settings" : h == kPauseLabel ? "PC SETTINGS" : "Picture, controls and more for this PC.");
+        ctx.eax = Str(h == kLabelHandle ? "Settings" : h == kPauseLabel ? "SETTINGS" : "Picture, controls and more for this PC.");
         ctx.esp += 4;
         return;
     }

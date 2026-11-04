@@ -88,7 +88,7 @@ if it crashes.
 
 ## Controls and Settings
 
-**PC Settings:** in the game's own menus, as the main menu's **PC Settings** item and a choice on the on-foot pause
+**Settings:** in the game's own menus, as the main menu's **Settings** item and a choice on the on-foot pause
 screen (under Continue, Restart and Quit): field of view, mouse sensitivity and invert, skip intro, sharp 2D, aspect,
 display mode, resolution, vsync and frame cap. **F1** opens the full settings window (graphics, renderer, controls) at
 any time; changes are saved at once to `settings.toml`.
@@ -136,9 +136,9 @@ right button zooms and R reloads.
 **Controllers:** Xbox, PlayStation and Switch controllers, with hot plugging and rumble.
 
 <p align="center">
-  <img src="docs/img/nightfire-menu.webp" alt="The pause screen with its text in the new font and a PC Settings choice" width="800">
+  <img src="docs/img/nightfire-menu.webp" alt="The pause screen with its text in the new font and a Settings choice" width="800">
   <br>
-  <i>The game's text redrawn from Sour Gummy Black, with PC Settings on the pause screen and your keys in the prompts.</i>
+  <i>The game's text redrawn from Sour Gummy Black, with Settings on the pause screen and your keys in the prompts.</i>
 </p>
 
 ## Graphics settings
@@ -214,7 +214,7 @@ the falling snow and the guards differ between them.
 ### General
 - **Launcher** - `NightFireLauncher.exe`: choose your disc, Build, Play, Update; portable build tools, nothing
   installed.
-- **PC Settings in the game's menus** - A native page in the game's own menus, from the main menu and the pause
+- **Settings in the game's menus** - A native page in the game's own menus, from the main menu and the pause
   screen (see above).
 - **Achievements** - 19 achievements (every mission, medals, 00 Agent, Bond Moves) with pop-ups and a list in the
   settings window, written in RetroAchievements' condition format; the set and its memory map are in
@@ -232,7 +232,7 @@ the falling snow and the guards differ between them.
 ## Status
 
 Plays on foot and in the driving missions on Windows, with saves; mouse aiming, the keyboard prompts, modern button
-pictures, clean fonts, PC Settings (main menu and pause screen), Hide HUD, Quit Game, widescreen and ultrawide are
+pictures, clean fonts, Settings (main menu and pause screen), Hide HUD, Quit Game, widescreen and ultrawide are
 in. Progress is in [PROGRESS.md](PROGRESS.md), and technical findings in [FINDINGS.md](FINDINGS.md).
 
 ## Community and Support

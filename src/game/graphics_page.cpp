@@ -1,5 +1,5 @@
-// Graphics, a page of the game's own menus (opened from PC Settings, in the front end and from the pause screen), and
-// its three style pages (Enhanced, Toon and Retro options). They are built as PC Settings is, from AV Options'
+// Graphics, a page of the game's own menus (opened from Settings, in the front end and from the pause screen), and
+// its three style pages (Enhanced, Toon and Retro options). They are built as Settings is, from AV Options'
 // records (src/game/pc_settings_page.cpp, nf::BuildPage), so their text, choices, focus, sounds and prompts are the
 // game's own. A keeps the page's values and goes back, B goes back without, as on AV Options.
 //
@@ -34,7 +34,7 @@ using kernel::R32;
 using nf::MenuRow;
 
 // the front end's file takes three pages more than its own, not four (a fourth crashed the menu code on its first
-// page change): Enhanced, Toon and Retro options and PC Settings' More Settings share one page, their rows on the
+// page change): Enhanced, Toon and Retro options and Settings' More Settings share one page, their rows on the
 // same lines, the others hidden, its title rewritten in place for the set shown (SetSharedTitle)
 constexpr uint32_t kGfxPage = 0x4000FC20, kStylePage = 0x4000FC30;
 constexpr uint32_t kEnhPage = 1, kToonPage = 2, kRetroPage = 3, kMorePage = 4;  // which rows the shared page shows

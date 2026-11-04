@@ -1,5 +1,5 @@
-// "PC Settings" and "Quit Game" in the game's own main menu (default.xbe): a fourth and fifth item under NightFire /
-// Multiplayer / Codenames, the first opening the PC Settings page, the second leaving the game (app::Quit).
+// "Settings" and "Quit Game" in the game's own main menu (default.xbe): a fourth and fifth item under NightFire /
+// Multiplayer / Codenames, the first opening the Settings page, the second leaving the game (app::Quit).
 //
 // Eurocom's menus are data: one menu file sits in memory as a record stream ([0x25FB08]), and the builder 0x93960
 // makes the widgets of a page from it. The main menu is page 0x40000002 (var 0x80000002) in the front end's file;
@@ -8,7 +8,7 @@
 // of ours) and the items moved up to make room. A press of A reaches the per-id dispatcher 0x8E320, where the new
 // id opens the overlay; the help box under the menu gets its line from 0x959E0, which knows only the game's items.
 // A level's menu file (the pause screen, page 0x4000004B's) has no AV Options page: its choices list (item 0x10000028
-// index 6: CONTINUE, RESTART, QUIT as text records, attribute 0x11) gets a fourth, PC SETTINGS, and the page is made
+// index 6: CONTINUE, RESTART, QUIT as text records, attribute 0x11) gets a fourth, SETTINGS, and the page is made
 // there from the front end's AV Options records, kept from its file. A on that choice opens it, as the main menu's
 // item does; back returns to the pause screen.
 // (.local/menu_re.md has the record formats and how they were found.)
@@ -43,7 +43,7 @@ constexpr uint32_t kMainMenu = 0x40000002, kFrontVar = 0x80000002;
 constexpr uint32_t kNightFire = 0x10000002, kMultiplayer = 0x10000003, kCodenames = 0x10000004;
 constexpr uint32_t kPcItem = 0x1000FC01;   // ours: no record or code of the game uses it
 constexpr uint32_t kQuitItem = 0x1000FC05;
-constexpr uint32_t kAvPage = 0x40000031;  // AV Options: the PC Settings page is made from it
+constexpr uint32_t kAvPage = 0x40000031;  // AV Options: the Settings page is made from it
 constexpr uint32_t kOpPage = 0xFFFFFFF0, kOpWidget = 0xFFFFFFF9, kOpAttr = 0xFFFFFFF6, kOpEnd = 0xFFFFFFF2;
 constexpr uint8_t kMsgText = 0x18;
 constexpr uint32_t kActivate = 0x4B;       // a widget message: A on it
@@ -96,7 +96,7 @@ std::vector<uint8_t> PausePanel(const std::vector<uint8_t>& b) {
     return {};
 }
 
-// a level's file: PC SETTINGS after the pause choices' texts; false when the file has no pause page
+// a level's file: SETTINGS after the pause choices' texts; false when the file has no pause page
 bool AddToPause(std::vector<uint8_t>& b) {
     size_t page = 0, after = 0;
     bool in_list = false;
@@ -212,7 +212,7 @@ uint32_t Patch(uint32_t stream, uint32_t at) {
         }
         made = mem::AllocHostContiguous(uint32_t(b.size()), 16);
         std::memcpy(kernel::HostPtr(made), b.data(), b.size());
-        LOGR("nightfire: PC Settings added to the pause screen (menu file %08X, %u bytes)", stream, at);
+        LOGR("nightfire: Settings added to the pause screen (menu file %08X, %u bytes)", stream, at);
         return made;
     }
     // our items: the Codenames item's records with our id, row and label
@@ -231,13 +231,13 @@ uint32_t Patch(uint32_t stream, uint32_t at) {
         }
         return it;
     };
-    static const uint32_t pc_label = GuestString("PC Settings"), quit_label = GuestString("Quit Game");
+    static const uint32_t pc_label = GuestString("Settings"), quit_label = GuestString("Quit Game");
     std::vector<uint8_t> ours = clone(kPcItem, kRowY[3], pc_label), quit = clone(kQuitItem, kRowY[4], quit_label);
     ours.insert(ours.end(), quit.begin(), quit.end());
     for (int i = 0; i < 3; i++) Put16(b, item[i] + 0xC, kRowY[i]);
     Put32(b, page + 0x11, Get32(b, page + 0x11) + uint32_t(ours.size()));  // the page's body size
     b.insert(b.begin() + codenames_end, ours.begin(), ours.end());
-    // the PC Settings page, made from AV Options' and put after it (src/game/pc_settings_page.cpp)
+    // the Settings page, made from AV Options' and put after it (src/game/pc_settings_page.cpp)
     for (size_t p = 4; p + 4 <= b.size();) {
         uint32_t op = Get32(b, p), n = RecordSize(op);
         if (!n) break;
@@ -250,14 +250,14 @@ uint32_t Patch(uint32_t stream, uint32_t at) {
             p += av.size();
             for (auto& g : nf::GraphicsPages(av, RecordSize)) page_copy.insert(page_copy.end(), g.begin(), g.end());
             b.insert(b.begin() + p, page_copy.begin(), page_copy.end());
-            LOGR("nightfire: PC Settings and Graphics pages made from AV Options' (%zu bytes)", page_copy.size());
+            LOGR("nightfire: Settings and Graphics pages made from AV Options' (%zu bytes)", page_copy.size());
             break;
         }
         p += n;
     }
     made = mem::AllocHostContiguous(uint32_t(b.size()), 16);  // past the title's memory, as the page's strings
     std::memcpy(kernel::HostPtr(made), b.data(), b.size());
-    LOGR("nightfire: PC Settings added to the main menu (menu file %08X, %u bytes)", stream, at);
+    LOGR("nightfire: Settings added to the main menu (menu file %08X, %u bytes)", stream, at);
     return made;
 }
 }  // namespace
@@ -348,14 +348,14 @@ X86_FUNC(sub_0008E320) {
         ctx.esp += 4;
         return;
     }
-    // A on the pause screen's choices with PC SETTINGS chosen (its fourth, 3)
+    // A on the pause screen's choices with SETTINGS chosen (its fourth, 3)
     for (uint32_t w : {widget, R32(ctx.esp + 0x10)}) {
         if (!w || message != kActivate || R32(w + 0x18) != kPauseItem || R32(w + 0x20) != kPauseChoices) continue;
         uint32_t eax = ctx.eax, chosen = kernel::CallGuest(ctx, kSetWidget, {w, kMsgRead, 0, 0}) & 0xFF;
         ctx.eax = eax;
         if (chosen != 3) break;
         nf::OpenPcPage(ctx, R32(ctx.esp + 4) & 0xFF);
-        LOGR("nightfire: PC Settings opened from the pause screen");
+        LOGR("nightfire: Settings opened from the pause screen");
         ctx.eax = 1;
         ctx.esp += 4;
         return;
@@ -372,7 +372,7 @@ X86_FUNC(sub_0008E320) {
         return;
     }
     nf::OpenPcPage(ctx, R32(ctx.esp + 4) & 0xFF);
-    LOGR("nightfire: PC Settings opened from the main menu");
+    LOGR("nightfire: Settings opened from the main menu");
     ctx.eax = 1;
     ctx.esp += 4;  // cdecl: the return address only
 }

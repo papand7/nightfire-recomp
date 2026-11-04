@@ -42,7 +42,7 @@ void MenuBack(X86Context& ctx, uint32_t player);
 std::vector<std::vector<uint8_t>> GraphicsPages(const std::vector<uint8_t>& av, uint32_t (*record_size)(uint32_t));
 bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint32_t msg, uint32_t arg);
 void OpenGraphicsPage(X86Context& ctx, uint32_t player);
-void OpenMorePage(X86Context& ctx, uint32_t player);  // PC Settings' More Settings (the style page's last row set)
+void OpenMorePage(X86Context& ctx, uint32_t player);  // Settings' More Settings (the style page's last row set)
 bool MenuRowHidden(uint32_t page, uint32_t id);  // a row the page has hidden (the style page's other styles')
 
 }  // namespace nf
