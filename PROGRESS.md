@@ -31,6 +31,20 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - HD texture packs made on the player's PC (hd_pack)
+
+- New tool sdk/tools/hd_pack (tools\hd_pack.exe beside the game, with Real-ESRGAN's ncnn Vulkan build and its
+  x4plus models, fetched by CMake): the dumped textures upscaled 4x (or 2x from 4x) in one GPU run, wrap-padded
+  against seams, alpha apart; --pbr adds normal (_n) and roughness (_r) maps. Incremental.
+- Dumping skipped movies: the first dump held 4,902 files, nearly all the menu movie's frames (each frame a new key at
+  the same address). A picture whose contents change again within a second is now not dumped: The Exchange's dump is
+  187 textures.
+- Runtime: a pack picture's _r map gives its mean roughness (PackRoughness); under 0.45 it reflects. A replaced
+  texture keeps its game key for reflections (BindGuestTexture's replacement path).
+- Tested: 187 Exchange textures 4x + PBR in 45 s (RTX 5060); the game loaded them (texture pack log), the castle wall
+  sharper in a before/after shot (captures/hd_cmp.png, private). Normal maps are not drawn (no light/tangent data).
+- Next: the tool from the game's menus or the launcher; normal maps once lighting data is recovered.
+
 ### 2026-11-04 - More Settings as a page of the game's menus; bullet holes checked
 
 - PC Settings > More Settings opened the ImGui settings window; now a page of the game's own menus: Frame Counter,

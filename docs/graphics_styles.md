@@ -106,6 +106,29 @@ under Vulkan, FXAA under Direct3D.
 
 Dumped textures are the game's: keep them out of any public repository.
 
+### HD texture pack (hd_pack)
+
+`tools\hd_pack.exe` beside the game makes a pack on the player's own PC: turn on *Dump the game's textures*, play the
+levels to upgrade (a movie's frames, pictures that change within a second, are not dumped), then run
+
+```
+tools\hd_pack.exe [--scale 2|4] [--pbr] [--model x4plus|anime] [--force]
+```
+
+Each dumped picture is upscaled 4x by Real-ESRGAN (`toolsealesrgan`, its ncnn Vulkan build: any Vulkan GPU, no
+install) in one run, padded with its own opposite edges first so repeating textures meet without seams, its alpha
+upscaled apart; `--scale 2` halves the result. `--pbr` adds `<key>_n.png` (normal map, height in alpha) and
+`<key>_r.png` (roughness) generated from the picture. Pictures already done are skipped, so it can be run again after
+playing more. The game loads the pack at its next start. Measured (RTX 5060): 187 textures of The Exchange, 4x with
+PBR maps, 45 seconds.
+
+The renderer uses: the upscaled pictures (the texture pack path); roughness for reflections (a pack picture whose mean
+roughness is under 0.45 reflects, smoother more). Normal maps are made but not drawn yet: lighting them needs the
+scene's light directions and tangent frames, which the game's vertex programs do not hand over (below).
+
+The pack is made from the player's own copy of the game: nothing of the game's ships with the tool, and the pack is
+not to be shared.
+
 ## Not available yet
 
 Measured (Vulkan, XBE_PERF): in Paris gameplay all 3D draws, about 450 a frame, are the title's vertex programs; none
