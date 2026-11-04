@@ -31,6 +31,20 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - LAN play, step 1: a bot driven from outside (puppet)
+- Plan (the user's): host-authoritative LAN play, a server browser and Host Game in the game's own menus, more than
+  4 players, several local split-screen players joining one server. Remote players will be the match's bot
+  characters, driven over the network. The engine's cap (RE, `.local/re/game.asm`): 10 characters a match, 4 humans
+  (cameras, controls, player arrays sized 4) and 6 bots (0x1D98E0 brains, `cmp eax,6` at 0xA27AA); score and slot
+  tables hold 10 (0x262738 / 0x25FE38, 0x30 each, +0x1C the character's object).
+- `src/game/lan_play.cpp`: a puppet's think (0x31530) runs the AI's frame (skipped, the bot's body never spawned or
+  drew), its target choice (0x37C10) gives none, then its position (object +0x24, metres, +0x28 up) and heading
+  (+0x40) are set. NF_LAN_TEST=1: bot slot 4 stands 3 m in front of player 1. Seen (Vulkan, `mp_match.sh 2`): Drake's
+  body and name tag there, following player 1, player 1 not shot in 40 s (`.local/vk/shots/lan8.png`, `lan9.png`).
+- Not yet: forcing the bot count ([0x260048] at 0xA25F0) did not take, Quick Game still made several bots (the
+  per-bot override at 0x245280?); a puppet's facing and walking animation unchecked.
+- Next: the network core (UDP, LAN broadcast discovery), then puppets from the network, then the menus.
+
 ### 2026-11-04 - The game's own font again by default (rounded_font)
 - Both exes' fonts were drawn from Sour Gummy Black; the player wants the original letters. New option rounded_font
   (default off): off, the game's glyphs keep their shapes, enlarged with smooth edges as before (Scale2x, blur, cut);
