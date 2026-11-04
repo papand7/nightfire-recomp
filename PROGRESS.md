@@ -31,6 +31,17 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - Split screen checked
+
+- Multiplayer split screen works on Vulkan: Join Game, codenames, Quick Game, 2 and 4 player matches at 60 fps, each
+  player's controller its own (shots fired on controllers 2-4 only change that player's ammo), the graphics style on
+  every view. Driven with XBE_PAD_PORTS=4 (controllers 2-4 plugged in for the cmd file) and "2:A"-style cmd presses.
+- Gap fixed: the keyboard and the first controller were both controller 1, so keyboard + one controller could not
+  play split screen. New setting keyboard_alone (settings window, Controls): the keyboard and mouse are controller 1
+  alone and controllers start at 2. Not tested with a real controller (none here).
+- Cosmetic, not fixed: the Join Game boxes of agents 2-4 show the keyboard's ENTER key when the keyboard is in use
+  (the button pictures are one set for every player).
+
 ### 2026-11-04 - Bug hunt: menus, mouse, renderers, runtime
 
 - Menus and mouse: the style page's hidden rows (other styles') no longer under the pointer (it cycled their values);
