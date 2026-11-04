@@ -81,7 +81,7 @@ const std::vector<Row> kRows = {
     {kMouse, kSliderRow, "Mouse Sensitivity", "How far the view turns for the mouse's movement."},
     {kInvert, kChoiceRow, "Invert Mouse", "Moving the mouse forward looks down."},
     {kSkip, kChoiceRow, "Skip Intro Movies", "Starts without the EA and MGM logo movies."},
-    {kSharp, kChoiceRow, "Sharp Text", "Draws the text and HUD pictures sharp at high resolutions."},
+    {kSharp, kChoiceRow, "Sharp Text", "Text and HUD pictures sharp at high resolutions. Rounded: a modern font (next start)."},
     {kAspect, kChoiceRow, "Aspect Ratio", "Auto follows the screen; Fill widens the view to an ultrawide screen."},
     {kDisplay, kChoiceRow, "Display Mode", "A window, a borderless window over the screen, or the screen itself."},
     {kResolution, kChoiceRow, "Resolution", "The window's or the screen's size; Desktop is the screen's own."},
@@ -182,7 +182,7 @@ void Enter(X86Context& ctx, uint32_t player) {
     Slider(ctx, player, kMouse, g_mouse_step);
     Choice(ctx, player, kInvert, Numbered({"Off", "On"}), s.mouse_invert_y ? 1 : 0);
     Choice(ctx, player, kSkip, Numbered({"Off", "On"}), nf::skip_intro ? 1 : 0);
-    Choice(ctx, player, kSharp, Numbered({"Off", "On"}), s.sharp_2d ? 1 : 0);
+    Choice(ctx, player, kSharp, Numbered({"Off", "On", "Rounded"}), !s.sharp_2d ? 0 : nf::rounded_font ? 2 : 1);
     Choice(ctx, player, kAspect, Numbered({"Auto", "4:3", "16:9", "Fill"}), std::min<uint32_t>(s.aspect, 3));
     using app::DisplayMode;
     Choice(ctx, player, kDisplay,
@@ -227,7 +227,7 @@ void Keep(X86Context& ctx, uint32_t player) {
         s.mouse_sensitivity = uint32_t(std::lround(25 * std::pow(2.0, std::min(mouse, 20u) / 5.0)));
     s.mouse_invert_y = invert == 1;
     nf::skip_intro = skip == 1;
-    s.sharp_2d = sharp == 1;
+    if (sharp <= 2) s.sharp_2d = sharp >= 1, nf::rounded_font = sharp == 2;
     uint32_t w = 0, h = 0;
     if (size >= 1 && size <= ShownSizes().size()) w = ShownSizes()[size - 1].w, h = ShownSizes()[size - 1].h;
     if (size == kAsIs) w = s.width, h = s.height;

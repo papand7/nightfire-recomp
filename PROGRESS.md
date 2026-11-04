@@ -31,6 +31,13 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - The game's own font again by default (rounded_font)
+- Both exes' fonts were drawn from Sour Gummy Black; the player wants the original letters. New option rounded_font
+  (default off): off, the game's glyphs keep their shapes, enlarged with smooth edges as before (Scale2x, blur, cut);
+  on, Sour Gummy Black as before. F1 options, and PC Settings' Sharp Text: Off / On / Rounded (next start).
+- Evidence: captures/font_menu3.png (private), Select Codename in the game's letters. Driving.xbe's font follows the
+  same switch (DrawEaFont skipped) but was not looked at.
+
 ### 2026-11-04 - Effect lights (work in progress, off by default)
 - The engine hands over no lights: default.xbe never calls SetLight/LightEnable, all 1,920 draws a frame in a match
   are vertex programs (0 fixed-function lit); the world's light is baked. So lights are taken from the screen.

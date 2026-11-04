@@ -30,6 +30,9 @@
 #include "../../third_party/stb/stb_truetype.h"
 
 namespace nf {
+// the fonts' letters drawn from Sour Gummy Black (a rounded font) instead of the game's own shapes (the setting,
+// src/common/game_info.cpp)
+bool rounded_font = false;
 extern const unsigned char kFontTtf[];  // src/common/font_data.cpp
 extern const size_t kFontTtfSize;
 namespace {
@@ -118,11 +121,14 @@ std::vector<uint32_t> Rebuild(const std::vector<uint32_t>& bgra, int w, int h, u
     for (size_t i = 0; i < mask.size(); i++) mask[i] = (bgra[i] >> 24) >= 128;
     std::vector<uint8_t> m4 = Scale2x(Scale2x(mask, w, h), w * 2, h * 2);
     std::vector<uint8_t> alpha = Cut(Blur(m4, w * 4, h * 4), w * 4, h * 4, kScale / 4);
-    if (w == 512 && h == 64 && DrawFont(mask, w, h, alpha)) {
+    if (!rounded_font) {
+        static bool said = false;
+        if (!said) said = true, LOGR("nightfire: the game's own font, its edges smoothed (rounded_font off)");
+    } else if (w == 512 && h == 64 && DrawFont(mask, w, h, alpha)) {
         static bool said = false;
         if (!said) said = true, LOGR("nightfire: default.xbe's font drawn from Sour Gummy Black");
     }
-    if (kDriving && DrawEaFont(data, w, h, alpha))
+    if (rounded_font && kDriving && DrawEaFont(data, w, h, alpha))
         LOGR("nightfire: Driving.xbe's font %08X (%dx%d) drawn from Sour Gummy Black", data, w, h);
     // each texel's colour: its own where it shows, else an opaque neighbour's (the glyph's), else white
     std::vector<uint32_t> colour(size_t(w) * h, 0xFFFFFF);
@@ -147,7 +153,7 @@ std::vector<uint32_t> Rebuild(const std::vector<uint32_t>& bgra, int w, int h, u
     return out;
 }
 
-// default.xbe's 512x64 font as a real font (Sour Gummy Black, Harry's pick: third_party/fonts): its glyphs lie in three
+// rounded_font: default.xbe's 512x64 font as a real font (Sour Gummy Black, Harry's pick: third_party/fonts): its glyphs lie in three
 // rows, each a run of columns with a clear one between; the first row is ASCII from '!' to ']', the second '`', a to z
 // and Latin-1 letters, the third more of them (the slots holding ligatures, quotes and a box keep the rebuilt mask).
 // Each known slot is cleared and the character drawn in it from the font: one size for all (the game's H's height),
