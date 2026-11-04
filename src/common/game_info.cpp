@@ -226,6 +226,7 @@ const app::GameInfo app::kGame = {
     .squeeze_screen_programs = true,      // ultrawide: Driving.xbe draws its HUD and menus through vertex programs
     .edge_bars = true,                    // ultrawide: the sniper scope's black side bars reach the screen's sides
     .sharpen_2d = true,                   // text and HUD pictures enlarged sharp (Settings::sharp_2d turns it off)
+    .hit_feedback = true,                 // src/game/hit_feedback.cpp: a mark and a tick when a shot hits
     .pal_console = true,                  // a PAL disc (region 4): the driving levels ask for NTSC\ files otherwise;
                                           // the USA disc's certificate (region 1) keeps an NTSC console
     .hide_file = HideFile,                // skip_intro

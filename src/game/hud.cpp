@@ -8,6 +8,16 @@
 #include "kernel/kernel.h"
 #include "xdk/hle.h"
 
+namespace nf {
+void HitTest();  // hit_feedback.cpp
+}
+
+X86_EXTERN_FUNC(__imp__sub_000DAC20);
+X86_FUNC(sub_000DAC20) {  // the frame's 2D pass
+    nf::HitTest();
+    __imp__sub_000DAC20(ctx, base);
+}
+
 X86_EXTERN_FUNC(__imp__sub_000D9410);
 X86_FUNC(sub_000D9410) {
     if (nf::hide_hud && !nf::MenuUp()) {

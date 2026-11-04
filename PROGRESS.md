@@ -31,6 +31,21 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - Hit feedback: a mark and a tick when your shot hits
+- Found: 0x3D900 (cdecl: the hit character's {object, data}, the hit, a scale) is every shot's damage to a character
+  on foot; the hit's +8 damage, +0x46 zone (5 head), +0x4C projectile ([+0xBC]+0x24 the shooter); health the data's
+  +0x90 float. A debug tweak page (0x82760: Drone Easy..Hard, Head/Arms/Legs/Torso, Armour, MP limbs) led there
+  through its multipliers 0x164068..0x16408C, read by 0x3D670. A shooter is player i's when camera i (0x1F661C) has it
+  at +0x64 (measured in a 2-player Fort Knox match: 11 hits, one to the head, kills).
+- src/game/hit_feedback.cpp: health taken by a player's shot -> app::HitMarker at that player's crosshair (split
+  screen: top/bottom for two, quarters above). SDK app/hit_marker.cpp: four strokes drawn over the HUD (white hit,
+  amber head, red kill, a short fade) and a synthesized tick mixed into the output. Setting hit_feedback (0 off,
+  1 mark, 2 mark and tick, default 2), F1 Display tab. NF_HIT_TEST=1 marks each view every second.
+- Evidence: captures/mark_1.png (private): red kill marks centred on both split-screen crosshairs, fading.
+- Not verified: the tick heard (no audio capture here); a real single-player hit with this build (the scripted
+  runs did not land one; the first diagnostic run's hits were player 1's). No native menu row: More Settings
+  holds 9 shared rows, the menu's limit so far.
+
 ### 2026-11-04 - Relief (parallax occlusion mapping) for materials
 
 - Materials > PBR + Relief (graphics.toml surface_depth 0-2): the material shader steps the view's ray down the pack's
