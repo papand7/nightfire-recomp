@@ -63,7 +63,7 @@ const std::vector<MenuRow> kGfxRows = {
     {kAo, nf::kMenuChoice, "Ambient Occlusion", "Soft shade in corners and creases, from the scene's depth."},
     {kBloom, nf::kMenuChoice, "Bloom", "A glow around lights and bright surfaces."},
     {kReflect, nf::kMenuChoice, "Reflections", "Glass mirrors what is on screen (screen-space reflections)."},
-    {kParticles, nf::kMenuChoice, "Particles", "Soft: smoke, flashes and sparks fade into walls instead of cutting."},
+    {kParticles, nf::kMenuChoice, "Particles", "Soft: effects fade into walls. Lights: flashes and fire light the room."},
     {kMaterials, nf::kMenuChoice, "Materials", "The HD pack's maps (next start). Relief: uneven walls in depth."},
     {kAa, nf::kMenuChoice, "Anti-Aliasing", "SMAA smooths the scene's edges, the HUD stays sharp; FXAA the whole picture."},
     {kSharpen, nf::kMenuChoice, "Sharpening", "Contrast adaptive sharpening of the finished picture."},
@@ -232,7 +232,8 @@ void EnterGraphics(X86Context& ctx, uint32_t player) {
         ShowOptions(ctx, player, kAo, kAoLevels, float(st.quality_ao));
         ShowOptions(ctx, player, kBloom, kOffOn, st.quality_bloom ? 1.0f : 0.0f);
         ShowOptions(ctx, player, kReflect, kReflectLevels, float(st.reflections));
-        Choice(ctx, player, kParticles, {{"Original", 0}, {"Soft", 1}}, st.soft_particles ? 1 : 0);
+        Choice(ctx, player, kParticles, {{"Original", 0}, {"Soft", 1}, {"Soft + Lights", 2}},
+               st.effect_lights ? 2 : st.soft_particles ? 1 : 0);
         Choice(ctx, player, kMaterials, {{"Original", 0}, {"PBR", 1}, {"PBR + Relief", 2}},
                !st.materials ? 0 : st.surface_depth > 0 ? 2 : 1);
     } else {
@@ -276,13 +277,17 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
             st.texture_pack = keep.texture_pack, st.dump_textures = keep.dump_textures;
             st.reflection_strength = keep.reflection_strength, st.reflections_auto = keep.reflections_auto;
             st.soft_particles = keep.soft_particles, st.particle_fade = keep.particle_fade;
+            st.effect_lights = keep.effect_lights, st.light_strength = keep.light_strength;
             st.materials = keep.materials, st.material_strength = keep.material_strength;
             st.surface_depth = keep.surface_depth;
         }
         st.quality_ao = int(ReadOption(ctx, player, kAo, kAoLevels));
         st.quality_bloom = ReadOption(ctx, player, kBloom, kOffOn) > 0;
         st.reflections = int(ReadOption(ctx, player, kReflect, kReflectLevels));
-        st.soft_particles = ChoiceValue(ctx, player, kParticles) == 1;
+        if (uint32_t pv = ChoiceValue(ctx, player, kParticles); pv <= 2) {
+            st.soft_particles = pv >= 1;
+            st.effect_lights = pv == 2;
+        }
         uint32_t mat = ChoiceValue(ctx, player, kMaterials);
         if (mat <= 2) {
             st.materials = mat >= 1;

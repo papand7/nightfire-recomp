@@ -31,6 +31,19 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - Effect lights (work in progress, off by default)
+- The engine hands over no lights: default.xbe never calls SetLight/LightEnable, all 1,920 draws a frame in a match
+  are vertex programs (0 fixed-function lit); the world's light is baked. So lights are taken from the screen.
+- SDK vulkan.cpp: added draws (dst ONE, src ONE or SRC_ALPHA, depth tested, not written) drawn again into a glow
+  image (RGBA16F, their colour and brightness times distance) over the scene's depth; 16x9 tiles summed (colour,
+  brightness centre, mean distance); the 32 brightest listed (pick); a light pass before the style pass lights the
+  scene from them (normals from depth, power by the light's distance squared over the surface's). Setting
+  effect_lights / light_strength (F1 Particles; menu Particles: Soft + Lights). XBE_LIGHT_TEST 1 the light alone,
+  2 the listed lights as dots.
+- Seen: 33-55 glowing draws a frame in Fort Knox; the list places lights on the glows (test 2). Cost about 1 ms on
+  the scene pass. Not done: the power is untuned (3000 lights the weapon beside a glow, walls metres away stay dark);
+  no capture yet with fire, explosions or a muzzle flash; Driving.xbe's perspective depth path looked far too bright.
+
 ### 2026-11-04 - Hit feedback: a mark and a tick when your shot hits
 - Found: 0x3D900 (cdecl: the hit character's {object, data}, the hit, a scale) is every shot's damage to a character
   on foot; the hit's +8 damage, +0x46 zone (5 head), +0x4C projectile ([+0xBC]+0x24 the shooter); health the data's
