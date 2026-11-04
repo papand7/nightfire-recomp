@@ -55,9 +55,10 @@ constexpr uint32_t kHumans = 0x260044, kBots = 0x260048;
 constexpr uint32_t kScores = 0x262738, kSlotSize = 0x30, kSlotObject = 0x1C;
 constexpr uint32_t kPos = 0x24, kYaw = 0x40;
 constexpr int kFirstBot = 4, kMostBots = 6;
-// the MP block's player slots (names, C strings; the character at +0x20), the join page's records (+0 joined), the
+// the MP block's player slots (names, C strings), the join page's records (+0 joined, +4 team, +8 character), the
 // bot setup (0x245280 its own bots, 0x245281 how many, records of 0x12: +0 name, +0xF team, +0x10 character)
-constexpr uint32_t kSlots = 0x25FE38, kSlotCharacter = 0x20, kJoined = 0x245240, kJoinSize = 0x10;
+constexpr uint32_t kSlots = 0x25FE38, kJoined = 0x245240, kJoinSize = 0x10, kJoinTeam = 4, kJoinCharacter = 8;
+constexpr uint32_t kCodenameLoaded = 0x17D550, kCodename = 0x17D558;  // the join page names players so when >= 2
 constexpr uint32_t kOwnBots = 0x245280, kBotCount = 0x245281, kBotRecords = 0x245282, kBotRecordSize = 0x12;
 
 float GetF(uint32_t va) {
@@ -97,7 +98,8 @@ struct Entry {          // one player's state on the wire
 };
 struct Named {          // a player in the lobby: who and as what
     uint8_t peer, local;
-    uint16_t character;  // the slot's +0x20
+    uint8_t character;   // the join record's +8 (an index into the characters 0x17CB98, 0x18 each)
+    uint8_t team;        // the join record's +4 (1 the first team)
     char name[16];
 };
 constexpr uint32_t kSettings = 0x260030, kSettingsSize = 0x40;  // the match's options (the MP block's, 0x260030-6F)
@@ -185,6 +187,15 @@ std::vector<Named> LobbyList() {
     for (auto& [peer, names] : g_infos)
         if (g_clients.count(peer))
             for (Named n : names) n.peer = uint8_t(peer), all.push_back(n);
+    static const int fake = [] {  // NF_LAN_FAKE=N (diagnostic): N made-up players in the lobby, alternate teams
+        const char* e = std::getenv("NF_LAN_FAKE");
+        return e ? std::atoi(e) : 0;
+    }();
+    for (int i = 0; i < fake; i++) {
+        Named n{uint8_t(200 + i), 0, uint8_t(i % 8), uint8_t(i % 2 ? 2 : 1), {}};
+        std::snprintf(n.name, sizeof n.name, "Test %d", i + 1);
+        all.push_back(n);
+    }
     return all;
 }
 void SendLobby() {
@@ -545,14 +556,41 @@ bool Interpolate(const std::deque<Sample>& s, int64_t t, Body& out) {
 std::atomic<int64_t> g_match_seen{-100000};
 bool MatchOn() { return Now() - g_match_seen.load() < 1000; }
 
-// a player's name as shown: a copy's default name ("Player 1", the join page's when no codename is loaded) is
-// numbered by the player's place in the lobby instead, so two copies' first players differ
+// a player's name as shown: as sent, numbered if an earlier player in the lobby has the same ("Julie", "Julie 2")
 std::string ShownName(const Named& m, size_t place) {
     std::string n(m.name, strnlen(m.name, 15));
-    size_t sp = n.rfind(' ');
-    if (sp != std::string::npos && sp + 2 == n.size() && n.back() == char('1' + m.local))
-        n = n.substr(0, sp + 1) + std::to_string(place + 1);
+    int same = 0;
+    for (size_t i = 0; i < place && i < g_lobby.size(); i++)
+        same += std::string(g_lobby[i].name, strnlen(g_lobby[i].name, 15)) == n ? 1 : 0;
+    if (same) n = n.substr(0, 12) + " " + std::to_string(same + 1);
     return n;
+}
+
+// this PC's player name: settings.toml's player_name, else the Windows user's name
+std::string PlayerName() {
+    static const std::string name = [] {
+        std::string n;
+        if (FILE* f = std::fopen("settings.toml", "r")) {
+            char line[256];
+            while (std::fgets(line, sizeof line, f)) {
+                std::string l = line;
+                if (l.rfind("player_name", 0) != 0) continue;
+                size_t a = l.find('"'), b = l.rfind('"');
+                if (a != std::string::npos && b > a) n = l.substr(a + 1, b - a - 1);
+            }
+            std::fclose(f);
+        }
+#ifdef _WIN32
+        if (n.empty()) {
+            char user[64] = {};
+            DWORD size = sizeof user;
+            if (GetUserNameA(user, &size)) n = user;
+        }
+#endif
+        if (n.empty()) n = "Bond";
+        return n.substr(0, 15);
+    }();
+    return name;
 }
 size_t Place(const Named& m) {
     for (size_t i = 0; i < g_lobby.size(); i++)
@@ -567,9 +605,12 @@ std::vector<Named> Remotes() {
         if (m.peer != g_me.load()) out.push_back(m);
     if (g_lobby.empty())
         for (auto& [k, r] : g_remotes)
-            if (Now() - r.heard < 2000) out.push_back(Named{uint8_t(k >> 8), uint8_t(k & 0xFF), 0, "Player"});
+            if (Now() - r.heard < 2000) out.push_back(Named{uint8_t(k >> 8), uint8_t(k & 0xFF), 0, 1, "Player"});
     return out;
 }
+
+// a human's team (the join record's: 1 the first) as a bot record's (1 the first, 0 the second: 0x897E2)
+uint8_t BotTeam(uint8_t team) { return team == 1 ? 1 : 0; }
 
 int PuppetKey(int slot) {  // the remote driving bot slot, else -1
     for (auto& [k, s] : g_slot_of)
@@ -657,8 +698,23 @@ void LanFrame(X86Context& ctx) {
         if (!kernel::G<uint8_t>(kJoined + i * kJoinSize)) continue;
         Named n{};
         n.local = uint8_t(i);
-        n.character = kernel::G<uint16_t>(kSlots + i * kSlotSize + kSlotCharacter);
-        std::memcpy(n.name, &kernel::G<char>(kSlots + i * kSlotSize), 15);
+        n.character = uint8_t(R32(kJoined + i * kJoinSize + kJoinCharacter));
+        n.team = uint8_t(R32(kJoined + i * kJoinSize + kJoinTeam));
+        // the name: the codename loaded (the game's own), else this PC's player name; 2, 3, 4 after it for the others
+        std::string base = R32(kCodenameLoaded) >= 2
+                               ? std::string(&kernel::G<char>(kCodename), strnlen(&kernel::G<char>(kCodename), 15))
+                               : PlayerName();
+        std::string mine = i ? base.substr(0, 13) + " " + std::to_string(i + 1) : base;
+        std::memcpy(n.name, mine.data(), std::min<size_t>(mine.size(), 15));
+        // the slot (the lists, the match) as the lobby shows it: numbered after an earlier player of the same name
+        n.peer = uint8_t(std::max(0, g_me.load()));
+        {
+            std::lock_guard<std::mutex> lock(g_lock);
+            for (size_t k = 0; k < g_lobby.size(); k++)
+                if (g_lobby[k].peer == n.peer && g_lobby[k].local == n.local) mine = ShownName(n, k);
+        }
+        char* slot = &kernel::G<char>(kSlots + i * kSlotSize);
+        if (std::strncmp(slot, mine.c_str(), 16)) std::memset(slot, 0, 16), std::memcpy(slot, mine.data(), mine.size());
         names.push_back(n);
     }
     std::lock_guard<std::mutex> lock(g_lock);
@@ -677,9 +733,18 @@ X86_FUNC(sub_000A25F0) {  // a multiplayer match starts: the bots are the other 
         std::lock_guard<std::mutex> lock(g_lock);
         g_slot_of.clear();
         int n = 0;
-        for (const Named& m : Remotes())
-            if (n < kMostBots) g_slot_of[uint16_t(m.peer << 8 | m.local)] = kFirstBot + n++;
-        kernel::G<uint8_t>(kOwnBots) = 0;
+        for (const Named& m : Remotes()) {
+            if (n >= kMostBots) break;
+            uint32_t rec = kBotRecords + uint32_t(n) * kBotRecordSize;  // its look and team in the match (0xA27D1)
+            std::string shown = ShownName(m, Place(m));
+            std::memset(&kernel::G<uint8_t>(rec), 0, 0xF);
+            std::memcpy(&kernel::G<char>(rec), shown.data(), std::min<size_t>(shown.size(), 14));
+            kernel::G<uint8_t>(rec + 0xF) = BotTeam(m.team);
+            kernel::G<uint8_t>(rec + 0x10) = m.character;
+            g_slot_of[uint16_t(m.peer << 8 | m.local)] = kFirstBot + n++;
+        }
+        kernel::G<uint8_t>(kOwnBots) = 1;
+        kernel::G<uint8_t>(kBotCount) = uint8_t(n);
         W32(kBots, uint32_t(n));
         LOGR("nightfire: LAN match: %u players here, %d from the network (bots %d..)", R32(kHumans), n, kFirstBot);
     }
@@ -786,33 +851,50 @@ void ApplyHost() {  // a client: the host's options (its own humans and bots kep
     W32(kHumanCount, humans), W32(kBotTotal, bots);
 }
 
-// the lobby's other players: the first in the Playing list's free rows (after this copy's), the rest as bots
-constexpr uint32_t kPlayingRows = 4, kTeams = 0x20000000;
-constexpr uint32_t kPlayingName = 0x10000237, kPlayingFace = 0x10000235, kPlayingScore = 0x10000238;
-constexpr uint32_t kRowsUsed = 0x25E95B, kListSet = 0x728F0, kCharacters = 0x17CB98;
-std::vector<Named> LobbyBots(std::vector<Named>& playing) {
-    std::vector<Named> rs = Remotes();
+// the lobby's other players in the players' two lists (the fill's: team 1's at 0x10000237 / 35 / 38, the other
+// team's at 0x10000239 / 36 / 3A, four rows each, their rows used counted at 0x25E95B and 0x25E95A): by team in a
+// team game, else the first list then the second; the rest as bots (the bot list shows a face, no name)
+constexpr uint32_t kListRows = 4, kTeams = 0x20000000;
+struct PlayerList {
+    uint32_t name, face, score, used;
+};
+constexpr PlayerList kLists[2] = {{0x10000237, 0x10000235, 0x10000238, 0x25E95B},
+                                  {0x10000239, 0x10000236, 0x1000023A, 0x25E95A}};
+constexpr uint32_t kListSet = 0x728F0, kCharacters = 0x17CB98, kSecondHeader = 0x1000023E;
+struct Listed {
+    Named who;
+    std::string name;
+    int list;
+};
+std::vector<Named> LobbyBots(std::vector<Listed>& listed) {
+    std::vector<Named> rs = Remotes(), bots;
     if (rs.size() > size_t(kMostBots)) rs.resize(kMostBots);
-    playing.clear();
-    uint32_t local = 0;
-    for (uint32_t i = 0; i < 4; i++) local += kernel::G<uint8_t>(kJoined + i * kJoinSize) ? 1 : 0;
-    if (!(R32(0x26003C) & kTeams))
-        while (!rs.empty() && local + playing.size() < kPlayingRows) playing.push_back(rs.front()), rs.erase(rs.begin());
+    listed.clear();
+    bool teams = R32(0x26003C) & kTeams;
+    uint32_t used[2] = {0, 0};
+    for (uint32_t i = 0; i < 4; i++)
+        if (kernel::G<uint8_t>(kJoined + i * kJoinSize))
+            used[teams && R32(kJoined + i * kJoinSize + kJoinTeam) != 1 ? 1 : 0]++;
+    for (const Named& m : rs) {
+        int list = teams ? (m.team == 1 ? 0 : 1) : (used[0] < kListRows ? 0 : 1);
+        if (used[list] < kListRows) used[list]++, listed.push_back({m, ShownName(m, Place(m)), list});
+        else bots.push_back(m);
+    }
     kernel::G<uint8_t>(kOwnBots) = 1;
-    kernel::G<uint8_t>(kBotCount) = uint8_t(rs.size());
-    for (size_t i = 0; i < rs.size(); i++) {
+    kernel::G<uint8_t>(kBotCount) = uint8_t(bots.size());
+    for (size_t i = 0; i < bots.size(); i++) {
         uint32_t rec = kBotRecords + uint32_t(i) * kBotRecordSize;
         std::memset(&kernel::G<uint8_t>(rec), 0, 0xF);
-        std::memcpy(&kernel::G<char>(rec), rs[i].name, 14);
-        kernel::G<uint8_t>(rec + 0xF) = 0;
-        kernel::G<uint8_t>(rec + 0x10) = uint8_t(rs[i].character);
+        std::memcpy(&kernel::G<char>(rec), bots[i].name, 14);
+        kernel::G<uint8_t>(rec + 0xF) = BotTeam(bots[i].team);
+        kernel::G<uint8_t>(rec + 0x10) = bots[i].character;
     }
-    return rs;
+    return bots;
 }
 
 std::string Shown() {
     std::string k = g_have_settings ? "s" : "";
-    for (const Named& m : g_lobby) k += std::string(m.name) + "|";
+    for (const Named& m : g_lobby) k += std::string(m.name) + char('0' + m.team) + char('A' + m.character) + "|";
     if (!g_host && g_have_settings) k.append((const char*)g_settings, kSettingsSize);
     return k;
 }
@@ -825,26 +907,12 @@ X86_FUNC(sub_000891E0) {  // the summary page's messages (player, ?, ?, message,
     if (g_on && msg == 0x4D && g_page == Page::kLobby) g_page = Page::kOther;
     if (!g_on || g_page != Page::kLobby) return __imp__sub_000891E0(ctx, base);
     auto fill = [&] {
-        std::vector<Named> bots, playing;
-        std::vector<std::string> names;
+        std::vector<Named> bots;
+        std::vector<Listed> listed;
         {
             std::lock_guard<std::mutex> lock(g_lock);
             ApplyHost();
-            // this copy's players with a default name: numbered by their place too (their slot's name, in the match too)
-            for (uint32_t i = 0; i < 4 && g_me.load() >= 0; i++) {
-                if (!kernel::G<uint8_t>(kJoined + i * kJoinSize)) continue;
-                Named me{uint8_t(g_me.load()), uint8_t(i), 0, {}};
-                char* slot = &kernel::G<char>(kSlots + i * kSlotSize);
-                std::memcpy(me.name, slot, 15);
-                bool listed = false;
-                for (const Named& m : g_lobby) listed |= m.peer == me.peer && m.local == me.local;
-                if (!listed) continue;
-                std::string n = ShownName(me, Place(me));
-                std::memset(slot, 0, 16);
-                std::memcpy(slot, n.data(), std::min<size_t>(n.size(), 15));
-            }
-            bots = LobbyBots(playing);
-            for (const Named& m : playing) names.push_back(ShownName(m, Place(m)));
+            bots = LobbyBots(listed);
             g_shown = Shown();
         }
         W32(ctx.esp + 0x10, 0x4C);
@@ -852,26 +920,31 @@ X86_FUNC(sub_000891E0) {  // the summary page's messages (player, ?, ?, message,
         W32(ctx.esp + 0x10, msg);
         // as the fill shows a joined player (0x89375): the name, the score line, the face (the character's)
         uint32_t eax = ctx.eax;
-        for (size_t i = 0; i < playing.size(); i++) {
-            uint32_t row = kernel::G<uint8_t>(kRowsUsed);
-            if (row >= kPlayingRows) break;
-            kernel::G<uint8_t>(kRowsUsed) = uint8_t(row + 1);
+        bool second = false;
+        for (const Listed& l : listed) {
+            const PlayerList& pl = kLists[l.list];
+            uint32_t row = kernel::G<uint8_t>(pl.used);
+            if (row >= kListRows) continue;
+            kernel::G<uint8_t>(pl.used) = uint8_t(row + 1);
+            second |= l.list == 1;
             auto set = [&](uint32_t id, uint32_t m, uint32_t a) { kernel::CallGuest(ctx, kListSet, {player, id, row, m, a, 0}); };
-            set(kPlayingName, 0x2B, 2);
-            set(kPlayingName, 0x18, nf::MenuString(names[i].c_str()));
-            set(kPlayingScore, 0x2B, 2);
-            set(kPlayingScore, 0x18, nf::MenuString("+0"));
-            set(kPlayingFace, 0x2B, 2);
-            set(kPlayingFace, 0x24, R32(kCharacters + uint32_t(playing[i].character) * 0x18));
+            set(pl.name, 0x2B, 2);
+            set(pl.name, 0x18, nf::MenuString(l.name.c_str()));
+            set(pl.score, 0x2B, 2);
+            set(pl.score, 0x18, nf::MenuString("+0"));
+            set(pl.face, 0x2B, 2);
+            set(pl.face, 0x24, R32(kCharacters + uint32_t(l.who.character) * 0x18));
         }
+        // the second list's panel shown (its title stays the second team's: text there crashed the game)
+        if (second && !(R32(0x26003C) & kTeams)) nf::MenuSet(ctx, player, kSecondHeader, 0x2B, 2);
         ctx.eax = eax;
-        bots.insert(bots.begin(), playing.begin(), playing.end());
         static size_t said = ~size_t(0);
-        if (said != bots.size()) {
-            said = bots.size();
-            LOGR("nightfire: LAN lobby: %zu players from the network listed (%s)", bots.size(),
-                 g_host ? "the host: its options" : "a client: the host's options, only the host changes them");
+        if (said != listed.size() + bots.size()) {
+            said = listed.size() + bots.size();
+            LOGR("nightfire: LAN lobby: %zu players from the network (%zu named in the players' lists), %s",
+                 listed.size() + bots.size(), listed.size(), g_host ? "the host" : "a client");
         }
+        return;
     };
     if (msg == 0x4C) {
         {

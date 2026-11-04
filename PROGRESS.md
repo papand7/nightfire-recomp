@@ -31,6 +31,21 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - LAN lobby: names, up to 8 named players, teams, characters
+- Names: a loaded codename (the game's own, [0x17D550] >= 2, 0x17D558), else settings.toml's `player_name`, else the
+  Windows user's name; a copy's players 2-4 get " 2".." 4" after it. Two players of the same name are numbered by
+  lobby place ("Felix", "Felix 2"), the same on every copy, in the lists and the match.
+- The lobby uses both player lists of the summary page (0x10000237/35/38 and 0x10000239/36/3A, four rows each,
+  rows used at 0x25E95B / 0x25E95A): by team in team games (join record +4: 1 the first team), else the first list
+  then the second (its panel 0x1000023E shown; its title stays "Phoenix": writing text to it crashed). Players past
+  eight go to the AI Bots list (no names there).
+- Each player's character (join record +8, an index into 0x17CB98) and team are sent; the puppets get them in the
+  match through the bot setup (0x245280 = 1, records: name, +0xF team 1/0, +0x10 character), so they look like the
+  remote players' choices.
+- NF_LAN_FAKE=N (diagnostic, host): N made-up lobby players. Tested with 5 (`FAKE=5 .local/vk/netplay.sh`): both
+  copies listed 7 players by name and face in two columns, and the match started with 6 puppets.
+- Not tested: a team game over the network (team colours in the match).
+
 ### 2026-11-04 - Netplay in the main menu; Multiplayer is Split Screen
 - The main menu reads NightFire / Split Screen / Netplay / Codenames / Settings / Quit Game (six rows 22 apart).
   Split Screen is the game's Multiplayer item relabelled (it ends any LAN session); Netplay is a clone of the
