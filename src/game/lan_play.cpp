@@ -113,7 +113,7 @@ struct Event {          // a hit on another copy's player, or a death; relayed b
     uint16_t weapon;    // the shooter's weapon index
     uint8_t node[0x40]; // the hit's record from +8 (damage, time, directions, type, zone)
 };
-enum : uint8_t { kHitEvent = 1, kDeathEvent = 2 };
+enum : uint8_t { kHitEvent = 1, kDeathEvent = 2, kShotEvent = 3 };  // a shot: node holds origin, direction, sound
 struct ServerInfo {     // a host's answer to a search (kQuery, broadcast to the port)
     char host[24];      // the PC's name
     char map[24];
@@ -589,6 +589,8 @@ bool Interpolate(const std::deque<Sample>& s, int64_t t, Body& out) {
 }
 
 void TestFrame();  // below
+void Queue(Event e);
+bool g_replaying = false;  // a remote shot being fired from its puppet (0x211F0 lets it)
 void Inject(X86Context& ctx, uint32_t obj);
 void ApplyEvents(X86Context& ctx);
 void WatchDeaths();
@@ -885,16 +887,31 @@ X86_FUNC(sub_00037C10) {
     __imp__sub_00037C10(ctx, base);
 }
 
-// a projectile fired (0x211F0, cdecl: the shooter's object, ...; the object made, 0 none, the bots' fire event at 0x18302
+// a projectile fired (0x211F0, cdecl: -1, the owner, the shooter, the weapon entry, origin*, direction*, sound; the
+// object made, 0 none, the bots' fire event at 0x18302
 // then plays no flash or sound): none from a puppet, whose shots are its own copy's
 X86_EXTERN_FUNC(__imp__sub_000211F0);
 X86_FUNC(sub_000211F0) {
-    if (nf::LanPuppet(R32(ctx.esp + 4))) {
+    uint32_t shooter = R32(ctx.esp + 8);  // (-1, the owner: data +0x24, the shooter, ...): 0x2128F reads [esp+0x34]
+    if (!g_replaying && nf::LanPuppet(shooter)) {
         ctx.eax = 0;
         ctx.esp += 4;
         return;
     }
+    // (?, owner, shooter, weapon entry, origin*, direction*, sound): one of ours fired, the others see it
+    uint32_t entry = R32(ctx.esp + 0x10), origin = R32(ctx.esp + 0x14), dir = R32(ctx.esp + 0x18);
+    uint32_t snd = R32(ctx.esp + 0x1C) & 0xFFFF;
+    int slot = g_on && !g_replaying ? SlotOf(shooter) : -1;
     __imp__sub_000211F0(ctx, base);
+    if (slot < 0 || slot >= kFirstBot || !origin || !dir || entry < 0x18CFA0) return;
+    Event e{};
+    e.kind = kShotEvent, e.killer_peer = uint8_t(std::max(0, g_me.load())), e.killer_local = uint8_t(slot);
+    e.victim_peer = e.victim_local = 0xFF;
+    e.weapon = uint16_t((entry - 0x18CFA0) / 0x10C);
+    std::memcpy(e.node, kernel::HostPtr(origin), 12);
+    std::memcpy(e.node + 12, kernel::HostPtr(dir), 12);
+    std::memcpy(e.node + 24, &snd, 2);
+    Queue(e);
 }
 
 // ---- the lobby: the multiplayer summary page (40000049, 0x891E0) ---------------------------------------------------
@@ -1188,6 +1205,18 @@ void ApplyEvents(X86Context& ctx) {
             if (said++ < 20) LOGR("nightfire: LAN: hit by %u:%u (%.1f damage, zone %u), health %.1f", e.killer_peer,
                                   e.killer_local, dmg, unsigned(e.node[0x3E]) | unsigned(e.node[0x3F]) << 8,
                                   data ? GetF(data + 0x824) : -1.0f);
+        } else if (e.kind == kShotEvent && e.killer_peer != g_me.load()) {
+            // another copy's player fired: the same round from its puppet (its tracer and sound; it does no harm here)
+            uint32_t shooter = killer;
+            if (!shooter) continue;
+            static uint32_t vec = mem::AllocHostContiguous(32, 16);
+            std::memcpy(kernel::HostPtr(vec), e.node, 24);
+            uint16_t snd;
+            std::memcpy(&snd, e.node + 24, 2);
+            g_replaying = true;
+            kernel::CallGuest(ctx, 0x211F0, {0xFFFFFFFF, shooter, shooter, 0x18CFA0 + uint32_t(e.weapon) * 0x10C, vec,
+                                             vec + 12, snd});
+            g_replaying = false;
         } else if (e.kind == kDeathEvent && e.victim_peer != g_me.load()) {
             // the scores as the victim's copy counted them (0xA2211-0xA230E): the killer's kills, streak and score,
             // the victim's deaths and killer; a death of one's own costs a kill and a point
@@ -1339,5 +1368,13 @@ X86_EXTERN_FUNC(__imp__sub_000AB450);
 X86_FUNC(sub_000AB450) {
     uint32_t obj = R32(ctx.esp + 4);
     __imp__sub_000AB450(ctx, base);
-    if (g_on) Inject(ctx, obj);
+    if (!g_on) return;
+    // a round from a puppet (another copy's shot, replayed for its tracer) does nothing: its copy sends the hits
+    for (uint32_t n = R32(obj + kHitList), guard = 0; n && guard < 64; n = R32(n + 4), guard++) {
+        uint32_t src = R32(n + 0x4C);
+        if (!src || kernel::G<uint8_t>(src + 0xDB) != kProjClass || R32(src + 0xBC) == src + 0x100) continue;
+        uint32_t data = R32(src + 0xBC);
+        if (data && nf::LanPuppet(R32(data + 0x24))) W32(n + 8, 0);
+    }
+    Inject(ctx, obj);
 }

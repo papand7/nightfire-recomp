@@ -31,6 +31,14 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - LAN play: remote shots replayed from the puppets
+- Our players' rounds (0x211F0, args -1, owner, shooter, weapon entry, origin*, direction*, sound: the shooter is the
+  second argument, 0x2128F; the puppet check read the first, -1, until now) go to the other copies (kShotEvent:
+  origin, direction, sound, weapon), which fire the same round from the shooter's puppet: its tracer and sound. Its
+  records in our players' hit lists are zeroed after the collisions (0xAB450): the shooter's copy sends the hits.
+- Tested (lan_fight.sh): the client's health still fell 20 a hit (no doubled damage), it died "Defeated by Felix",
+  no crash. The replayed tracer was not seen in a screenshot (dark, the view red at death): not confirmed.
+
 ### 2026-11-04 - LAN play: hits, deaths and scores over the network; puppets' legs
 - Hits: a shot of ours that hits a puppet (its hit record at 0x3D900, from src/game/hit_feedback.cpp) is refused here
   and its record (+8..+0x48: damage, time, directions, type, zone) goes to the victim's copy (kEvent, through the
