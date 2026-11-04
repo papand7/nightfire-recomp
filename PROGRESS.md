@@ -31,6 +31,13 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - The game's own font enlarged from its own edges (no more blobs)
+- With rounded_font off, the font was the glyphs' mask (alpha >= 128) through Scale2x twice, a blur and a cut: small
+  letters melted ("s" like "8", a bent "t"; the player: "the weird font"). Now src/common/fonts.cpp's Enlarge takes
+  the font's own anti-aliased alpha, enlarges it 8x with Catmull-Rom and firms the edge (slope x2.2 around half), so
+  the letters keep the shapes the game drew. Seen on the title screen's copyright text (`.local/vk/font_cmp.sh`).
+- Not looked at: Driving.xbe's font (the same path), the in-game HUD at every size.
+
 ### 2026-11-04 - LAN play: remote shots replayed from the puppets
 - Our players' rounds (0x211F0, args -1, owner, shooter, weapon entry, origin*, direction*, sound: the shooter is the
   second argument, 0x2128F; the puppet check read the first, -1, until now) go to the other copies (kShotEvent:

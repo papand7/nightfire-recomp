@@ -112,6 +112,36 @@ std::vector<uint8_t> Cut(const std::vector<float>& f, int w, int h, int s) {
     return out;
 }
 
+// the game's own glyphs kScale times larger, their shapes kept: the font's alpha (its anti-aliased edges carry the
+// shapes finer than a texel) enlarged with Catmull-Rom, then its edge made firmer (the slope around half times
+// kFirm); the mask's Scale2x and blur rounded small letters into blobs ("s" as "8")
+constexpr float kFirm = 2.2f;
+std::vector<uint8_t> Enlarge(const std::vector<uint32_t>& bgra, int w, int h) {
+    auto at = [&](int x, int y) {
+        return float(bgra[size_t(std::clamp(y, 0, h - 1)) * w + size_t(std::clamp(x, 0, w - 1))] >> 24) / 255.0f;
+    };
+    auto cr = [](float p0, float p1, float p2, float p3, float t) {
+        return p1 + 0.5f * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
+    };
+    int ow = w * kScale, oh = h * kScale;
+    std::vector<uint8_t> out(size_t(ow) * oh);
+    for (int y = 0; y < oh; y++) {
+        float sy = (y + 0.5f) / kScale - 0.5f;
+        int y0 = int(std::floor(sy));
+        float fy = sy - y0;
+        for (int x = 0; x < ow; x++) {
+            float sx = (x + 0.5f) / kScale - 0.5f;
+            int x0 = int(std::floor(sx));
+            float fx = sx - x0, row[4];
+            for (int j = 0; j < 4; j++)
+                row[j] = cr(at(x0 - 1, y0 - 1 + j), at(x0, y0 - 1 + j), at(x0 + 1, y0 - 1 + j), at(x0 + 2, y0 - 1 + j), fx);
+            float a = (cr(row[0], row[1], row[2], row[3], fy) - 0.5f) * kFirm + 0.5f;
+            out[size_t(y) * ow + x] = uint8_t(std::clamp(a, 0.0f, 1.0f) * 255 + 0.5f);
+        }
+    }
+    return out;
+}
+
 bool DrawFont(const std::vector<uint8_t>& mask, int w, int h, std::vector<uint8_t>& alpha);
 bool DrawEaFont(uint32_t data, int w, int h, std::vector<uint8_t>& alpha);
 
@@ -122,8 +152,9 @@ std::vector<uint32_t> Rebuild(const std::vector<uint32_t>& bgra, int w, int h, u
     std::vector<uint8_t> m4 = Scale2x(Scale2x(mask, w, h), w * 2, h * 2);
     std::vector<uint8_t> alpha = Cut(Blur(m4, w * 4, h * 4), w * 4, h * 4, kScale / 4);
     if (!rounded_font) {
+        alpha = Enlarge(bgra, w, h);
         static bool said = false;
-        if (!said) said = true, LOGR("nightfire: the game's own font, its edges smoothed (rounded_font off)");
+        if (!said) said = true, LOGR("nightfire: the game's own font, enlarged from its own edges (rounded_font off)");
     } else if (w == 512 && h == 64 && DrawFont(mask, w, h, alpha)) {
         static bool said = false;
         if (!said) said = true, LOGR("nightfire: default.xbe's font drawn from Sour Gummy Black");
