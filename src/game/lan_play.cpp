@@ -41,6 +41,7 @@
 #endif
 
 #include "common/nightfire.h"
+#include "game/menu_page.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
 #include "xdk/hle.h"
@@ -53,6 +54,10 @@ constexpr uint32_t kHumans = 0x260044, kBots = 0x260048;
 constexpr uint32_t kScores = 0x262738, kSlotSize = 0x30, kSlotObject = 0x1C;
 constexpr uint32_t kPos = 0x24, kYaw = 0x40;
 constexpr int kFirstBot = 4, kMostBots = 6;
+// the MP block's player slots (names, C strings; the character at +0x20), the join page's records (+0 joined), the
+// bot setup (0x245280 its own bots, 0x245281 how many, records of 0x12: +0 name, +0xF team, +0x10 character)
+constexpr uint32_t kSlots = 0x25FE38, kSlotCharacter = 0x20, kJoined = 0x245240, kJoinSize = 0x10;
+constexpr uint32_t kOwnBots = 0x245280, kBotCount = 0x245281, kBotRecords = 0x245282, kBotRecordSize = 0x12;
 
 float GetF(uint32_t va) {
     float f;
@@ -73,7 +78,7 @@ int SlotOf(uint32_t obj) {
 // ---- the network --------------------------------------------------------------------------------------------------
 
 constexpr uint32_t kMagic = 0x314C464E;  // "NFL1"
-enum : uint8_t { kHello = 1, kWelcome, kState, kSnap, kPing, kPong };
+enum : uint8_t { kHello = 1, kWelcome, kState, kSnap, kPing, kPong, kInfo, kLobby };
 constexpr uint16_t kPort = 27787;
 constexpr int kRate = 30;                // states and snapshots a second
 constexpr int64_t kDelay = 100;          // ms in the past remote players are drawn
@@ -89,6 +94,12 @@ struct Entry {          // one player's state on the wire
     uint32_t time;      // the host's clock (ms) at which it was taken or arrived
     Body body;
 };
+struct Named {          // a player in the lobby: who and as what
+    uint8_t peer, local;
+    uint16_t character;  // the slot's +0x20
+    char name[16];
+};
+constexpr uint32_t kSettings = 0x260030, kSettingsSize = 0x40;  // the match's options (the MP block's, 0x260030-6F)
 struct Header {
     uint32_t magic;
     uint8_t type, peer, count, pad;
@@ -119,6 +130,14 @@ bool g_in_match = false;                  // g_local is theirs (else one player 
 std::map<uint16_t, Remote> g_remotes;     // (peer << 8 | local): other copies' players
 std::map<uint16_t, int> g_slot_of;        // a remote's bot slot in this match
 std::map<uint16_t, Entry> g_latest;       // the host's: everyone's newest
+// the lobby: everyone's names in order (the host's list, sent to all), the host's options and its starts
+std::vector<Named> g_local_names;         // this copy's players, from the game's thread
+std::map<int, std::vector<Named>> g_infos;  // the host's: each client's
+std::vector<Named> g_lobby;
+uint8_t g_settings[kSettingsSize];
+bool g_have_settings = false;
+uint32_t g_starts = 0;                    // the host's count of matches started from the lobby
+std::atomic<bool> g_send_now{false};
 
 #ifdef _WIN32
 SOCKET g_sock = INVALID_SOCKET;
@@ -137,6 +156,34 @@ void Send(const sockaddr_in& to, uint8_t type, const std::vector<Entry>& entries
     std::memcpy(buf, &h, sizeof h);
     std::memcpy(buf + sizeof h, entries.data(), h.count * sizeof(Entry));
     sendto(g_sock, buf, int(sizeof h + h.count * sizeof(Entry)), 0, (const sockaddr*)&to, sizeof to);
+}
+
+void SendRaw(const sockaddr_in& to, uint8_t type, const void* body, size_t size, uint8_t count) {
+    char buf[1400];
+    Header h{kMagic, type, uint8_t(g_me.load() < 0 ? 0 : g_me.load()), count, 0, uint32_t(Now())};
+    size = std::min(size, sizeof buf - sizeof h);
+    std::memcpy(buf, &h, sizeof h);
+    std::memcpy(buf + sizeof h, body, size);
+    sendto(g_sock, buf, int(sizeof h + size), 0, (const sockaddr*)&to, sizeof to);
+}
+
+// the host's lobby: its own players, then each client's
+std::vector<Named> LobbyList() {
+    std::vector<Named> all;
+    for (Named n : g_local_names) n.peer = 0, all.push_back(n);
+    for (auto& [peer, names] : g_infos)
+        if (g_clients.count(peer))
+            for (Named n : names) n.peer = uint8_t(peer), all.push_back(n);
+    return all;
+}
+void SendLobby() {
+    g_lobby = LobbyList();
+    std::vector<uint8_t> body(kSettingsSize + 4);
+    std::memcpy(body.data(), g_settings, kSettingsSize);
+    std::memcpy(body.data() + kSettingsSize, &g_starts, 4);
+    size_t n = std::min<size_t>(g_lobby.size(), 40);
+    body.insert(body.end(), (const uint8_t*)g_lobby.data(), (const uint8_t*)(g_lobby.data() + n));
+    for (auto& [id, c] : g_clients) SendRaw(c.addr, kLobby, body.data(), body.size(), uint8_t(n));
 }
 
 void Store(const Entry& e) {  // a remote player's state, by the host's clock
@@ -159,7 +206,31 @@ void Receive() {
         if (n < int(sizeof(Header))) return;
         Header h;
         std::memcpy(&h, buf, sizeof h);
-        if (h.magic != kMagic || n < int(sizeof h + h.count * sizeof(Entry))) continue;
+        if (h.magic != kMagic) continue;
+        if (h.type == kInfo || h.type == kLobby) {
+            std::lock_guard<std::mutex> lock(g_lock);
+            const char* p = buf + sizeof h;
+            size_t head = h.type == kLobby ? kSettingsSize + 4 : 0;
+            if (n < int(sizeof h + head + h.count * sizeof(Named))) continue;
+            std::vector<Named> names(h.count);
+            std::memcpy(names.data(), p + head, h.count * sizeof(Named));
+            for (Named& m : names) m.name[15] = 0;
+            if (h.type == kInfo && g_host) {
+                auto c = g_clients.find(h.peer);
+                if (c == g_clients.end()) continue;
+                c->second.heard = Now();
+                if (g_infos[h.peer].size() != names.size()) g_send_now = true;
+                g_infos[h.peer] = names;
+            } else if (h.type == kLobby && !g_host) {
+                g_heard_host = Now();
+                std::memcpy(g_settings, p, kSettingsSize);
+                g_have_settings = true;
+                std::memcpy(&g_starts, p + kSettingsSize, 4);
+                g_lobby = names;
+            }
+            continue;
+        }
+        if (n < int(sizeof h + h.count * sizeof(Entry))) continue;
         std::vector<Entry> es(h.count);
         std::memcpy(es.data(), buf + sizeof h, h.count * sizeof(Entry));
         int64_t now = Now();
@@ -213,7 +284,7 @@ void Receive() {
 }
 
 void Loop() {
-    int64_t next = Now(), last_ping = 0, last_hello = -10000;
+    int64_t next = Now(), last_ping = 0, last_hello = -10000, last_lobby = 0;
     for (;;) {
         Receive();
         int64_t now = Now();
@@ -239,6 +310,7 @@ void Loop() {
                         ++it;
                     }
                 }
+                if (now - last_lobby > 500 || g_send_now.exchange(false)) last_lobby = now, SendLobby();
                 std::vector<Entry> all = mine;
                 for (auto& [k, e] : g_latest) all.push_back(e);
                 for (auto& [id, c] : g_clients) Send(c.addr, kSnap, all, uint32_t(now));
@@ -249,6 +321,11 @@ void Loop() {
                 if (now - last_hello > 500) last_hello = now, Send(g_host_addr, kHello, {}, uint32_t(now));
             } else {
                 Send(g_host_addr, kState, mine, uint32_t(now));
+                if (now - last_lobby > 500 || g_send_now.exchange(false)) {
+                    last_lobby = now;
+                    SendRaw(g_host_addr, kInfo, g_local_names.data(), g_local_names.size() * sizeof(Named),
+                            uint8_t(g_local_names.size()));
+                }
                 if (now - last_ping > 500) last_ping = now, Send(g_host_addr, kPing, {}, uint32_t(now));
             }
         }
@@ -332,12 +409,42 @@ bool Interpolate(const std::deque<Sample>& s, int64_t t, Body& out) {
 std::atomic<int64_t> g_match_seen{-100000};
 bool MatchOn() { return Now() - g_match_seen.load() < 1000; }
 
+// a player's name as shown: a copy's default name ("Player 1", the join page's when no codename is loaded) is
+// numbered by the player's place in the lobby instead, so two copies' first players differ
+std::string ShownName(const Named& m, size_t place) {
+    std::string n(m.name, strnlen(m.name, 15));
+    size_t sp = n.rfind(' ');
+    if (sp != std::string::npos && sp + 2 == n.size() && n.back() == char('1' + m.local))
+        n = n.substr(0, sp + 1) + std::to_string(place + 1);
+    return n;
+}
+size_t Place(const Named& m) {
+    for (size_t i = 0; i < g_lobby.size(); i++)
+        if (g_lobby[i].peer == m.peer && g_lobby[i].local == m.local) return i;
+    return 0;
+}
+
+// the lobby's players from other copies, in its order (the host's list; before it came, those heard from)
+std::vector<Named> Remotes() {
+    std::vector<Named> out;
+    for (const Named& m : g_lobby)
+        if (m.peer != g_me.load()) out.push_back(m);
+    if (g_lobby.empty())
+        for (auto& [k, r] : g_remotes)
+            if (Now() - r.heard < 2000) out.push_back(Named{uint8_t(k >> 8), uint8_t(k & 0xFF), 0, "Player"});
+    return out;
+}
+
 int PuppetKey(int slot) {  // the remote driving bot slot, else -1
     for (auto& [k, s] : g_slot_of)
         if (s == slot) return k;
     return -1;
 }
 }  // namespace
+
+namespace {
+void LobbyFrame(X86Context& ctx);
+}
 
 namespace nf {
 // a character driven from the network (its weapon is not the game's to fire: src/game/aim.cpp skips its update)
@@ -350,8 +457,9 @@ bool LanPuppet(uint32_t obj) {
 }
 
 // each frame, after 0xDE720 read the controls (src/game/controls.cpp): this copy's players' state for the network
-void LanFrame() {
+void LanFrame(X86Context& ctx) {
     Start();
+    LobbyFrame(ctx);
     if (!g_on) return;
     uint32_t humans = std::min<uint32_t>(R32(kHumans), 4);
     std::vector<Body> local;
@@ -366,9 +474,21 @@ void LanFrame() {
     }
     in_match = !local.empty();
     if (!in_match) local.resize(std::max<uint32_t>(humans, 1), Body{});
+    std::vector<Named> names;
+    for (uint32_t i = 0; i < 4; i++) {
+        if (!kernel::G<uint8_t>(kJoined + i * kJoinSize)) continue;
+        Named n{};
+        n.local = uint8_t(i);
+        n.character = kernel::G<uint16_t>(kSlots + i * kSlotSize + kSlotCharacter);
+        std::memcpy(n.name, &kernel::G<char>(kSlots + i * kSlotSize), 15);
+        names.push_back(n);
+    }
     std::lock_guard<std::mutex> lock(g_lock);
     g_local = local;
     g_in_match = in_match;
+    if (names.size() != g_local_names.size()) g_send_now = true;
+    g_local_names = names;
+    if (g_host) std::memcpy(g_settings, &kernel::G<uint8_t>(kSettings), kSettingsSize), g_have_settings = true;
 }
 }  // namespace nf
 
@@ -379,12 +499,24 @@ X86_FUNC(sub_000A25F0) {  // a multiplayer match starts: the bots are the other 
         std::lock_guard<std::mutex> lock(g_lock);
         g_slot_of.clear();
         int n = 0;
-        for (auto& [k, r] : g_remotes)
-            if (Now() - r.heard < 2000 && n < kMostBots) g_slot_of[k] = kFirstBot + n++;
+        for (const Named& m : Remotes())
+            if (n < kMostBots) g_slot_of[uint16_t(m.peer << 8 | m.local)] = kFirstBot + n++;
+        kernel::G<uint8_t>(kOwnBots) = 0;
         W32(kBots, uint32_t(n));
         LOGR("nightfire: LAN match: %u players here, %d from the network (bots %d..)", R32(kHumans), n, kFirstBot);
     }
     __imp__sub_000A25F0(ctx, base);
+    if (g_on) {  // the puppets go by their players' names
+        std::lock_guard<std::mutex> lock(g_lock);
+        for (const Named& m : Remotes()) {
+            auto it = g_slot_of.find(uint16_t(m.peer << 8 | m.local));
+            if (it == g_slot_of.end()) continue;
+            char* name = &kernel::G<char>(kSlots + uint32_t(it->second) * kSlotSize);
+            std::string shown = ShownName(m, Place(m));
+            std::memset(name, 0, 16);
+            std::memcpy(name, shown.data(), std::min<size_t>(shown.size(), 15));
+        }
+    }
 }
 
 X86_EXTERN_FUNC(__imp__sub_000AD520);
@@ -452,4 +584,198 @@ X86_FUNC(sub_000211F0) {
         return;
     }
     __imp__sub_000211F0(ctx, base);
+}
+
+// ---- the lobby: the multiplayer summary page (40000049, 0x891E0) ---------------------------------------------------
+// The pages' messages: 0x4C opened (filled), 0x50 each frame, 0x4B A, 0x63 B, 0x4D closed. Its fill (message 0x4C) lists the joined players (names) and the bots (the bot setup's records), the map, the
+// scenario, the weapons and the limits; A (0x4B, 0x8985C) starts the match: saves the block, sets the humans and the
+// level ([0x1F6588] from 0x260040) and loads it. In LAN play it is the lobby: its bots are the other copies' players
+// (their names written over the list's rows), a client shows the host's options (copied in before the fill) and its
+// A does nothing and B leaves to the main menu; the host's A starts the match on every copy (its start count, in the
+// lobby packets). A client goes from the join page straight to it (not to the scenario list 4000001A).
+namespace {
+constexpr uint32_t kLobbyPage = 0x40000049, kHumanCount = 0x260044, kBotTotal = 0x260048;
+constexpr uint32_t kScenarioPage = 0x4000001A, kMainMenu = 0x40000002;
+uint32_t g_refill = 0;       // the lobby to fill again (its player + 1)
+uint32_t g_seen_starts = 0;  // a client's: the host's start count when it came to the lobby
+std::string g_shown;         // the lobby as last filled (names, options), to fill again when it changes
+enum class Page { kOther, kJoin, kScenario, kLobby } g_page = Page::kOther;  // the page open (0x4C to 0x4D)
+
+void ApplyHost() {  // a client: the host's options (its own humans and bots kept)
+    if (g_host || !g_have_settings) return;
+    uint32_t humans = R32(kHumanCount), bots = R32(kBotTotal);
+    std::memcpy(&kernel::G<uint8_t>(kSettings), g_settings, kSettingsSize);
+    W32(kHumanCount, humans), W32(kBotTotal, bots);
+}
+
+// the lobby's other players: the first in the Playing list's free rows (after this copy's), the rest as bots
+constexpr uint32_t kPlayingRows = 4, kTeams = 0x20000000;
+constexpr uint32_t kPlayingName = 0x10000237, kPlayingFace = 0x10000235, kPlayingScore = 0x10000238;
+constexpr uint32_t kRowsUsed = 0x25E95B, kListSet = 0x728F0, kCharacters = 0x17CB98;
+std::vector<Named> LobbyBots(std::vector<Named>& playing) {
+    std::vector<Named> rs = Remotes();
+    if (rs.size() > size_t(kMostBots)) rs.resize(kMostBots);
+    playing.clear();
+    uint32_t local = 0;
+    for (uint32_t i = 0; i < 4; i++) local += kernel::G<uint8_t>(kJoined + i * kJoinSize) ? 1 : 0;
+    if (!(R32(0x26003C) & kTeams))
+        while (!rs.empty() && local + playing.size() < kPlayingRows) playing.push_back(rs.front()), rs.erase(rs.begin());
+    kernel::G<uint8_t>(kOwnBots) = 1;
+    kernel::G<uint8_t>(kBotCount) = uint8_t(rs.size());
+    for (size_t i = 0; i < rs.size(); i++) {
+        uint32_t rec = kBotRecords + uint32_t(i) * kBotRecordSize;
+        std::memset(&kernel::G<uint8_t>(rec), 0, 0xF);
+        std::memcpy(&kernel::G<char>(rec), rs[i].name, 14);
+        kernel::G<uint8_t>(rec + 0xF) = 0;
+        kernel::G<uint8_t>(rec + 0x10) = uint8_t(rs[i].character);
+    }
+    return rs;
+}
+
+std::string Shown() {
+    std::string k = g_have_settings ? "s" : "";
+    for (const Named& m : g_lobby) k += std::string(m.name) + "|";
+    if (!g_host && g_have_settings) k.append((const char*)g_settings, kSettingsSize);
+    return k;
+}
+}  // namespace
+
+X86_EXTERN_FUNC(__imp__sub_000891E0);
+X86_FUNC(sub_000891E0) {  // the summary page's messages (player, ?, ?, message, ...)
+    uint32_t player = R32(ctx.esp + 4), msg = R32(ctx.esp + 0x10);
+    if (g_on && msg == 0x4C) g_page = Page::kLobby;
+    if (g_on && msg == 0x4D && g_page == Page::kLobby) g_page = Page::kOther;
+    if (!g_on || g_page != Page::kLobby) return __imp__sub_000891E0(ctx, base);
+    auto fill = [&] {
+        std::vector<Named> bots, playing;
+        std::vector<std::string> names;
+        {
+            std::lock_guard<std::mutex> lock(g_lock);
+            ApplyHost();
+            // this copy's players with a default name: numbered by their place too (their slot's name, in the match too)
+            for (uint32_t i = 0; i < 4 && g_me.load() >= 0; i++) {
+                if (!kernel::G<uint8_t>(kJoined + i * kJoinSize)) continue;
+                Named me{uint8_t(g_me.load()), uint8_t(i), 0, {}};
+                char* slot = &kernel::G<char>(kSlots + i * kSlotSize);
+                std::memcpy(me.name, slot, 15);
+                bool listed = false;
+                for (const Named& m : g_lobby) listed |= m.peer == me.peer && m.local == me.local;
+                if (!listed) continue;
+                std::string n = ShownName(me, Place(me));
+                std::memset(slot, 0, 16);
+                std::memcpy(slot, n.data(), std::min<size_t>(n.size(), 15));
+            }
+            bots = LobbyBots(playing);
+            for (const Named& m : playing) names.push_back(ShownName(m, Place(m)));
+            g_shown = Shown();
+        }
+        W32(ctx.esp + 0x10, 0x4C);
+        __imp__sub_000891E0(ctx, base);
+        W32(ctx.esp + 0x10, msg);
+        // as the fill shows a joined player (0x89375): the name, the score line, the face (the character's)
+        uint32_t eax = ctx.eax;
+        for (size_t i = 0; i < playing.size(); i++) {
+            uint32_t row = kernel::G<uint8_t>(kRowsUsed);
+            if (row >= kPlayingRows) break;
+            kernel::G<uint8_t>(kRowsUsed) = uint8_t(row + 1);
+            auto set = [&](uint32_t id, uint32_t m, uint32_t a) { kernel::CallGuest(ctx, kListSet, {player, id, row, m, a, 0}); };
+            set(kPlayingName, 0x2B, 2);
+            set(kPlayingName, 0x18, nf::MenuString(names[i].c_str()));
+            set(kPlayingScore, 0x2B, 2);
+            set(kPlayingScore, 0x18, nf::MenuString("+0"));
+            set(kPlayingFace, 0x2B, 2);
+            set(kPlayingFace, 0x24, R32(kCharacters + uint32_t(playing[i].character) * 0x18));
+        }
+        ctx.eax = eax;
+        bots.insert(bots.begin(), playing.begin(), playing.end());
+        static size_t said = ~size_t(0);
+        if (said != bots.size()) {
+            said = bots.size();
+            LOGR("nightfire: LAN lobby: %zu players from the network listed (%s)", bots.size(),
+                 g_host ? "the host: its options" : "a client: the host's options, only the host changes them");
+        }
+    };
+    if (msg == 0x4C) {
+        {
+            std::lock_guard<std::mutex> lock(g_lock);
+            g_seen_starts = g_starts;
+        }
+        return fill();
+    }
+    bool start = false, refill = false;
+    {
+        std::lock_guard<std::mutex> lock(g_lock);
+        start = !g_host && g_starts != g_seen_starts;
+        refill = Shown() != g_shown;
+        if (start) g_seen_starts = g_starts;
+    }
+    if (start) {  // the host started the match: this copy too, with its options
+        {
+            std::lock_guard<std::mutex> lock(g_lock);
+            ApplyHost();
+        }
+        LOGR("nightfire: LAN lobby: the host started the match (map %08X)", R32(0x260040));
+        W32(ctx.esp + 0x10, 0x4B);
+        __imp__sub_000891E0(ctx, base);
+        W32(ctx.esp + 0x10, msg);
+        return;
+    }
+    if (refill) g_refill = player + 1;  // filled again from the frame (nf::LanFrame), not inside the menu's update
+    if (msg == 0x63 && !g_host) {  // a client's B: out to the main menu (the scenario list was never its)
+        nf::MenuGoTo(ctx, player, kMainMenu);
+        ctx.eax = 1;
+        ctx.esp += 4;
+        return;
+    }
+    if (msg == 0x4B) {
+        if (!g_host) {  // a client's A: only the host starts
+            ctx.eax = 1;
+            ctx.esp += 4;
+            return;
+        }
+        {
+            std::lock_guard<std::mutex> lock(g_lock);
+            g_starts++;
+            g_seen_starts = g_starts;
+        }
+        g_send_now = true;
+        LOGR("nightfire: LAN lobby: the host starts the match (map %08X)", R32(0x260040));
+    }
+    __imp__sub_000891E0(ctx, base);
+}
+
+namespace {
+// the lobby filled again (its options or players changed): its fill message from outside the menu's update
+void LobbyFrame(X86Context& ctx) {
+    if (!g_refill) return;
+    uint32_t player = g_refill - 1;
+    g_refill = 0;
+    if (g_page != Page::kLobby) return;
+    uint32_t eax = ctx.eax;
+    kernel::CallGuest(ctx, 0x891E0, {player, 0, 0, 0x4C, 0, 0});
+    ctx.eax = eax;
+}
+}  // namespace
+
+X86_EXTERN_FUNC(__imp__sub_00087880);
+X86_FUNC(sub_00087880) {  // the join page's messages
+    if (g_on && R32(ctx.esp + 0x10) == 0x4C) g_page = Page::kJoin;
+    __imp__sub_00087880(ctx, base);
+}
+
+X86_EXTERN_FUNC(__imp__sub_000873B0);
+X86_FUNC(sub_000873B0) {  // the scenario list's messages
+    if (g_on && R32(ctx.esp + 0x10) == 0x4C) g_page = Page::kScenario;
+    __imp__sub_000873B0(ctx, base);
+}
+
+// a page change (0x92C40, cdecl: the player's menu context, 0x44 to a page, the page, 0): a client's join page goes on
+// to the lobby, not the scenario list (0x87D07; only the host chooses)
+X86_EXTERN_FUNC(__imp__sub_00092C40);
+X86_FUNC(sub_00092C40) {
+    if (g_on && !g_host && g_page == Page::kJoin && R32(ctx.esp + 8) == 0x44 && R32(ctx.esp + 12) == kScenarioPage) {
+        W32(ctx.esp + 12, kLobbyPage);
+        LOGR("nightfire: LAN lobby: a client goes from the join page to the lobby");
+    }
+    __imp__sub_00092C40(ctx, base);
 }

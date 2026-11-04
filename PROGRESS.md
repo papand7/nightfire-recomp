@@ -31,6 +31,25 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - LAN play step 3: the lobby (host's options, player list, host starts)
+- The multiplayer summary page (40000049, handler 0x891E0) is the LAN lobby: map, scenario, weapon set, limits and
+  friendly fire, and a Playing list with every copy's players by name. The host sets the options through the game's
+  own pages (scenario, map, options); clients get them (0x260030-0x26006F, 0x40 bytes, their own humans/bots kept)
+  twice a second and the page fills again when they change. A client's A does nothing; its B goes to the main menu.
+  The host's A starts the match on every copy (a start count in the lobby packets; each copy runs the page's own A,
+  0x8985C), so all load the same map.
+- A client's join page goes straight to the lobby (the page change 0x92C40 from 0x87D07 retargeted from the scenario
+  list 4000001A). The lobby is filled again from the frame (nf::LanFrame), not inside the menu's update: filling it
+  there crashed the menu code.
+- Names: each copy sends its joined players' names (slot name 0x25FE38 + i*0x30, character +0x20). A default name
+  ("Player N") is numbered by lobby place, so the host is Player 1 and the client Player 2 on both screens; the
+  puppets carry the names in the match. Up to 4 show in Playing; more go to the AI Bots list (unnamed there: writing
+  a name into a bot row crashed the game).
+- Tested (`.local/vk/lan_lobby.sh`): the client reached the lobby from the join page and showed the host's map and
+  options (Missile Silo, Arena, 10/10) and both players by name; the host's A started both copies on 07000028.
+- Not done: Host Game / Join / server browser menu entries (still NF_LAN), choosing your own name, team modes'
+  lists, shots and damage over the network, puppet animation.
+
 ### 2026-11-04 - LAN play step 2: client/server network core (NF_LAN)
 - `src/game/lan_play.cpp`: UDP client/server, the host the authority. Each copy plays its own players natively (no
   input delay) and sends their state 30 times a second; the host relays everyone's state back 30 times a second.
