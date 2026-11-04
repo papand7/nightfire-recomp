@@ -29,6 +29,7 @@
 
 #include "app/app.h"
 #include "common/nightfire.h"
+#include "game/menu_page.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
 #include "kernel/memory.h"
@@ -72,14 +73,10 @@ uint32_t GuestString(const char* s) {
     return va;
 }
 
-enum Kind { kSliderRow, kChoiceRow, kButtonRow };
-struct Row {
-    uint32_t id;
-    Kind kind;
-    const char* label;
-    const char* help;
-};
-constexpr Row kRows[] = {
+using Row = nf::MenuRow;
+constexpr nf::MenuRowKind kSliderRow = nf::kMenuSlider, kChoiceRow = nf::kMenuChoice, kButtonRow = nf::kMenuButton;
+constexpr uint32_t kGraphics = 0x1000FC18;
+const std::vector<Row> kRows = {
     {kFov, kSliderRow, "Field of View", "How wide the view is, on foot and driving. The game's is in the middle."},
     {kMouse, kSliderRow, "Mouse Sensitivity", "How far the view turns for the mouse's movement."},
     {kInvert, kChoiceRow, "Invert Mouse", "Moving the mouse forward looks down."},
@@ -90,9 +87,10 @@ constexpr Row kRows[] = {
     {kResolution, kChoiceRow, "Resolution", "The window's or the screen's size; Desktop is the screen's own."},
     {kVsync, kChoiceRow, "Vertical Sync", "Frames shown with the screen's refresh: no tearing."},
     {kCap, kChoiceRow, "Frame Cap", "The most frames a second drawn."},
-    {kMore, kButtonRow, "More Settings", "Graphics, sound, controls and the rest in the settings window."},
+    {kGraphics, kButtonRow, "Graphics", "Picture quality, the shader style and its options."},
+    {kMore, kButtonRow, "More Settings", "Sound, controls and the rest in the settings window."},
 };
-constexpr int16_t kFirstY = 80, kRowStep = 24;  // AV's rows are 28 apart from 86: eleven need it closer
+constexpr int16_t kFirstY = 78, kRowStep = 22;  // AV's rows are 28 apart from 86: twelve need it closer
 
 // a string's guest copy, made once for each text (by its contents: a host pointer can be another string's later)
 uint32_t Str(const char* s) {
@@ -272,6 +270,11 @@ bool PcPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint32_t m
                 if (!app::OverlayOpen()) app::ToggleOverlay();
                 return true;
             }
+            if (arg && R32(arg + 0x18) == kGraphics) {  // this page's values kept, then the Graphics page
+                Keep(ctx, player);
+                nf::OpenGraphicsPage(ctx, player);
+                return true;
+            }
             Keep(ctx, player);
             uint32_t eax = ctx.eax;
             kernel::CallGuest(ctx, kGoTo, {kMenuContext + (player & 0xFF) * kContextSize, 0x5F, 0, 0});
@@ -283,6 +286,30 @@ bool PcPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint32_t m
         for (const Row& r : kRows)
             if (r.id == id) SetById(ctx, player, kHelpBox, 0x18, Str(r.help));
     return false;
+}
+
+uint32_t MenuString(const char* s) { return Str(s); }
+uint32_t MenuSet(X86Context& ctx, uint32_t player, uint32_t id, uint32_t msg, uint32_t a, uint32_t b) {
+    return SetById(ctx, player, id, msg, a, b);
+}
+void MenuChoice(X86Context& ctx, uint32_t player, uint32_t id,
+                const std::vector<std::pair<const char*, uint32_t>>& items, uint32_t value) {
+    Choice(ctx, player, id, items, value);
+}
+uint32_t MenuChoiceValue(X86Context& ctx, uint32_t player, uint32_t id) { return SetById(ctx, player, id, 0x35, 0) & 0xFF; }
+std::vector<std::pair<const char*, uint32_t>> MenuNumbered(std::initializer_list<const char*> items) {
+    return Numbered(items);
+}
+void MenuHelp(X86Context& ctx, uint32_t player, const char* text) { SetById(ctx, player, kHelpBox, 0x18, Str(text)); }
+void MenuGoTo(X86Context& ctx, uint32_t player, uint32_t page) {
+    uint32_t eax = ctx.eax;
+    kernel::CallGuest(ctx, kGoTo, {kMenuContext + (player & 0xFF) * kContextSize, 0x44, page, 0});
+    ctx.eax = eax;
+}
+void MenuBack(X86Context& ctx, uint32_t player) {
+    uint32_t eax = ctx.eax;
+    kernel::CallGuest(ctx, kGoTo, {kMenuContext + (player & 0xFF) * kContextSize, 0x5F, 0, 0});
+    ctx.eax = eax;
 }
 
 // the page from anywhere in the front end (the main menu's item)
@@ -297,6 +324,11 @@ void OpenPcPage(X86Context& ctx, uint32_t player) {
 // (with its grey track), subtitles choice and Restore Defaults button rows (each a label and a value widget with one
 // id), one under another; the focus moves between them by where they are
 std::vector<uint8_t> PcPage(const std::vector<uint8_t>& av, uint32_t (*record_size)(uint32_t)) {
+    return BuildPage(av, record_size, kPage, "PC Settings", kRows, kFirstY, kRowStep);
+}
+
+std::vector<uint8_t> BuildPage(const std::vector<uint8_t>& av, uint32_t (*record_size)(uint32_t), uint32_t page_id,
+                               const char* title, const std::vector<MenuRow>& rows, int16_t first_y, int16_t step) {
     auto get = [](const std::vector<uint8_t>& b, size_t at) {
         uint32_t v;
         std::memcpy(&v, &b[at], 4);
@@ -353,30 +385,31 @@ std::vector<uint8_t> PcPage(const std::vector<uint8_t>& av, uint32_t (*record_si
         return b;
     };
     std::vector<uint8_t> out(av.begin(), av.begin() + head);
-    put(out, 4, kPage);
+    put(out, 4, page_id);
     // the page widget, its first focus our first row
     std::vector<uint8_t> pg = page->bytes;
-    put(pg, 4, kPage);
+    put(pg, 4, page_id);
     for (size_t p = 0; p + 4 <= pg.size();) {
         uint32_t op = get(pg, p), n = record_size(op);
         if (!n) break;
-        if (op == kOpFocus) put(pg, p + 0xC, kRows[0].id);
+        if (op == kOpFocus) put(pg, p + 0xC, rows[0].id);
         p += n;
     }
     out.insert(out.end(), pg.begin(), pg.end());
     // what stays: the title (its text ours), the prompt line, the help box and the pictures
     for (const Group& g : groups) {
-        bool title = g.id == 0x10000001 && g.y == 40, keep = (g.id == 0x10000001 && (g.y == 419 || g.y == 38)) ||
+        bool is_title = g.id == 0x10000001 && g.y == 40, keep = (g.id == 0x10000001 && (g.y == 419 || g.y == 38)) ||
                                                          g.id == 0x10000225 || g.id == 0x10000224;
-        if (title) {
-            std::vector<uint8_t> t = made(g, g.id, g.y, "PC Settings");
+        if (is_title) {
+            std::vector<uint8_t> t = made(g, g.id, g.y, title);
             out.insert(out.end(), t.begin(), t.end());
         } else if (keep) {
             out.insert(out.end(), g.bytes.begin(), g.bytes.end());
         }
     }
-    int16_t y = kFirstY;
-    for (const Row& r : kRows) {
+    int16_t y = first_y;
+    for (const MenuRow& r : rows) {
+        if (r.slot >= 0) y = int16_t(first_y + r.slot * step);
         std::vector<uint8_t> a, b;
         if (r.kind == kSliderRow) {
             std::vector<uint8_t> t = made(*track, track->id, y, nullptr);
@@ -387,7 +420,7 @@ std::vector<uint8_t> PcPage(const std::vector<uint8_t>& av, uint32_t (*record_si
         if (r.kind == kButtonRow) a = made(*button, r.id, y, r.label);
         out.insert(out.end(), a.begin(), a.end());
         out.insert(out.end(), b.begin(), b.end());
-        y = int16_t(y + kRowStep);
+        y = int16_t(y + step);
     }
     put(out, 0x11, uint32_t(out.size() - head));  // the page's body size
     return out;

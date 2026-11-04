@@ -21,6 +21,7 @@
 #include "kernel/kernel.h"
 #include "kernel/memory.h"
 #include "xdk/hle.h"
+#include "game/menu_page.h"
 
 namespace nf {
 bool PcPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint32_t msg, uint32_t arg);  // pc_settings_page
@@ -169,23 +170,29 @@ uint32_t Patched(uint32_t stream) {
     if (!page || !item[0] || !item[1] || !item[2] || !codenames_end) {
         // a level's file: the pause screen's entry, and the page before the file's end
         if (g_av.empty() || !AddToPause(b)) return 0;
-        std::vector<uint8_t> page_copy = nf::PcPage(g_av, RecordSize);
-        if (page_copy.empty()) return 0;
-        // behind its rows the pause screen's panel, made the page's size (the front end's backdrop is not loaded)
+        std::vector<std::vector<uint8_t>> pages = {nf::PcPage(g_av, RecordSize)};
+        if (pages[0].empty()) return 0;
+        for (auto& g : nf::GraphicsPages(g_av, RecordSize)) pages.push_back(std::move(g));
+        // behind each page's rows the pause screen's panel, made the page's size (the front end's backdrop is not
+        // loaded)
         std::vector<uint8_t> panel = PausePanel(b);
-        size_t second = 0;  // the page's second widget record: the panel goes before it
-        for (size_t p = RecordSize(kOpPage), widgets = 0; p + 4 <= page_copy.size() && !second;) {
-            uint32_t op = Get32(page_copy, p), n = RecordSize(op);
-            if (!n) break;
-            if (op == kOpWidget && ++widgets == 2) second = p;
-            p += n;
-        }
-        if (!panel.empty() && second) {
+        if (!panel.empty())
             Put16(panel, 0xA, 16), Put16(panel, 0xC, 24), Put16(panel, 0xE, 608), Put16(panel, 0x10, 432);
-            page_copy.insert(page_copy.begin() + second, panel.begin(), panel.end());
-            Put32(page_copy, 0x11, Get32(page_copy, 0x11) + uint32_t(panel.size()));
+        for (std::vector<uint8_t>& page_copy : pages) {
+            if (page_copy.empty()) continue;
+            size_t second = 0;  // the page's second widget record: the panel goes before it
+            for (size_t p = RecordSize(kOpPage), widgets = 0; p + 4 <= page_copy.size() && !second;) {
+                uint32_t op = Get32(page_copy, p), n = RecordSize(op);
+                if (!n) break;
+                if (op == kOpWidget && ++widgets == 2) second = p;
+                p += n;
+            }
+            if (!panel.empty() && second) {
+                page_copy.insert(page_copy.begin() + second, panel.begin(), panel.end());
+                Put32(page_copy, 0x11, Get32(page_copy, 0x11) + uint32_t(panel.size()));
+            }
+            b.insert(b.end() - 4, page_copy.begin(), page_copy.end());  // before the end record
         }
-        b.insert(b.end() - 4, page_copy.begin(), page_copy.end());  // before the end record
         made = mem::AllocHostContiguous(uint32_t(b.size()), 16);
         std::memcpy(kernel::HostPtr(made), b.data(), b.size());
         LOGR("nightfire: PC Settings added to the pause screen (menu file %08X, %u bytes)", stream, at);
@@ -223,8 +230,9 @@ uint32_t Patched(uint32_t stream) {
             std::vector<uint8_t> page_copy = nf::PcPage(av, RecordSize);
             if (page_copy.empty()) break;  // not laid out as expected: no page
             p += av.size();
+            for (auto& g : nf::GraphicsPages(av, RecordSize)) page_copy.insert(page_copy.end(), g.begin(), g.end());
             b.insert(b.begin() + p, page_copy.begin(), page_copy.end());
-            LOGR("nightfire: PC Settings page made from AV Options' (%zu bytes)", page_copy.size());
+            LOGR("nightfire: PC Settings and Graphics pages made from AV Options' (%zu bytes)", page_copy.size());
             break;
         }
         p += n;
@@ -249,7 +257,8 @@ X86_FUNC(sub_00093960) {
 X86_EXTERN_FUNC(__imp__sub_0008E320);
 X86_FUNC(sub_0008E320) {
     uint32_t widget = R32(ctx.esp + 8), message = R32(ctx.esp + 0xC);
-    if (widget && nf::PcPageMessage(ctx, R32(ctx.esp + 4) & 0xFF, widget, message, R32(ctx.esp + 0x14))) {
+    if (widget && (nf::PcPageMessage(ctx, R32(ctx.esp + 4) & 0xFF, widget, message, R32(ctx.esp + 0x14)) ||
+                   nf::GraphicsPageMessage(ctx, R32(ctx.esp + 4) & 0xFF, widget, message, R32(ctx.esp + 0x14)))) {
         ctx.eax = 1;
         ctx.esp += 4;
         return;
