@@ -31,6 +31,26 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - LAN play: hits, deaths and scores over the network; puppets' legs
+- Hits: a shot of ours that hits a puppet (its hit record at 0x3D900, from src/game/hit_feedback.cpp) is refused here
+  and its record (+8..+0x48: damage, time, directions, type, zone) goes to the victim's copy (kEvent, through the
+  host, sent twice, repeats dropped); the shooter sees the hit mark. The victim's copy puts it in its player's hit
+  list (0x29560) with a stand-in projectile (class 5, data +0x24 the shooter's puppet, +0x38 the weapon), right after
+  the player's collisions (0xAB450): the list is emptied and filled again in the player's update, then walked at
+  0xAE39F (0xADD00, 0xADE00, 0x9D700, 0xAC0A0). So health, death and "Defeated by" are the game's own.
+- Deaths: a copy whose player's deaths (score slot +0x08) went up tells the others with its killer (+0x28); they count
+  it in their score tables as 0xA2211-0xA230E does (kills +0x04, streak +0x10, points +0x18, deaths, killer). The
+  puppet does not play the death (calling 0x3D900 from outside crashed; a bot's hit list is walked in its message
+  handlers): it goes where its player respawns.
+- Legs: the bots' posture requests (0x341C0) are refused for puppets; before their think we ask for standing (0x0A),
+  walking (0x08), running (0x1E) or sprinting (0x1F) by their speed over the network, facing the way they move.
+- NF_LAN_TEST=aim / meet (diagnostics: turn player 1 to the nearest puppet / stand 5 m before it); `.local/vk/
+  lan_fight.sh` runs both copies so, the host firing (RT). Tested: the client's health went 100, 80, 60, 40 and it
+  died ("killer slot 4", the host's puppet), twice; the host's HUD showed 2 kills; the host's puppet stood in a pose,
+  no longer sliding stiff. Damage per pistol hit was 20 (the record said 5: the game's scaling for a bot shooter,
+  0xADE26, or the zone; not checked against split screen).
+- Not done: remote shots' flash, sound and tracer; the puppet's death animation; team games over the network.
+
 ### 2026-11-04 - LAN lobby: names, up to 8 named players, teams, characters
 - Names: a loaded codename (the game's own, [0x17D550] >= 2, 0x17D558), else settings.toml's `player_name`, else the
   Windows user's name; a copy's players 2-4 get " 2".." 4" after it. Two players of the same name are numbered by

@@ -50,7 +50,8 @@ void NetJoin(uint32_t ip, uint16_t port);
 void NetStop();
 bool NetOn();
 void LanFrame(X86Context& ctx);  // default.xbe: each frame, this copy's players for LAN play (src/game/lan_play.cpp)
-bool LanPuppet(uint32_t obj);  // a character another copy's player drives (src/game/lan_play.cpp)
+bool LanPuppet(uint32_t obj);
+int LanDamage(uint32_t pair, uint32_t hit);  // before 0x3D900: 0 the game's, 1 refused, 2 sent (a hit mark)  // a character another copy's player drives (src/game/lan_play.cpp)
 // LAN play's check that the copies compute the same game (core/netplay.h): default.xbe's players (src/game/netplay.cpp)
 uint64_t NetStateHash();
 bool PlayerFree();  // default.xbe: Bond under the player's own control (not a keypad, a missile, a cutscene)

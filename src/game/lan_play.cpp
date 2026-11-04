@@ -45,6 +45,7 @@
 #include "game/menu_page.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
+#include "kernel/memory.h"
 #include "xdk/hle.h"
 
 namespace {
@@ -80,7 +81,7 @@ int SlotOf(uint32_t obj) {
 // ---- the network --------------------------------------------------------------------------------------------------
 
 constexpr uint32_t kMagic = 0x314C464E;  // "NFL1"
-enum : uint8_t { kHello = 1, kWelcome, kState, kSnap, kPing, kPong, kInfo, kLobby, kQuery, kServer };
+enum : uint8_t { kHello = 1, kWelcome, kState, kSnap, kPing, kPong, kInfo, kLobby, kQuery, kServer, kEvent };
 constexpr uint16_t kPort = 27787;
 constexpr int kRate = 30;                // states and snapshots a second
 constexpr int64_t kDelay = 100;          // ms in the past remote players are drawn
@@ -103,6 +104,16 @@ struct Named {          // a player in the lobby: who and as what
     char name[16];
 };
 constexpr uint32_t kSettings = 0x260030, kSettingsSize = 0x40;  // the match's options (the MP block's, 0x260030-6F)
+struct Event {          // a hit on another copy's player, or a death; relayed by the host to every copy
+    uint32_t id;        // the origin's count (with its peer: repeats dropped)
+    uint8_t kind;       // kHit or kDeath
+    uint8_t origin;     // the copy that sent it
+    uint8_t victim_peer, victim_local;
+    uint8_t killer_peer, killer_local;  // 0xFF none (a fall, a suicide)
+    uint16_t weapon;    // the shooter's weapon index
+    uint8_t node[0x40]; // the hit's record from +8 (damage, time, directions, type, zone)
+};
+enum : uint8_t { kHitEvent = 1, kDeathEvent = 2 };
 struct ServerInfo {     // a host's answer to a search (kQuery, broadcast to the port)
     char host[24];      // the PC's name
     char map[24];
@@ -151,6 +162,9 @@ std::string g_server_name, g_map_name;    // the host's PC and the lobby's map (
 uint16_t g_port = 0;
 std::atomic<bool> g_quit{false};
 std::thread g_thread;
+std::deque<Event> g_events_in, g_events_out;  // to apply on the game's thread; to send
+std::map<uint32_t, bool> g_events_seen;       // origin << 24 | id
+uint32_t g_event_id = 0;
 
 #ifdef _WIN32
 SOCKET g_sock = INVALID_SOCKET;
@@ -240,6 +254,19 @@ void Receive() {
                 if (g_clients.count(peer)) players += names.size();
             info.players = uint8_t(players), info.port = g_port;
             SendRaw(from, kServer, &info, sizeof info, 1);
+            continue;
+        }
+        if (h.type == kEvent) {
+            if (n < int(sizeof h + sizeof(Event))) continue;
+            Event e;
+            std::memcpy(&e, buf + sizeof h, sizeof e);
+            std::lock_guard<std::mutex> lock(g_lock);
+            uint32_t key = uint32_t(e.origin) << 24 | (e.id & 0xFFFFFF);
+            if (g_events_seen.count(key)) continue;
+            g_events_seen[key] = true;
+            if (g_events_seen.size() > 4096) g_events_seen.erase(g_events_seen.begin());
+            if (g_host) g_events_out.push_back(e);  // to the other clients too
+            g_events_in.push_back(e);
             continue;
         }
         if (h.type == kInfo || h.type == kLobby) {
@@ -346,6 +373,11 @@ void Loop() {
                     }
                 }
                 if (now - last_lobby > 500 || g_send_now.exchange(false)) last_lobby = now, SendLobby();
+                for (const Event& e : g_events_out)
+                    for (auto& [id, c] : g_clients)
+                        if (id != e.origin)
+                            for (int k = 0; k < 2; k++) SendRaw(c.addr, kEvent, &e, sizeof e, 1);
+                g_events_out.clear();
                 std::vector<Entry> all = mine;
                 for (auto& [k, e] : g_latest) all.push_back(e);
                 for (auto& [id, c] : g_clients) Send(c.addr, kSnap, all, uint32_t(now));
@@ -356,6 +388,9 @@ void Loop() {
                 if (now - last_hello > 500) last_hello = now, Send(g_host_addr, kHello, {}, uint32_t(now));
             } else {
                 Send(g_host_addr, kState, mine, uint32_t(now));
+                for (const Event& e : g_events_out)
+                    for (int k = 0; k < 2; k++) SendRaw(g_host_addr, kEvent, &e, sizeof e, 1);
+                g_events_out.clear();
                 if (now - last_lobby > 500 || g_send_now.exchange(false)) {
                     last_lobby = now;
                     SendRaw(g_host_addr, kInfo, g_local_names.data(), g_local_names.size() * sizeof(Named),
@@ -381,6 +416,7 @@ bool Begin(bool host, uint32_t ip, uint16_t port) {
         std::lock_guard<std::mutex> lock(g_lock);
         g_remotes.clear(), g_latest.clear(), g_infos.clear(), g_lobby.clear(), g_clients.clear(), g_slot_of.clear();
         g_have_settings = false, g_starts = 0, g_heard_host = Now();
+        g_events_in.clear(), g_events_out.clear(), g_events_seen.clear();
         char name[64] = {};
         DWORD n = sizeof name;
         if (!GetComputerNameA(name, &n)) std::strcpy(name, "NightFire");
@@ -552,6 +588,13 @@ bool Interpolate(const std::deque<Sample>& s, int64_t t, Body& out) {
     return true;
 }
 
+void TestFrame();  // below
+void Inject(X86Context& ctx, uint32_t obj);
+void ApplyEvents(X86Context& ctx);
+void WatchDeaths();
+// a puppet's posture: standing, walking, running, sprinting by its speed (m/s); ours asked, the AI's refused
+std::atomic<bool> g_own_posture{false};
+int Posture(float speed) { return speed < 0.4f ? 0x0A : speed < 2.2f ? 0x08 : speed < 3.4f ? 0x1E : 0x1F; }
 // a match being played (0xA25F0 started one; the bot think ran lately)
 std::atomic<int64_t> g_match_seen{-100000};
 bool MatchOn() { return Now() - g_match_seen.load() < 1000; }
@@ -663,6 +706,7 @@ void LanFrame(X86Context& ctx) {
     Search();
     NetplayPageFrame(ctx);
     LobbyFrame(ctx);
+    if (g_on) ApplyEvents(ctx), WatchDeaths(), TestFrame();
     if (g_on && g_host) {  // the map's name for searches (the maps' table 0x17C6A0: 0x18 each, +4 its text, +0xC its id)
         static uint32_t shown = ~0u;
         uint32_t map = R32(0x260040);
@@ -772,6 +816,30 @@ X86_EXTERN_FUNC(__imp__sub_00031530);
 X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
     uint32_t obj = R32(ctx.esp + 4);
     int slot = g_on ? SlotOf(obj) : -1;
+    float speed = 0, move_yaw = 0;
+    int key0 = -1;
+    if (slot >= kFirstBot) {
+        std::lock_guard<std::mutex> lock(g_lock);
+        key0 = PuppetKey(slot);
+        Body now, before;
+        int64_t t = Now() + g_offset - kDelay;
+        if (key0 >= 0 && Interpolate(g_remotes[uint16_t(key0)].samples, t, now) &&
+            Interpolate(g_remotes[uint16_t(key0)].samples, t - 100, before)) {
+            float dx = now.pos[0] - before.pos[0], dz = now.pos[2] - before.pos[2];
+            speed = std::sqrt(dx * dx + dz * dz) / 0.1f;
+            move_yaw = std::atan2(dx, dz);
+        }
+    }
+    if (key0 >= 0) Inject(ctx, obj);
+    if (key0 >= 0 && R32(obj + 0xBC)) {  // its legs: the posture for its speed, played by the think's last step
+        static uint32_t pair = mem::AllocHostContiguous(8, 16);
+        W32(pair, obj), W32(pair + 4, R32(obj + 0xBC));
+        uint32_t eax = ctx.eax;
+        g_own_posture = true;
+        kernel::CallGuest(ctx, 0x341C0, {uint32_t(Posture(speed)), 0, 0, 0, 0, 0, pair});
+        g_own_posture = false;
+        ctx.eax = eax;
+    }
     __imp__sub_00031530(ctx, base);
     if (slot < kFirstBot) return;
     // a puppet: the AI's own frame ran (it spawns the body and animates it; 0x37C10 gives it no target), then moved
@@ -781,7 +849,7 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
     Body b;
     if (!Interpolate(g_remotes[uint16_t(key)].samples, Now() + g_offset - kDelay, b)) return;
     for (int k = 0; k < 3; k++) SetF(obj + kPos + k * 4, b.pos[k]);
-    SetF(obj + kYaw, b.yaw);
+    SetF(obj + kYaw, speed >= 0.4f ? move_yaw : b.yaw);  // running the way it goes (bots only run forward)
     static bool said = false;
     if (!said) said = true, LOGR("nightfire: LAN: slot %d is client %d's player %d", slot, key >> 8, (key & 0xFF) + 1);
     static const bool trace = [] {
@@ -1029,4 +1097,247 @@ X86_FUNC(sub_00092C40) {
         LOGR("nightfire: LAN lobby: a client goes from the join page to the lobby");
     }
     __imp__sub_00092C40(ctx, base);
+}
+
+// ---- combat over the network ---------------------------------------------------------------------------------------
+// Each copy's players are its own: their health, deaths and respawns are the game's there. A shot of ours that hits a
+// puppet (its hit record, 0x3D900 from the bot's hit list +0xAC) is not applied here: the record goes to the victim's
+// copy, which puts it in its player's hit list (0x29560: list, time, contact, source) with a stand-in projectile
+// whose shooter is the shooter's puppet there (the projectile's data +0x24 the shooter, +0x38 the weapon; class 5),
+// so the game's own player update (0xADD00 / 0xADE00 / 0xAC0A0) takes the health and, on a death, 0xA1FC0 credits the
+// shooter (the hit list's sources) and shows "Defeated by". A copy whose player died tells every copy (the score
+// slot's deaths +0x08 went up; its killer's slot +0x28), which count it in their score table as the game does, so
+// kills, deaths and scores agree on every copy. Puppets take no damage (their death is not played yet: the puppet
+// goes where its player respawns). The records go in after the player's collisions (0xAB450), before 0xAE39F walks
+// the list: the list is emptied and filled again in the player's update.
+namespace {
+constexpr uint32_t kHitList = 0xAC, kAddHit = 0x29560, kProjClass = 5;
+constexpr uint32_t kDeaths = 0x08, kKiller = 0x28;
+// records to put in a character's hit list just before its own update (the lists are emptied each frame before)
+struct Pending {
+    uint32_t source, time;
+    uint8_t node[0x40];
+};
+std::map<uint32_t, std::vector<Pending>> g_pending;
+
+// a stand-in projectile for a shooter (one each, made once)
+uint32_t StandIn(uint32_t shooter, uint32_t weapon_entry) {
+    static std::map<uint32_t, uint32_t> made;
+    uint32_t& p = made[shooter];
+    if (!p) {
+        p = mem::AllocHostContiguous(0x200, 16);
+        std::memset(kernel::HostPtr(p), 0, 0x200);
+        kernel::G<uint8_t>(p + 0xDB) = kProjClass;
+        W32(p + 0xBC, p + 0x100);  // its data, after it
+    }
+    W32(p + 0x100 + 0x24, shooter);
+    W32(p + 0x100 + 0x38, weapon_entry);
+    for (int k = 0; k < 3; k++) W32(p + kPos + k * 4, R32(shooter + kPos + k * 4));
+    return p;
+}
+
+uint32_t WeaponEntry(uint32_t obj) {
+    uint32_t state = obj ? R32(obj + 0xB8) : 0;
+    int idx = state ? kernel::G<int8_t>(state + 0x52) : 0;
+    return 0x18CFA0 + uint32_t(std::max(0, idx)) * 0x10C;
+}
+
+// the object of a player (peer, local) in this copy's match: ours, or its puppet
+uint32_t ObjectOf(uint8_t peer, uint8_t local) {
+    if (peer == g_me.load()) return local < 4 ? SlotObject(local) : 0;
+    auto it = g_slot_of.find(uint16_t(peer << 8 | local));
+    return it == g_slot_of.end() ? 0 : SlotObject(it->second);
+}
+// a score slot's player (peer, local), false if none
+bool WhoIs(int slot, uint8_t& peer, uint8_t& local) {
+    if (slot >= 0 && slot < kFirstBot) return peer = uint8_t(std::max(0, g_me.load())), local = uint8_t(slot), true;
+    int key = PuppetKey(slot);
+    if (key < 0) return false;
+    peer = uint8_t(key >> 8), local = uint8_t(key & 0xFF);
+    return true;
+}
+
+void Queue(Event e) {  // ours: applied here as well when it is for this copy (the host's own, a client's to itself)
+    e.origin = uint8_t(std::max(0, g_me.load())), e.id = ++g_event_id;
+    std::lock_guard<std::mutex> lock(g_lock);
+    g_events_out.push_back(e);
+}
+
+void ApplyEvents(X86Context& ctx) {
+    std::deque<Event> in;
+    {
+        std::lock_guard<std::mutex> lock(g_lock);
+        in.swap(g_events_in);
+    }
+    for (const Event& e : in) {
+        uint32_t victim = ObjectOf(e.victim_peer, e.victim_local);
+        uint32_t killer = e.killer_peer == 0xFF ? 0 : ObjectOf(e.killer_peer, e.killer_local);
+        if (!victim) continue;
+        uint32_t eax = ctx.eax;
+        if (e.kind == kHitEvent && e.victim_peer == g_me.load()) {
+            if (!killer) continue;
+            uint32_t src = StandIn(killer, 0x18CFA0 + uint32_t(e.weapon) * 0x10C), time;
+            std::memcpy(&time, e.node + 4, 4);  // the record's +0xC
+            Pending p{src, time, {}};
+            std::memcpy(p.node, e.node, 0x40);
+            g_pending[victim].push_back(p);
+            static int said = 0;
+            float dmg;
+            std::memcpy(&dmg, e.node, 4);
+            uint32_t data = R32(victim + 0xBC);
+            if (said++ < 20) LOGR("nightfire: LAN: hit by %u:%u (%.1f damage, zone %u), health %.1f", e.killer_peer,
+                                  e.killer_local, dmg, unsigned(e.node[0x3E]) | unsigned(e.node[0x3F]) << 8,
+                                  data ? GetF(data + 0x824) : -1.0f);
+        } else if (e.kind == kDeathEvent && e.victim_peer != g_me.load()) {
+            // the scores as the victim's copy counted them (0xA2211-0xA230E): the killer's kills, streak and score,
+            // the victim's deaths and killer; a death of one's own costs a kill and a point
+            int vslot = SlotOf(victim), kslot = killer ? SlotOf(killer) : -1;
+            if (vslot < 0) continue;
+            uint32_t v = kScores + uint32_t(vslot) * kSlotSize;
+            W32(v + kDeaths, R32(v + kDeaths) + 1);
+            kernel::G<int16_t>(v + kKiller) = int16_t(kslot);
+            bool points = R32(0x260028) == 0;
+            if (kslot >= 0 && kslot != vslot) {
+                uint32_t k = kScores + uint32_t(kslot) * kSlotSize;
+                W32(k + 0x04, R32(k + 0x04) + 1), W32(k + 0x10, R32(k + 0x10) + 1);
+                if (points) SetF(k + 0x18, GetF(k + 0x18) + 1);
+            } else {
+                W32(v + 0x04, R32(v + 0x04) - 1), W32(v + 0x10, 0);
+                if (points) SetF(v + 0x18, GetF(v + 0x18) - 1);
+            }
+            LOGR("nightfire: LAN: %u:%u died (slot %d, by slot %d)", e.victim_peer, e.victim_local, vslot, kslot);
+        }
+        ctx.eax = eax;
+    }
+}
+
+// a character's pending records into its hit list (from its update's hook, before the update)
+void Inject(X86Context& ctx, uint32_t obj) {
+    auto it = g_pending.find(obj);
+    if (it == g_pending.end()) return;
+    uint32_t eax = ctx.eax;
+    for (const Pending& p : it->second) {
+        uint32_t node = kernel::CallGuest(ctx, kAddHit, {obj + kHitList, p.time, 0, p.source});
+        if (node) std::memcpy(kernel::HostPtr(node + 8), p.node, 0x40);
+    }
+    ctx.eax = eax;
+    g_pending.erase(it);
+}
+
+// our players' deaths (the score slot's deaths went up): to every copy
+void WatchDeaths() {
+    static uint32_t deaths[4] = {};
+    static bool was_on = false;
+    bool on = MatchOn();
+    for (int i = 0; i < 4; i++) {
+        uint32_t d = R32(kScores + uint32_t(i) * kSlotSize + kDeaths);
+        if (on && was_on && SlotObject(i) && d > deaths[i] && i < int(R32(kHumans))) {
+            Event e{};
+            e.kind = kDeathEvent, e.victim_peer = uint8_t(std::max(0, g_me.load())), e.victim_local = uint8_t(i);
+            e.killer_peer = e.killer_local = 0xFF;
+            int by = kernel::G<int16_t>(kScores + uint32_t(i) * kSlotSize + kKiller);
+            if (by >= 0 && by != i) WhoIs(by, e.killer_peer, e.killer_local);
+            Queue(e);
+            LOGR("nightfire: LAN: player %d died (killer slot %d), told the others", i + 1, by);
+        }
+        deaths[i] = d;
+    }
+    was_on = on;
+}
+
+// ---- puppets' legs: the bots' posture requests (0x341C0: node, variant, ?, ?, ?, ?, {object, data}*) are refused for
+// a puppet; before its think we ask for standing (0x0A), walking (0x08), running (0x1E) or sprinting (0x1F) by its
+// speed over the network, and the think's last step (0x35CB0) plays it
+}  // namespace
+
+namespace nf {
+// from src/game/hit_feedback.cpp before 0x3D900 (the pair {victim, data}, the hit record): 0 the game's, 1 refused,
+// 2 refused, a hit of ours on a puppet sent to its copy (the hit mark shown)
+int LanDamage(uint32_t pair, uint32_t hit) {
+    if (!g_on || !pair || !hit) return 0;
+    uint32_t victim = R32(pair);
+    int vslot = SlotOf(victim);
+    if (vslot < kFirstBot) return 0;
+    uint8_t vpeer, vlocal;
+    {
+        std::lock_guard<std::mutex> lock(g_lock);
+        if (!WhoIs(vslot, vpeer, vlocal)) return 0;  // a real bot
+    }
+    uint32_t proj = R32(hit + 0x4C);
+    uint32_t pdata = proj ? R32(proj + 0xBC) : 0, shooter = pdata ? R32(pdata + 0x24) : 0;
+    int sslot = SlotOf(shooter);
+    if (sslot < 0 || sslot >= kFirstBot) return 1;
+    Event e{};
+    e.kind = kHitEvent, e.victim_peer = vpeer, e.victim_local = vlocal;
+    e.killer_peer = uint8_t(std::max(0, g_me.load())), e.killer_local = uint8_t(sslot);
+    uint32_t entry = pdata ? R32(pdata + 0x38) : 0;
+    e.weapon = uint16_t(entry >= 0x18CFA0 ? (entry - 0x18CFA0) / 0x10C : 0);
+    std::memcpy(e.node, kernel::HostPtr(hit + 8), 0x40);
+    Queue(e);
+    static int said = 0;
+    if (said++ < 5) LOGR("nightfire: LAN: our player %d hit %u:%u's player: sent to its copy", sslot + 1, vpeer, vlocal);
+    return 2;
+}
+}  // namespace nf
+
+X86_EXTERN_FUNC(__imp__sub_000341C0);
+X86_FUNC(sub_000341C0) {  // a bot's posture request
+    uint32_t pair = R32(ctx.esp + 0x1C);
+    if (!g_own_posture && g_on && pair && nf::LanPuppet(R32(pair))) {
+        ctx.eax = 0;
+        ctx.esp += 4;
+        return;
+    }
+    __imp__sub_000341C0(ctx, base);
+}
+
+// NF_LAN_TEST (diagnostics): "aim" turns player 1 to the nearest puppet each frame; "meet" stands player 1 5 m in
+// front of the first puppet, facing it, once a second
+namespace {
+void TestFrame() {
+    static const std::string test = [] {
+        const char* e = std::getenv("NF_LAN_TEST");
+        return std::string(e ? e : "");
+    }();
+    if (test.empty() || !MatchOn()) return;
+    uint32_t me = SlotObject(0);
+    if (!me) return;
+    uint32_t best = 0;
+    float bd = 1e9f;
+    for (int s = kFirstBot; s < 10; s++) {
+        uint32_t o = SlotObject(s);
+        if (!o || !nf::LanPuppet(o)) continue;
+        float dx = GetF(o + kPos) - GetF(me + kPos), dz = GetF(o + kPos + 8) - GetF(me + kPos + 8);
+        if (dx * dx + dz * dz < bd) bd = dx * dx + dz * dz, best = o;
+    }
+    if (!best) return;
+    if (test == "aim") {
+        float dx = GetF(best + kPos) - GetF(me + kPos), dz = GetF(best + kPos + 8) - GetF(me + kPos + 8);
+        float dy = GetF(best + kPos + 4) - GetF(me + kPos + 4);  // feet to feet: the chest from the eye is about as low
+        SetF(me + kYaw, std::atan2(dx, dz));
+        if (uint32_t actor = R32(me + 0xBC))  // the pitch: a quarter turn up is 1 (mouse.cpp)
+            SetF(actor + 0x838, std::atan2(dy - 0.5f, std::sqrt(dx * dx + dz * dz)) / 1.5707964f), kernel::G<uint8_t>(actor + 0xF0) = 1;
+        static int n = 0;
+        if (n++ % 120 == 0)
+            LOGR("nightfire: LAN test: aim at the puppet %.1f m away, %.1f m up", std::sqrt(dx * dx + dz * dz), dy);
+    } else if (test == "meet") {
+        static int64_t last = 0;
+        if (Now() - last < 1000) return;
+        last = Now();
+        float yaw = GetF(best + kYaw);
+        SetF(me + kPos, GetF(best + kPos) + std::sin(yaw) * 5);
+        SetF(me + kPos + 4, GetF(best + kPos + 4));
+        SetF(me + kPos + 8, GetF(best + kPos + 8) + std::cos(yaw) * 5);
+        SetF(me + kYaw, yaw + 3.14159265f);
+    }
+}
+}  // namespace
+
+// a player's movement and collisions (0xAB450, cdecl: the object; from 0xAE27E): its hit list was emptied and filled
+// again here, and 0xAE39F walks it next: the records from the network go in now
+X86_EXTERN_FUNC(__imp__sub_000AB450);
+X86_FUNC(sub_000AB450) {
+    uint32_t obj = R32(ctx.esp + 4);
+    __imp__sub_000AB450(ctx, base);
+    if (g_on) Inject(ctx, obj);
 }

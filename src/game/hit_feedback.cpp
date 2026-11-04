@@ -53,6 +53,15 @@ void ViewCentre(int i, float& x, float& y) {
 X86_EXTERN_FUNC(__imp__sub_0003D900);
 X86_FUNC(sub_0003D900) {
     uint32_t who = R32(ctx.esp + 4), hit = R32(ctx.esp + 8);
+    if (int lan = nf::LanDamage(who, hit)) {  // LAN play: a puppet's health is its own copy's
+        if (lan == 2) {
+            float x, y;
+            ViewCentre(0, x, y);
+            app::HitMarker(x, y, kernel::G<uint16_t>(hit + 0x46) == 5 ? 1 : 0);
+        }
+        ctx.esp += 4;
+        return;
+    }
     uint32_t data = who ? R32(who + 4) : 0;
     float before = data ? F32(data + 0x90) : 0;
     __imp__sub_0003D900(ctx, base);
