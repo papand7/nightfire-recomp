@@ -64,7 +64,7 @@ const std::vector<MenuRow> kGfxRows = {
     {kBloom, nf::kMenuChoice, "Bloom", "A glow around lights and bright surfaces."},
     {kReflect, nf::kMenuChoice, "Reflections", "Glass mirrors what is on screen (screen-space reflections)."},
     {kParticles, nf::kMenuChoice, "Particles", "Soft: smoke, flashes and sparks fade into walls instead of cutting."},
-    {kMaterials, nf::kMenuChoice, "Materials", "PBR: the HD pack's normal and roughness maps, at the next start."},
+    {kMaterials, nf::kMenuChoice, "Materials", "The HD pack's maps (next start). Relief: uneven walls in depth."},
     {kAa, nf::kMenuChoice, "Anti-Aliasing", "SMAA smooths the scene's edges, the HUD stays sharp; FXAA the whole picture."},
     {kSharpen, nf::kMenuChoice, "Sharpening", "Contrast adaptive sharpening of the finished picture."},
     {kScale, nf::kMenuChoice, "Render Scale", "The 3D picture's size against the screen's: lower is faster, higher smoother."},
@@ -233,7 +233,8 @@ void EnterGraphics(X86Context& ctx, uint32_t player) {
         ShowOptions(ctx, player, kBloom, kOffOn, st.quality_bloom ? 1.0f : 0.0f);
         ShowOptions(ctx, player, kReflect, kReflectLevels, float(st.reflections));
         Choice(ctx, player, kParticles, {{"Original", 0}, {"Soft", 1}}, st.soft_particles ? 1 : 0);
-        Choice(ctx, player, kMaterials, {{"Original", 0}, {"PBR", 1}}, st.materials ? 1 : 0);
+        Choice(ctx, player, kMaterials, {{"Original", 0}, {"PBR", 1}, {"PBR + Relief", 2}},
+               !st.materials ? 0 : st.surface_depth > 0 ? 2 : 1);
     } else {
         Choice(ctx, player, kStyle, {{"Original (Needs Vulkan)", 0xFF}}, 0xFF);
         Choice(ctx, player, kAo, {{"Needs Vulkan", 0xFF}}, 0xFF);
@@ -276,12 +277,17 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
             st.reflection_strength = keep.reflection_strength, st.reflections_auto = keep.reflections_auto;
             st.soft_particles = keep.soft_particles, st.particle_fade = keep.particle_fade;
             st.materials = keep.materials, st.material_strength = keep.material_strength;
+            st.surface_depth = keep.surface_depth;
         }
         st.quality_ao = int(ReadOption(ctx, player, kAo, kAoLevels));
         st.quality_bloom = ReadOption(ctx, player, kBloom, kOffOn) > 0;
         st.reflections = int(ReadOption(ctx, player, kReflect, kReflectLevels));
         st.soft_particles = ChoiceValue(ctx, player, kParticles) == 1;
-        st.materials = ChoiceValue(ctx, player, kMaterials) == 1;
+        uint32_t mat = ChoiceValue(ctx, player, kMaterials);
+        if (mat <= 2) {
+            st.materials = mat >= 1;
+            st.surface_depth = mat == 2 ? std::max(st.surface_depth, 0.6f) : 0.0f;
+        }
         st.texture_pack = ReadOption(ctx, player, kPack, kOffOn) > 0;
     }
     bool fxaa = aa == 1, smaa = Vulkan() ? aa == kAaSmaa : app::Get().smaa;

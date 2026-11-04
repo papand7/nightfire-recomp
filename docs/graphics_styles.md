@@ -143,6 +143,13 @@ light, and adds a GGX highlight of the roughness kept in proportion to the colou
 game hands over no light directions, so the maps add relief and sheen rather than relight the scene. Vulkan, every
 style but Retro. Measured (The Exchange, RTX 5060): about 1,240 such draws a frame, 60 frames a second.
 
+**Relief** (Materials > PBR + Relief, graphics.toml `surface_depth` 0-2): parallax occlusion mapping. The view's ray is
+stepped down the height map (8 to 24 steps, more at a glancing view) and the texture coordinates moved to where it
+meets it, for the game's own textures as well as the maps, so mortar sinks, stones stand out and hide one another as
+the view moves. Not tessellation: the game's vertex programs hand over only finished screen positions, so geometry
+moved along a normal would open cracks between triangles and differ from what the player collides with. Silhouettes
+stay flat.
+
 The pack is made from the player's own copy of the game: nothing of the game's ships with the tool, and the pack is
 not to be shared.
 

@@ -31,6 +31,15 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - Relief (parallax occlusion mapping) for materials
+
+- Materials > PBR + Relief (graphics.toml surface_depth 0-2): the material shader steps the view's ray down the pack's
+  height map and moves stage 0's coordinates to the hit, for the game's colour too (game_main is handed the moved tc0).
+  pbr.z is now the relief depth (the view angle is taken as 60 degrees in the shader).
+- Why not tessellation: the vertex programs output clip positions only; displacing them would crack triangle seams.
+- Tested (The Exchange): 60 frames a second with relief on, no shader failures; head-on the stones shift slightly
+  (captures/pom_cmp.png, private). A glancing-angle comparison is still missing (the scripted route did not reach one).
+
 ### 2026-11-04 - Materials: the HD pack's normal and roughness maps drawn (PBR)
 
 - New option materials (Graphics page > Materials: Original / PBR; settings window; graphics.toml materials,
