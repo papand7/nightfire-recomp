@@ -16,20 +16,28 @@
 #include <string>
 #include <vector>
 
+#include <cstring>
+
 #include "app/app.h"
+#include "common/nightfire.h"
 #include "core/log.h"
 #include "game/menu_page.h"
 #include "gpu/style.h"
 #include "kernel/kernel.h"
+
+namespace nf {
+extern bool modern_buttons;  // src/common/buttons.cpp
+}
 
 namespace {
 using kernel::R32;
 using nf::MenuRow;
 
 // the front end's file takes three pages more than its own, not four (a fourth crashed the menu code on its first
-// page change): Enhanced, Toon and Retro options share one page, their rows on the same lines, the others hidden
+// page change): Enhanced, Toon and Retro options and PC Settings' More Settings share one page, their rows on the
+// same lines, the others hidden, its title rewritten in place for the set shown (SetSharedTitle)
 constexpr uint32_t kGfxPage = 0x4000FC20, kStylePage = 0x4000FC30;
-constexpr uint32_t kEnhPage = 1, kToonPage = 2, kRetroPage = 3;  // which rows the style page shows
+constexpr uint32_t kEnhPage = 1, kToonPage = 2, kRetroPage = 3, kMorePage = 4;  // which rows the shared page shows
 // the Graphics page's rows
 constexpr uint32_t kQuality = 0x1000FC21, kStyle = 0x1000FC22, kStyleOptions = 0x1000FC23, kFilter = 0x1000FC24,
                    kAo = 0x1000FC25, kBloom = 0x1000FC26, kAa = 0x1000FC27, kSharpen = 0x1000FC28,
@@ -42,6 +50,10 @@ constexpr uint32_t kBands = 0x1000FC41, kOutline = 0x1000FC42, kOutlineColor = 0
                    kHalftone = 0x1000FC45, kToonSaturation = 0x1000FC46;
 constexpr uint32_t kPixel = 0x1000FC51, kDepth = 0x1000FC52, kDither = 0x1000FC53, kRetroFilter = 0x1000FC54,
                    kSnap = 0x1000FC55, kTint = 0x1000FC56;
+// More Settings' rows
+constexpr uint32_t kFps = 0x1000FC61, kPauseBg = 0x1000FC62, kHideHud = 0x1000FC63, kButtonPics = 0x1000FC64,
+                   kStartMenus = 0x1000FC65, kKeyboard = 0x1000FC66, kMouseLook = 0x1000FC67, kLanguage = 0x1000FC68,
+                   kKeys = 0x1000FC69;
 
 const std::vector<MenuRow> kGfxRows = {
     {kQuality, nf::kMenuChoice, "Graphics Quality", "Low to Ultra set the rows below at once; changing one makes it Custom."},
@@ -83,6 +95,17 @@ const std::vector<MenuRow> kRetroRows = {
     {kSnap, nf::kMenuChoice, "Vertex Snapping", "Corners jump between screen pixels, as on early consoles.", 4},
     {kTint, nf::kMenuChoice, "Colour Grading", "A warm, faded old screen.", 5},
 };
+const std::vector<MenuRow> kMoreRows = {
+    {kFps, nf::kMenuChoice, "Frame Counter", "Frames a second in the top corner.", 0},
+    {kPauseBg, nf::kMenuChoice, "Pause in Background", "The game stands still and silent while its window is not in front.", 1},
+    {kHideHud, nf::kMenuChoice, "Hide HUD", "For screenshots: no ammo, health or radar. The menus stay.", 2},
+    {kButtonPics, nf::kMenuChoice, "Button Pictures", "The console's prompts, or today's pad's (LB, RB, Menu, View).", 3},
+    {kStartMenus, nf::kMenuChoice, "Start in Menus", "START at the title opens the menus instead of Paris.", 4},
+    {kKeyboard, nf::kMenuChoice, "Keyboard and Mouse", "Player 1 with the first controller, Player 1 alone, or off.", 5},
+    {kMouseLook, nf::kMenuChoice, "Mouse Look", "The mouse turns and aims on foot.", 6},
+    {kLanguage, nf::kMenuChoice, "Language", "The game's language, at the next start.", 7},
+    {kKeys, nf::kMenuChoice, "Keys and Wheel", "Key bindings and a steering wheel: A opens the settings window.", 8},
+};
 constexpr int16_t kFirstY = 78, kStep = 22;
 
 // a choice of labelled values: shown at the one nearest the current value
@@ -97,13 +120,24 @@ uint32_t Nearest(const Options& o, float v) {
         if (std::fabs(o[i].value - v) < std::fabs(o[best].value - v)) best = i;
     return best;
 }
+// the shared page (Style Options, More Settings): nine rows of its own, kShared0 + the line, each set's rows drawn
+// on them by their slot; the page's widgets stay as few as the menu builder takes (a page of every set's rows, 28,
+// crashed it as the front end loaded). A set's row id stands for the shared row on its line
+constexpr uint32_t kShared0 = 0x1000FC71, kSharedRows = 9;
+uint32_t Wid(uint32_t id);
+void Choice(X86Context& ctx, uint32_t player, uint32_t id, const std::vector<std::pair<const char*, uint32_t>>& items,
+            uint32_t value) {
+    nf::MenuChoice(ctx, player, Wid(id), items, value);
+}
+uint32_t ChoiceValue(X86Context& ctx, uint32_t player, uint32_t id) { return nf::MenuChoiceValue(ctx, player, Wid(id)); }
+
 void ShowOptions(X86Context& ctx, uint32_t player, uint32_t id, const Options& o, float v) {
     std::vector<std::pair<const char*, uint32_t>> items;
     for (uint32_t i = 0; i < o.size(); i++) items.push_back({o[i].text, i});
-    nf::MenuChoice(ctx, player, id, items, Nearest(o, v));
+    Choice(ctx, player, id, items, Nearest(o, v));
 }
 float ReadOption(X86Context& ctx, uint32_t player, uint32_t id, const Options& o) {
-    uint32_t i = nf::MenuChoiceValue(ctx, player, id);
+    uint32_t i = ChoiceValue(ctx, player, id);
     return o[std::min<size_t>(i, o.size() - 1)].value;
 }
 
@@ -187,29 +221,29 @@ void EnterGraphics(X86Context& ctx, uint32_t player) {
     const app::Settings& s = app::Get();
     gpu::GraphicsStyle st = Current();
     g_entered_quality = uint32_t(gpu::MatchQuality(st, s.aniso, s.fxaa, s.smaa));
-    nf::MenuChoice(ctx, player, kQuality,
+    Choice(ctx, player, kQuality,
                    {{"Low", 0}, {"Medium", 1}, {"High", 2}, {"Ultra", 3}, {"Custom", 4}}, g_entered_quality);
     if (Vulkan()) {
         uint32_t shown = 0;
         auto items = StyleItems(st, shown);
-        nf::MenuChoice(ctx, player, kStyle, items, shown);
+        Choice(ctx, player, kStyle, items, shown);
         ShowOptions(ctx, player, kAo, kAoLevels, float(st.quality_ao));
         ShowOptions(ctx, player, kBloom, kOffOn, st.quality_bloom ? 1.0f : 0.0f);
         ShowOptions(ctx, player, kReflect, kReflectLevels, float(st.reflections));
     } else {
-        nf::MenuChoice(ctx, player, kStyle, {{"Original (Needs Vulkan)", 0xFF}}, 0xFF);
-        nf::MenuChoice(ctx, player, kAo, {{"Needs Vulkan", 0xFF}}, 0xFF);
-        nf::MenuChoice(ctx, player, kBloom, {{"Needs Vulkan", 0xFF}}, 0xFF);
-        nf::MenuChoice(ctx, player, kReflect, {{"Needs Vulkan", 0xFF}}, 0xFF);
+        Choice(ctx, player, kStyle, {{"Original (Needs Vulkan)", 0xFF}}, 0xFF);
+        Choice(ctx, player, kAo, {{"Needs Vulkan", 0xFF}}, 0xFF);
+        Choice(ctx, player, kBloom, {{"Needs Vulkan", 0xFF}}, 0xFF);
+        Choice(ctx, player, kReflect, {{"Needs Vulkan", 0xFF}}, 0xFF);
     }
     ShowOptions(ctx, player, kFilter, kFilters, float(s.aniso));
     uint32_t aa = s.msaa && !Vulkan() ? 1 + std::min<uint32_t>(s.msaa, 3) : s.smaa && Vulkan() ? kAaSmaa : s.fxaa ? 1 : 0;
-    nf::MenuChoice(ctx, player, kAa, AaItems(), aa);
+    Choice(ctx, player, kAa, AaItems(), aa);
     ShowOptions(ctx, player, kSharpen, kSharpenLevels, float(s.sharpen));
     ShowOptions(ctx, player, kScale, kScales, float(s.render_percent));
-    nf::MenuChoice(ctx, player, kRenderer, {{"Direct3D 12", 0}, {"Direct3D 11", 1}, {"Vulkan", 2}}, s.renderer % 3);
+    Choice(ctx, player, kRenderer, {{"Direct3D 12", 0}, {"Direct3D 11", 1}, {"Vulkan", 2}}, s.renderer % 3);
     if (Vulkan()) ShowOptions(ctx, player, kPack, kOffOn, st.texture_pack ? 1.0f : 0.0f);
-    else nf::MenuChoice(ctx, player, kPack, {{"Needs Vulkan", 0xFF}}, 0xFF);
+    else Choice(ctx, player, kPack, {{"Needs Vulkan", 0xFF}}, 0xFF);
     LOGR("nightfire: Graphics page entered (quality %s, style %s)", kQualityNames[g_entered_quality],
          st.preset.empty() ? "edited" : st.preset.c_str());
 }
@@ -217,14 +251,14 @@ void EnterGraphics(X86Context& ctx, uint32_t player) {
 // the page's values into the settings and the style; the style's options pages are opened with it kept
 void KeepGraphics(X86Context& ctx, uint32_t player) {
     gpu::GraphicsStyle st = Current();
-    uint32_t quality = nf::MenuChoiceValue(ctx, player, kQuality);
+    uint32_t quality = ChoiceValue(ctx, player, kQuality);
     uint32_t aniso = uint32_t(ReadOption(ctx, player, kFilter, kFilters));
-    uint32_t aa = nf::MenuChoiceValue(ctx, player, kAa);
+    uint32_t aa = ChoiceValue(ctx, player, kAa);
     uint32_t sharpen = uint32_t(ReadOption(ctx, player, kSharpen, kSharpenLevels));
     uint32_t scale = uint32_t(ReadOption(ctx, player, kScale, kScales));
-    uint32_t renderer = nf::MenuChoiceValue(ctx, player, kRenderer);
+    uint32_t renderer = ChoiceValue(ctx, player, kRenderer);
     if (Vulkan()) {
-        uint32_t style = nf::MenuChoiceValue(ctx, player, kStyle);
+        uint32_t style = ChoiceValue(ctx, player, kStyle);
         const auto& presets = gpu::StylePresets();
         if (style < presets.size() && presets[style].name != st.preset) {
             // a preset's look; quality and the texture settings are not part of it
@@ -313,7 +347,7 @@ void EnterStyle(X86Context& ctx, uint32_t player, uint32_t page) {
             for (int c = 0; c < 3; c++) d += std::fabs(kInks[i].rgb[c] - st.outline_color[c]);
             if (d < best) best = d, ink = i;
         }
-        nf::MenuChoice(ctx, player, kOutlineColor, inks, ink);
+        Choice(ctx, player, kOutlineColor, inks, ink);
         ShowOptions(ctx, player, kEdges, kOffOn, st.internal_edges ? 1.0f : 0.0f);
         ShowOptions(ctx, player, kHalftone, kHalftones, st.halftone);
         ShowOptions(ctx, player, kToonSaturation, kToonSaturations, st.saturation);
@@ -325,6 +359,48 @@ void EnterStyle(X86Context& ctx, uint32_t player, uint32_t page) {
         ShowOptions(ctx, player, kSnap, kOffOn, st.vertex_snap ? 1.0f : 0.0f);
         ShowOptions(ctx, player, kTint, kTints, st.retro_tint);
     }
+}
+
+// More Settings
+const char* LanguageName(uint32_t l) {
+    static const char* names[] = {"", "English", "Japanese", "German", "French", "Spanish", "Italian", "Korean",
+                                  "Chinese", "Portuguese"};
+    return l < std::size(names) ? names[l] : "Other";
+}
+void EnterMore(X86Context& ctx, uint32_t player) {
+    const app::Settings& s = app::Get();
+    ShowOptions(ctx, player, kFps, kOffOn, s.show_fps ? 1.0f : 0.0f);
+    ShowOptions(ctx, player, kPauseBg, kOffOn, s.pause_unfocused ? 1.0f : 0.0f);
+    ShowOptions(ctx, player, kHideHud, kOffOn, nf::hide_hud ? 1.0f : 0.0f);
+    Choice(ctx, player, kButtonPics, {{"Original", 0}, {"Modern", 1}}, nf::modern_buttons ? 1 : 0);
+    ShowOptions(ctx, player, kStartMenus, kOffOn, nf::skip_paris ? 1.0f : 0.0f);
+    Choice(ctx, player, kKeyboard, {{"Player 1", 0}, {"Player 1 Alone", 1}, {"Off", 2}},
+                   !s.keyboard ? 2 : s.keyboard_alone ? 1 : 0);
+    ShowOptions(ctx, player, kMouseLook, kOffOn, s.mouse_look ? 1.0f : 0.0f);
+    std::vector<std::pair<const char*, uint32_t>> langs;
+    for (uint32_t l : app::kGame.languages) langs.push_back({LanguageName(l), l});
+    if (langs.empty()) langs.push_back({LanguageName(s.language), s.language});
+    Choice(ctx, player, kLanguage, langs, s.language);
+    Choice(ctx, player, kKeys, {{"Open", 0}}, 0);
+}
+void KeepMore(X86Context& ctx, uint32_t player) {
+    uint32_t kb = ChoiceValue(ctx, player, kKeyboard), lang = ChoiceValue(ctx, player, kLanguage);
+    std::lock_guard<std::recursive_mutex> lock(app::UiLock());
+    app::Settings& s = app::Get();
+    s.show_fps = ReadOption(ctx, player, kFps, kOffOn) > 0;
+    s.pause_unfocused = ReadOption(ctx, player, kPauseBg, kOffOn) > 0;
+    nf::hide_hud = ReadOption(ctx, player, kHideHud, kOffOn) > 0;
+    nf::modern_buttons = ChoiceValue(ctx, player, kButtonPics) == 1;
+    nf::skip_paris = ReadOption(ctx, player, kStartMenus, kOffOn) > 0;
+    if (kb <= 2) s.keyboard = kb != 2, s.keyboard_alone = kb == 1;
+    s.mouse_look = ReadOption(ctx, player, kMouseLook, kOffOn) > 0;
+    for (uint32_t l : app::kGame.languages)
+        if (l == lang) s.language = l;
+    app::Save();
+    LOGR("nightfire: More Settings kept: frame counter %d, pause in background %d, hide HUD %d, modern buttons %d, "
+         "start in menus %d, keyboard %d alone %d, mouse look %d, language %u",
+         s.show_fps, s.pause_unfocused, nf::hide_hud, nf::modern_buttons, nf::skip_paris, s.keyboard,
+         s.keyboard_alone, s.mouse_look, s.language);
 }
 
 void KeepStyle(X86Context& ctx, uint32_t player, uint32_t page) {
@@ -342,7 +418,7 @@ void KeepStyle(X86Context& ctx, uint32_t player, uint32_t page) {
         st.mode = gpu::kStyleToon;
         st.bands = int(ReadOption(ctx, player, kBands, kBandCounts));
         st.outline = ReadOption(ctx, player, kOutline, kOutlines);
-        uint32_t ink = std::min<uint32_t>(nf::MenuChoiceValue(ctx, player, kOutlineColor), std::size(kInks) - 1);
+        uint32_t ink = std::min<uint32_t>(ChoiceValue(ctx, player, kOutlineColor), std::size(kInks) - 1);
         for (int c = 0; c < 3; c++) st.outline_color[c] = kInks[ink].rgb[c];
         st.internal_edges = ReadOption(ctx, player, kEdges, kOffOn) > 0;
         st.halftone = ReadOption(ctx, player, kHalftone, kHalftones);
@@ -372,21 +448,59 @@ void KeepStyle(X86Context& ctx, uint32_t player, uint32_t page) {
 }
 
 const std::vector<MenuRow>& RowsOf(uint32_t page) {
-    return page == kGfxPage ? kGfxRows : page == kEnhPage ? kEnhRows : page == kToonPage ? kToonRows : kRetroRows;
+    return page == kGfxPage    ? kGfxRows
+           : page == kEnhPage  ? kEnhRows
+           : page == kToonPage ? kToonRows
+           : page == kMorePage ? kMoreRows
+                               : kRetroRows;
+}
+constexpr uint32_t kSharedSets[] = {kEnhPage, kToonPage, kRetroPage, kMorePage};
+uint32_t g_style_rows = kEnhPage;  // the set the shared page was opened for
+uint32_t Wid(uint32_t id) {
+    for (uint32_t set : kSharedSets)
+        for (const MenuRow& r : RowsOf(set))
+            if (r.id == id) return kShared0 + uint32_t(r.slot);
+    return id;
+}
+// the set's row on a shared line, else null
+const MenuRow* SharedRow(uint32_t line) {
+    for (const MenuRow& r : RowsOf(g_style_rows))
+        if (uint32_t(r.slot) == line) return &r;
+    return nullptr;
+}
+// the shared page's texts: strings of its own (the title's trailing space keeps it apart from the Graphics row's
+// "Style Options"; the rows' are blanks as long as the longest label), rewritten for the set shown before the page
+// opens
+constexpr char kStyleTitle[] = "Style Options ", kMoreTitle[] = "More Settings ";
+static_assert(sizeof(kStyleTitle) == sizeof(kMoreTitle));
+constexpr size_t kLabelBytes = 32;
+const char* SharedLabel(uint32_t line) {
+    static std::string labels[kSharedRows];
+    if (labels[line].empty()) labels[line] = std::string(kLabelBytes - 2, ' ') + char('0' + line);
+    return labels[line].c_str();
+}
+void SetSharedTexts(uint32_t set) {
+    std::memcpy(kernel::HostPtr(nf::MenuString(kStyleTitle)), set == kMorePage ? kMoreTitle : kStyleTitle,
+                sizeof(kStyleTitle));
+    g_style_rows = set;
+    for (uint32_t line = 0; line < kSharedRows; line++) {
+        const MenuRow* r = SharedRow(line);
+        char text[kLabelBytes] = {};
+        std::strncpy(text, r ? r->label : "", kLabelBytes - 1);
+        std::memcpy(kernel::HostPtr(nf::MenuString(SharedLabel(line))), text, kLabelBytes);
+    }
 }
 bool IsPage(uint32_t id) { return id == kGfxPage || id == kStylePage; }
-uint32_t g_style_rows = kEnhPage;  // the style the style page was opened for
-// the style page: every style's rows, one after another (their slots put them on the same lines)
 std::vector<MenuRow> StylePageRows() {
-    std::vector<MenuRow> v = kEnhRows;
-    v.insert(v.end(), kToonRows.begin(), kToonRows.end());
-    v.insert(v.end(), kRetroRows.begin(), kRetroRows.end());
+    std::vector<MenuRow> v;
+    for (uint32_t line = 0; line < kSharedRows; line++)
+        v.push_back({kShared0 + line, nf::kMenuChoice, SharedLabel(line), "", int(line)});
     return v;
 }
-// the rows of the styles not shown hidden (0x2B 1), the chosen style's shown (0x2B 0)
-void ShowStyleRows(X86Context& ctx, uint32_t player, uint32_t which) {
-    for (uint32_t set : {kEnhPage, kToonPage, kRetroPage})
-        for (const MenuRow& r : RowsOf(set)) nf::MenuSet(ctx, player, r.id, 0x2B, set == which ? 0 : 1);
+// the lines the set has no row on hidden (0x2B 1), the others shown (0x2B 0)
+void ShowStyleRows(X86Context& ctx, uint32_t player) {
+    for (uint32_t line = 0; line < kSharedRows; line++)
+        nf::MenuSet(ctx, player, kShared0 + line, 0x2B, SharedRow(line) ? 0 : 1);
 }
 
 }  // namespace
@@ -394,17 +508,12 @@ void ShowStyleRows(X86Context& ctx, uint32_t player, uint32_t which) {
 namespace nf {
 
 bool MenuRowHidden(uint32_t page, uint32_t id) {
-    if (page != kStylePage) return false;
-    for (uint32_t set : {kEnhPage, kToonPage, kRetroPage})
-        if (set != g_style_rows)
-            for (const MenuRow& r : RowsOf(set))
-                if (r.id == id) return true;
-    return false;
+    return page == kStylePage && id >= kShared0 && id < kShared0 + kSharedRows && !SharedRow(id - kShared0);
 }
 
 std::vector<std::vector<uint8_t>> GraphicsPages(const std::vector<uint8_t>& av, uint32_t (*record_size)(uint32_t)) {
     std::vector<std::vector<uint8_t>> pages = {BuildPage(av, record_size, kGfxPage, "Graphics", kGfxRows, kFirstY, kStep),
-                                               BuildPage(av, record_size, kStylePage, "Style Options", StylePageRows(),
+                                               BuildPage(av, record_size, kStylePage, kStyleTitle, StylePageRows(),
                                                          kFirstY, kStep)};
     for (auto& p : pages)
         if (p.empty()) return {};
@@ -416,6 +525,12 @@ void OpenGraphicsPage(X86Context& ctx, uint32_t player) {
     LOGR("nightfire: Graphics page opened");
 }
 
+void OpenMorePage(X86Context& ctx, uint32_t player) {
+    SetSharedTexts(kMorePage);
+    MenuGoTo(ctx, player, kStylePage);
+    LOGR("nightfire: More Settings opened");
+}
+
 bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint32_t msg, uint32_t arg) {
     uint32_t id = R32(widget + 0x18);
     if (IsPage(id)) {
@@ -423,8 +538,9 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
             if (id == kGfxPage) {
                 EnterGraphics(ctx, player);
             } else {
-                ShowStyleRows(ctx, player, g_style_rows);
-                EnterStyle(ctx, player, g_style_rows);
+                ShowStyleRows(ctx, player);
+                if (g_style_rows == kMorePage) EnterMore(ctx, player);
+                else EnterStyle(ctx, player, g_style_rows);
             }
         }
         if (msg == 0x4B) {
@@ -432,7 +548,7 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
             if (id == kGfxPage && on == kStyleOptions) {
                 // the style chosen here kept, then its page (Original has none)
                 KeepGraphics(ctx, player);
-                uint32_t chosen = nf::MenuChoiceValue(ctx, player, kStyle);
+                uint32_t chosen = ChoiceValue(ctx, player, kStyle);
                 const auto& presets = gpu::StylePresets();
                 int mode = chosen < presets.size() ? presets[chosen].values.mode : Current().mode;
                 if (!Vulkan() || mode == gpu::kStyleOriginal) {
@@ -440,7 +556,7 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
                                                    : "The styles are drawn by the Vulkan renderer.");
                     return true;
                 }
-                g_style_rows = mode == gpu::kStyleEnhanced ? kEnhPage : mode == gpu::kStyleToon ? kToonPage : kRetroPage;
+                SetSharedTexts(mode == gpu::kStyleEnhanced ? kEnhPage : mode == gpu::kStyleToon ? kToonPage : kRetroPage);
                 MenuGoTo(ctx, player, kStylePage);
                 return true;
             }
@@ -449,19 +565,30 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
                 MenuBack(ctx, player);
                 return true;
             }
+            if (id == kStylePage && g_style_rows == kMorePage && on == Wid(kKeys)) {
+                // key bindings and the wheel: the settings window, over the page
+                std::lock_guard<std::recursive_mutex> lock(app::UiLock());
+                if (!app::OverlayOpen()) app::ToggleOverlay();
+                return true;
+            }
             if (id == kGfxPage) KeepGraphics(ctx, player);
+            else if (g_style_rows == kMorePage) KeepMore(ctx, player);
             else KeepStyle(ctx, player, g_style_rows);
             MenuBack(ctx, player);
         }
         return true;
     }
-    if (msg == 0x4E)  // focus gained: the row's help line
-        for (uint32_t page : {kGfxPage, kEnhPage, kToonPage, kRetroPage})
-            for (const MenuRow& r : RowsOf(page))
-                if (r.id == id) {
-                    MenuHelp(ctx, player, r.help);
-                    return false;
-                }
+    if (msg == 0x4E) {  // focus gained: the row's help line
+        if (id >= kShared0 && id < kShared0 + kSharedRows) {
+            if (const MenuRow* r = SharedRow(id - kShared0)) MenuHelp(ctx, player, r->help);
+            return false;
+        }
+        for (const MenuRow& r : kGfxRows)
+            if (r.id == id) {
+                MenuHelp(ctx, player, r.help);
+                return false;
+            }
+    }
     return false;
 }
 

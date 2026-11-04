@@ -4,7 +4,7 @@
 // The page is the AV Options page (0x40000031) cloned into the menu file the page builder reads (src/game/
 // pc_settings_item.cpp's copy), its page and row widgets given ids of ours: two sliders (the volumes' rows: field of
 // view, mouse sensitivity) and four choices (invert mouse, skip intro movies, sharp text, aspect), the Restore Defaults
-// button as "More Settings" (the settings window), the rest hidden as AV Options hides its own. The game's widget
+// button as "More Settings" (graphics_page.cpp OpenMorePage), the rest hidden as AV Options hides its own. The game's widget
 // messages drive it as AV Options' handler 0x8D7A0 does (sub_72820(player, id, message, a, b)): a slider 0x27 its
 // steps, 0x69, 0x2E its value, 0x40 read; a choice 0x17 cleared, 0x10 a choice added (its text, its value), 0x1E the
 // choice of a value, 0x35 its value read; 0x2B 1
@@ -88,7 +88,7 @@ const std::vector<Row> kRows = {
     {kVsync, kChoiceRow, "Vertical Sync", "Frames shown with the screen's refresh: no tearing."},
     {kCap, kChoiceRow, "Frame Cap", "The most frames a second drawn."},
     {kGraphics, kButtonRow, "Graphics", "Picture quality, the shader style and its options."},
-    {kMore, kButtonRow, "More Settings", "Sound, controls and the rest in the settings window."},
+    {kMore, kButtonRow, "More Settings", "Frame counter, HUD, keyboard and mouse, language and more."},
 };
 constexpr int16_t kFirstY = 78, kRowStep = 22;  // AV's rows are 28 apart from 86: twelve need it closer
 
@@ -276,9 +276,9 @@ bool PcPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint32_t m
     if (id == kPage) {
         if (msg == 0x4C) Enter(ctx, player);
         if (msg == 0x4B) {
-            if (arg && R32(arg + 0x18) == kMore) {
-                std::lock_guard<std::recursive_mutex> lock(app::UiLock());
-                if (!app::OverlayOpen()) app::ToggleOverlay();
+            if (arg && R32(arg + 0x18) == kMore) {  // this page's values kept, then More Settings
+                Keep(ctx, player);
+                nf::OpenMorePage(ctx, player);
                 return true;
             }
             if (arg && R32(arg + 0x18) == kGraphics) {  // this page's values kept, then the Graphics page

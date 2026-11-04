@@ -31,6 +31,20 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - More Settings as a page of the game's menus; bullet holes checked
+
+- PC Settings > More Settings opened the ImGui settings window; now a page of the game's own menus: Frame Counter,
+  Pause in Background, Hide HUD, Button Pictures, Start in Menus (skip_paris), Keyboard and Mouse (player 1 / alone /
+  off), Mouse Look, Language (next start), and Keys and Wheel (A opens the settings window: key binding and the wheel
+  are not native yet). Kept with A, saved in settings.toml (seen: mouse look On -> Off written).
+- The front end's file takes no fourth page, and a shared page holding every set's rows (28) crashed the menu code
+  as the front end loaded (write to guest 0x76). Style Options and More Settings now share one page of nine generic
+  rows (0x1000FC71..79): each set's rows map to them by slot, their labels and the page title are strings of ours
+  rewritten in place before the page opens, lines a set does not use hidden. Tested: More Settings, then Graphics >
+  Style Options (Retro's six rows, its title) in the same session.
+- Bullet holes: the game draws them already (The Exchange, 3 pistol shots into snow: a dark mark at the crosshair,
+  none before). Improving them (count, lifetime, HD picture) is next if wanted.
+
 ### 2026-11-04 - START goes to the menus, not into Paris (skip_paris)
 
 - New option skip_paris (on by default; settings window, settings.toml; NF_SKIP_PARIS): a cold start's START at the
