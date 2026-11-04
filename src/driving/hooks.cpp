@@ -27,6 +27,7 @@ bool MenuKeys() {
 
 // the control map (0x1E455C): +4 its mode, 1 a mounted gun (data\control\povcfgN.def), 0 the car (drivecfg.def), 2 none
 // yet; +0xC the gun's style (the player's controller style)
+uint64_t NetStateHash() { return 0; }  // no LAN play in the driving levels
 bool PlayerFree() { return true; }  // default.xbe's questions (src/game/mouse.cpp)
 bool Zoomed() { return false; }
 void ScopeZoom(int) {}

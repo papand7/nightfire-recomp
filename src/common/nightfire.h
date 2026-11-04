@@ -31,6 +31,8 @@ void MenuCursor(int size, std::vector<uint32_t>& bgra, int& hot_x, int& hot_y); 
 std::vector<achievements::Def> AchievementSet();  // src/common/achievement_set.cpp
 void MenuMouse(int port, input::Pad& p);
 void MouseAsStick();
+// LAN play's check that the copies compute the same game (core/netplay.h): default.xbe's players (src/game/netplay.cpp)
+uint64_t NetStateHash();
 bool PlayerFree();  // default.xbe: Bond under the player's own control (not a keypad, a missile, a cutscene)
 bool Zoomed();
 void ScopeZoom(int notches);  // default.xbe: the wheel's notches through a scope, up nearer (src/game/mouse.cpp)  // default.xbe: player 1 looking through a scope or sight, zoomed in (src/game/mouse.cpp)

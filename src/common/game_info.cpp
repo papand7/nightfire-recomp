@@ -11,6 +11,7 @@
 #include "app/app.h"
 #include "core/input.h"
 #include "core/log.h"
+#include "core/netplay.h"
 #include "nightfire.h"
 
 namespace nf {
@@ -59,6 +60,7 @@ void Init() {
     for (const achievements::Def& d : app::kGame.achievements)
         if (std::string e = achievements::Check(d.condition); !e.empty())
             LOGE("nightfire: achievement %s: %s", d.id, e.c_str());
+    netplay::SetStateHash(nf::NetStateHash);
     if (nf::skip_intro) LOGR("nightfire: the intro logos are skipped (skip_intro)");
     if (nf::hide_hud) LOGR("nightfire: the HUD is hidden (hide_hud)");
     if (!nf::modern_buttons) LOGR("nightfire: the console's button pictures (modern_buttons off)");
