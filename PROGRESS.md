@@ -31,6 +31,18 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - Materials: the HD pack's normal and roughness maps drawn (PBR)
+
+- New option materials (Graphics page > Materials: Original / PBR; settings window; graphics.toml materials,
+  material_strength): a pack picture's _n and _r maps, read with it into one image (normal xy, roughness, height, with
+  mips), bound to a stage the draw leaves free; the draw's pixel shader variant shades the game's colour by a bumped
+  normal (cotangent frame from screen derivatives) and adds a GGX sheen of the roughness. New DrawConstants float4 pbr
+  (shared with the D3D backends' HLSL, unused there).
+- Tested (The Exchange, Vulkan, the 187-texture 4x pack): about 1,240 material draws a frame, 60.0 frames a second, no
+  shader failures; the castle wall shows its stones and mortar in relief with strength 1 against 0 in the same scene
+  (captures/pbr_cmp.png, private).
+- Limits: no game light directions (the vertex programs keep them), so light comes from above the view and the camera.
+
 ### 2026-11-04 - Soft particles (optional)
 
 - New option soft_particles (settings window > Particles; Graphics page > Particles: Original / Soft; graphics.toml):

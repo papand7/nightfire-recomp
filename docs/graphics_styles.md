@@ -134,8 +134,14 @@ playing more. The game loads the pack at its next start. Measured (RTX 5060): 18
 PBR maps, 45 seconds.
 
 The renderer uses: the upscaled pictures (the texture pack path); roughness for reflections (a pack picture whose mean
-roughness is under 0.45 reflects, smoother more). Normal maps are made but not drawn yet: lighting them needs the
-scene's light directions and tangent frames, which the game's vertex programs do not hand over (below).
+roughness is under 0.45 reflects, smoother more); and, with **Materials** on (Graphics > Materials > PBR, or graphics.toml
+`materials`, `material_strength` 0-1.5; read with the pack, so at the next start), normal and roughness maps drawn: a
+pack-replaced surface drawn opaque gets a variant of its pixel shader that builds the surface's frame from screen
+derivatives (its position, the view taken as 60 degrees, and its texture coordinates: a cotangent frame), lights the
+bumped normal from above the view and from the camera, scales the game's own colour by the bumped light over the flat
+light, and adds a GGX highlight of the roughness kept in proportion to the colour. The game's baked lighting stays; the
+game hands over no light directions, so the maps add relief and sheen rather than relight the scene. Vulkan, every
+style but Retro. Measured (The Exchange, RTX 5060): about 1,240 such draws a frame, 60 frames a second.
 
 The pack is made from the player's own copy of the game: nothing of the game's ships with the tool, and the pack is
 not to be shared.
