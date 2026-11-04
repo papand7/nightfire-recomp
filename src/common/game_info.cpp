@@ -15,6 +15,7 @@
 
 namespace nf {
 bool skip_intro = false;
+bool skip_paris = true;
 bool hide_hud = false;
 uint32_t fov_percent = 100;
 extern bool modern_buttons;  // src/common/buttons.cpp
@@ -49,6 +50,7 @@ namespace {
 // after the settings load: the harness's environment overrides them; each setting in effect is logged
 void Init() {
     if (const char* e = std::getenv("NF_SKIP_INTRO"); e && *e) nf::skip_intro = *e == '1';
+    if (const char* e = std::getenv("NF_SKIP_PARIS"); e && *e) nf::skip_paris = *e == '1';
     if (const char* e = std::getenv("NF_FOV"); e && *e) nf::fov_percent = uint32_t(std::atoi(e));
     if (const char* e = std::getenv("NF_HIDE_HUD"); e && *e) nf::hide_hud = *e == '1';
     if (const char* e = std::getenv("NF_MODERN_BUTTONS"); e && *e) nf::modern_buttons = *e == '1';
@@ -200,6 +202,8 @@ const app::GameInfo app::kGame = {
                                           // each recompiled xbe and its exe, for title launches
     .options = {{"skip_intro", &nf::skip_intro, nullptr, "Skip intro movies",
                  "Starts without the EA and MGM logo movies"},
+                {"skip_paris", &nf::skip_paris, nullptr, "Menus at start, not Paris",
+                 "START at the title opens the menus; Paris is then started from the single player missions."},
                 {"hide_hud", &nf::hide_hud, nullptr, "Hide the HUD", "For screenshots; at once, on foot and driving. The menus and pause screens stay."},
                 {"modern_buttons", &nf::modern_buttons, nullptr, "Modern button pictures",
                  "A controller's prompts as today's Xbox pad marks them: LB and RB for White and Black, Menu and View for Start and Back."},

@@ -31,6 +31,20 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - START goes to the menus, not into Paris (skip_paris)
+
+- New option skip_paris (on by default; settings window, settings.toml; NF_SKIP_PARIS): a cold start's START at the
+  title opens the main menu instead of launching Driving.xbe into Paris Prelude. src/game/start.cpp overrides 0xDFB50
+  (state 9 of the state machine 0x6ACA0 launches Driving.xbe, level 0x9000001 = Paris) and relaunches default.xbe
+  with the data Driving.xbe hands back after Paris is quit from its pause screen (offsets 0x4B4 "LOADER READY",
+  0x4F4 "paris_mis01", 0x53C 3, bytes 0x5DD 0x615 0x619 0x625 0x979), measured with the new XBE_LAUNCH_DUMP=<folder>
+  switch (sdk xapi.cpp: each XLaunchNewImage's 3072 data bytes to a file).
+- Cold means not --relaunched: the launch data page is no test, the game has consumed it by the time state 9 runs.
+- Tested (Vulkan): START -> main menu; NightFire -> Play without saving -> difficulty -> Paris Prelude -> Driving.xbe
+  loads Paris and plays. The harness counts as relaunched, so smoke.sh still goes through Paris; .local route scripts
+  set NF_SKIP_PARIS=0.
+- Not tested: a saved codename profile, the USA disc.
+
 ### 2026-11-04 - Reflections, SMAA, W-buffer depth in the scene pass
 
 - Screen-space reflections (Vulkan; Off/Low/High in the game's Graphics page and the settings window; graphics.toml
