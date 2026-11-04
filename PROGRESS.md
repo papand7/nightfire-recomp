@@ -32,6 +32,7 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 ## Log
 
 ### 2026-11-04 - Aim down sights (aim_down_sights, on by default)
+- More Settings has an "Aim Down Sights" row (Off/On, the page's tenth shared row). Seen on screen: the row toggles, A keeps it (log "aim down sights 0", settings.toml `aim_down_sights = false`), B leaves it as it was.
 - L (the right mouse button) no longer enters the game's manual aim (view held, red crosshair moved by the stick):
   `src/game/aim.cpp` clears the controls' slot 19 after 0xDE720, so the weapon state's manual-aim bit never sets and
   shots go through the middle. Instead the zoom target is 1.3 (0xB7190), the first person gun is moved to the middle
