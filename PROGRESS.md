@@ -31,6 +31,23 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-04 - Bug hunt: menus, mouse, renderers, runtime
+
+- Menus and mouse: the style page's hidden rows (other styles') no longer under the pointer (it cycled their values);
+  wheel and stick moves end the hover; a row the d-pad cannot reach is given up, not retried; left/right never used to
+  move focus off a value row. PC Settings' Keep leaves a resolution, frame cap, FOV or mouse speed the page cannot show
+  as it was. Style Options shows the style just kept (the request is taken a frame later). Menu file copies keyed by
+  their bytes and reused per level (were leaked each load); page widget checked live; guest returns masked to a byte.
+- Vulkan: occlusion queries returned to the pool, barriers after image-to-buffer copies and between submissions,
+  throttling while minimised, no geometry-shader pipelines without the feature, a copy's source looked up again after
+  its destination is made; swizzled read-backs not compared as linear (D3D11 and D3D12 too). graphics.toml and texture
+  dumps written by temp file and rename; style load and edits locked.
+- Runtime: a lost audio device drops to the silent mixer; a settings.toml that does not parse is logged and kept as
+  .bak, saves are atomic; renderer fallback tries all three and exits with a message if none starts; language, size
+  and render scale checked on load; the mode restored on the monitor it was changed on; swapped mouse buttons; the
+  render thread not freed while its worker still runs.
+- Checked: Vulkan with validation (no messages), D3D12, PC Settings -> Graphics -> Style Options by mouse clicks.
+
 ### 2026-11-04 - Graphics styles: on foot, tuning, shader mod
 
 - On foot (The Exchange, reached by pad commands from Paris's failure): all four styles switched live, 60 fps, HUD

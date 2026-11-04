@@ -172,11 +172,14 @@ const char* SizeText(Size z) {
     return kept.back().c_str();
 }
 constexpr uint32_t kCaps[] = {30, 60, 120, 144, 240, 0};
+constexpr uint32_t kAsIs = 0xFE;  // a choice's item for a value the list does not have: Keep leaves it as it is
+uint32_t g_fov_step = 0, g_mouse_step = 0;  // the sliders as entered: unmoved, the exact values stay
 
 void Enter(X86Context& ctx, uint32_t player) {
     const app::Settings& s = app::Get();
-    Slider(ctx, player, kFov, FovStep());
-    Slider(ctx, player, kMouse, MouseStep());
+    g_fov_step = FovStep(), g_mouse_step = MouseStep();
+    Slider(ctx, player, kFov, g_fov_step);
+    Slider(ctx, player, kMouse, g_mouse_step);
     Choice(ctx, player, kInvert, Numbered({"Off", "On"}), s.mouse_invert_y ? 1 : 0);
     Choice(ctx, player, kSkip, Numbered({"Off", "On"}), nf::skip_intro ? 1 : 0);
     Choice(ctx, player, kSharp, Numbered({"Off", "On"}), s.sharp_2d ? 1 : 0);
@@ -194,12 +197,18 @@ void Enter(X86Context& ctx, uint32_t player) {
         sizes.push_back({SizeText(z), uint32_t(i + 1)});
         if (z.w == s.width && z.h == s.height) size = uint32_t(i + 1);
     }
+    if (!size && (s.width || s.height)) {  // a size not in the list (set by hand, another monitor's)
+        sizes.push_back({SizeText({s.width, s.height}), kAsIs});
+        size = kAsIs;
+    }
     Choice(ctx, player, kResolution, sizes, size);
     Choice(ctx, player, kVsync, Numbered({"Off", "On"}), s.vsync ? 1 : 0);
-    uint32_t cap = 1;
+    uint32_t cap = kAsIs;
     for (uint32_t i = 0; i < std::size(kCaps); i++)
         if (kCaps[i] == s.fps_cap) cap = i;
-    Choice(ctx, player, kCap, Numbered({"30", "60", "120", "144", "240", "Unlimited"}), cap);
+    auto caps = Numbered({"30", "60", "120", "144", "240", "Unlimited"});
+    if (cap == kAsIs) caps.push_back({SizeText({s.fps_cap, 0}) , kAsIs});
+    Choice(ctx, player, kCap, caps, cap);
     LOGR("nightfire: PC Settings page entered");
 }
 
@@ -213,20 +222,22 @@ void Keep(X86Context& ctx, uint32_t player) {
     uint32_t vsync = SetById(ctx, player, kVsync, 0x35, 0) & 0xFF, cap = SetById(ctx, player, kCap, 0x35, 0) & 0xFF;
     std::lock_guard<std::recursive_mutex> lock(app::UiLock());
     app::Settings& s = app::Get();
-    nf::fov_percent = 50 + std::min(fov, 20u) * 5;
-    s.mouse_sensitivity = uint32_t(std::lround(25 * std::pow(2.0, std::min(mouse, 20u) / 5.0)));
+    if (fov != g_fov_step) nf::fov_percent = 50 + std::min(fov, 20u) * 5;
+    if (mouse != g_mouse_step)
+        s.mouse_sensitivity = uint32_t(std::lround(25 * std::pow(2.0, std::min(mouse, 20u) / 5.0)));
     s.mouse_invert_y = invert == 1;
     nf::skip_intro = skip == 1;
     s.sharp_2d = sharp == 1;
     uint32_t w = 0, h = 0;
     if (size >= 1 && size <= ShownSizes().size()) w = ShownSizes()[size - 1].w, h = ShownSizes()[size - 1].h;
+    if (size == kAsIs) w = s.width, h = s.height;
     app::DisplayMode mode = display <= 2 ? app::DisplayMode(display) : s.display_mode;
     bool apply = s.aspect != std::min(aspect, 3u) || s.display_mode != mode || s.width != w || s.height != h;
     s.aspect = std::min(aspect, 3u);
     s.display_mode = mode;
     s.width = w, s.height = h;
     s.vsync = vsync == 1;
-    s.fps_cap = kCaps[std::min<uint32_t>(cap, std::size(kCaps) - 1)];
+    if (cap != kAsIs) s.fps_cap = kCaps[std::min<uint32_t>(cap, std::size(kCaps) - 1)];
     app::Save();
     if (apply) app::ApplyDisplay();
     LOGR("nightfire: PC Settings kept: field of view %u%%, mouse %u%%, invert %d, skip intro %d, sharp text %d, "
@@ -446,7 +457,7 @@ X86_FUNC(sub_0007F680) {
     // own pointer, which the game's arithmetic wraps into memory the copy's address would not)
     uint32_t widget = R32(ctx.esp + 8);
     if (widget && R32(ctx.esp + 0xC) == kTable) {
-        uint32_t index = kernel::CallGuest(ctx, kSetWidget, {widget, 0x40, 0, 0});
+        uint32_t index = kernel::CallGuest(ctx, kSetWidget, {widget, 0x40, 0, 0}) & 0xFF;
         if (index < kCopied) W32(ctx.esp + 0xC, ListCopy());
     }
     __imp__sub_0007F680(ctx, base);
@@ -456,7 +467,7 @@ X86_FUNC(sub_0007F680) {
 X86_EXTERN_FUNC(__imp__sub_0008C7F0);
 X86_FUNC(sub_0008C7F0) {
     uint32_t player = R32(ctx.esp + 4), widget = R32(ctx.esp + 8), msg = R32(ctx.esp + 0x10);
-    uint32_t index = widget ? kernel::CallGuest(ctx, kSetWidget, {widget, 0x40, 0, 0}) : ~0u;
+    uint32_t index = widget ? kernel::CallGuest(ctx, kSetWidget, {widget, 0x40, 0, 0}) & 0xFF : ~0u;
     if ((msg == 0x49 || msg == 0x54) && index < kCopied) {
         // focus moved: the rows' labels, help and picture (the game's call, with the copy: its direct call to 0x7F680
         // does not come through the hook below); not before the list is made (its index the widget's pointer)

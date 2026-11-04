@@ -50,9 +50,9 @@ X86_EXTERN_FUNC(__imp__sub_000857D0);
 X86_FUNC(sub_000857D0) {
     uint32_t cam = ctx.ecx, game = kernel::R32(kGame);
     float x, y;
+    if (!cam || !Counts(x, y)) return __imp__sub_000857D0(ctx, base);
     bool frozen = (game && kernel::R32(game + 0x47C)) || kernel::R32(kState) == 3 ||
                   kernel::G<uint8_t>(cam + kAttached);
-    if (!cam || !Counts(x, y)) return __imp__sub_000857D0(ctx, base);
     if (frozen) return __imp__sub_000857D0(ctx, base);  // paused, a movie, scripted: the counts are dropped
     float zoom = std::clamp(GetF(cam + kHalfAngle) / kGameHalfAngle, 0.02f, 2.0f);
     bool zoomed = zoom < 0.9f;

@@ -135,8 +135,10 @@ uint32_t GuestString(const char* s) {
 }
 
 // the menu file with our item, in guest memory; 0 when the stream has no main menu (another menu file)
+uint32_t Patch(uint32_t stream, uint32_t at);
 uint32_t Patched(uint32_t stream) {
-    static uint32_t source = 0, made = 0, source_len = 0;
+    static uint32_t source = 0, made = 0, source_len = 0, source_hash = 0;
+    static std::unordered_map<uint64_t, uint32_t> copies;  // length and hash to the copy (0: none for that file)
     // the stream's length: its records to the end opcode
     uint32_t at = 4;  // a header dword first
     for (;;) {
@@ -149,8 +151,20 @@ uint32_t Patched(uint32_t stream) {
         if (!n || at > 0x400000) return 0;  // not a stream this walker knows
         at += n;
     }
-    if (stream == source && at == source_len) return made;
-    source = stream, source_len = at, made = 0;
+    uint32_t hash = 2166136261u;  // FNV-1a
+    const uint8_t* bytes = static_cast<const uint8_t*>(kernel::HostPtr(stream));
+    for (uint32_t i = 0; i < at; i++) hash = (hash ^ bytes[i]) * 16777619u;
+    if (stream == source && at == source_len && hash == source_hash) return made;
+    source = stream, source_len = at, source_hash = hash;
+    uint64_t key = uint64_t(at) << 32 | hash;
+    if (auto c = copies.find(key); c != copies.end()) return made = c->second;
+    made = Patch(stream, at);
+    if (made || !g_av.empty()) copies[key] = made;  // a level's file before the front end's is tried again
+    return made;
+}
+
+uint32_t Patch(uint32_t stream, uint32_t at) {
+    uint32_t made = 0;
     std::vector<uint8_t> b(at);
     std::memcpy(b.data(), kernel::HostPtr(stream), at);
     // the main menu page, its three items' widget records, and where the Codenames item's records end
@@ -228,6 +242,7 @@ uint32_t Patched(uint32_t stream) {
         uint32_t op = Get32(b, p), n = RecordSize(op);
         if (!n) break;
         if (op == kOpPage && Get32(b, p + 4) == kAvPage && Get32(b, p + 8) == kFrontVar && b[p + 0x10] == 0) {
+            if (p + n + Get32(b, p + 0x11) > b.size()) break;  // a body past the file: not laid out as expected
             std::vector<uint8_t> av(b.begin() + p, b.begin() + p + n + Get32(b, p + 0x11));
             g_av = av;
             std::vector<uint8_t> page_copy = nf::PcPage(av, RecordSize);
@@ -296,13 +311,15 @@ bool MenuGeometry(uint32_t& page, std::vector<MenuWidget>& widgets, uint32_t& fo
     // pause screen's and level pages' ids, not the front end's
     page = g_page_id;
     uint32_t w = g_page_widget;
-    if (!w || w >= 0x84000000u) return false;
+    if (!w || w >= 0x84000000u || R32(w + 0x18) != page) return false;  // gone with its menu file
     uint32_t f = R32(w + 0xAC);  // the focused widget (0x959E0 reads it there)
     focused = f && f < 0x84000000u ? R32(f + 0x18) : 0;
     std::lock_guard lock(g_geo_lock);
     auto it = g_geo.find(page);
     if (it == g_geo.end()) return false;
-    widgets = it->second;
+    widgets.clear();
+    for (const MenuWidget& m : it->second)  // not the rows hidden (the style page's other styles')
+        if (!MenuRowHidden(page, m.id)) widgets.push_back(m);
     return true;
 }
 }  // namespace nf
@@ -334,7 +351,7 @@ X86_FUNC(sub_0008E320) {
     // A on the pause screen's choices with PC SETTINGS chosen (its fourth, 3)
     for (uint32_t w : {widget, R32(ctx.esp + 0x10)}) {
         if (!w || message != kActivate || R32(w + 0x18) != kPauseItem || R32(w + 0x20) != kPauseChoices) continue;
-        uint32_t eax = ctx.eax, chosen = kernel::CallGuest(ctx, kSetWidget, {w, kMsgRead, 0, 0});
+        uint32_t eax = ctx.eax, chosen = kernel::CallGuest(ctx, kSetWidget, {w, kMsgRead, 0, 0}) & 0xFF;
         ctx.eax = eax;
         if (chosen != 3) break;
         nf::OpenPcPage(ctx, R32(ctx.esp + 4) & 0xFF);

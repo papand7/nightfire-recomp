@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <cstdio>
 #include <string>
@@ -141,7 +142,7 @@ std::vector<Row> Rows(const std::vector<MenuWidget>& widgets) {
 
 namespace {
 // the pointer's presses: one control held kHold ms, then kRest ms before the next, so the game sees each as a press
-void Pointer(input::Pad& p, uint32_t held, int64_t now) {
+void Pointer(input::Pad& p, uint32_t held, int64_t now, bool moved) {
     constexpr int64_t kHold = 50, kRest = 50;
     static uint32_t was_held = 0;
     static int act = -1;
@@ -149,6 +150,7 @@ void Pointer(input::Pad& p, uint32_t held, int64_t now) {
     static float last_x = -1, last_y = -1;
     static bool hovering = false;  // the pointer leads the focus until the d-pad moves it
     static uint32_t target = 0, page_was = 0;
+    static uint32_t given_up = 0;  // a row the d-pad did not reach: not tried again until the pointer leaves it
     static int steps = 0;
     static bool click = false, click_value = false, click_left = false;
     if (now < 0) {
@@ -157,7 +159,8 @@ void Pointer(input::Pad& p, uint32_t held, int64_t now) {
     }
     uint32_t pressed = held & ~was_held;
     was_held = held;
-    if (p.buttons & 0xF) hovering = false, target = 0;  // the d-pad's own
+    // the d-pad's own, the wheel's and the left stick's moves: the focus theirs until the pointer moves
+    if ((p.buttons & 0xF) || moved || std::abs(p.lx) > 12000 || std::abs(p.ly) > 12000) hovering = false, target = 0;
     if (act >= 0 && now < act_end) {
         if (act < input::kA) p.buttons |= uint16_t(1u << act);
         else p.analog[act - input::kA] = 255;
@@ -181,7 +184,7 @@ void Pointer(input::Pad& p, uint32_t held, int64_t now) {
     std::vector<Row> rows;
     if (MenuGeometry(page, widgets, focused)) rows = Rows(widgets);
     if (page != page_was) {
-        target = 0, click = false, steps = 0, page_was = page;
+        target = 0, click = false, steps = 0, page_was = page, given_up = 0;
         // each page's rows once in the log: what the pointer finds there
         static std::vector<uint32_t> told;
         if (page && std::find(told.begin(), told.end(), page) == told.end() && told.size() < 64) {
@@ -208,7 +211,8 @@ void Pointer(input::Pad& p, uint32_t held, int64_t now) {
                 (!hit || (r.x1 - r.x0) * (r.y1 - r.y0) < (hit->x1 - hit->x0) * (hit->y1 - hit->y0)))
                 hit = &r;
     if (pressed & 1) {
-        if (rows.empty() || !focused) {  // no geometry: A on what is focused
+        if (rows.empty()) {  // no geometry: A on what is focused (a page with rows but nothing focused yet is
+                             // woken below, its A would keep and leave it)
             play(input::kA);
             return;
         }
@@ -217,9 +221,10 @@ void Pointer(input::Pad& p, uint32_t held, int64_t now) {
             click_value = hit->value && gx >= hit->vx0 - 24 && gx < hit->vx1 + 24;
             click_left = gx < (hit->vx0 + hit->vx1) / 2;
         }
-    } else if (hovering && hit && hit->id != target) {
+    } else if (hovering && hit && hit->id != target && hit->id != given_up) {
         target = hit->id, steps = 0;
     }
+    if (!hit || hit->id != given_up) given_up = 0;
     if (now < rest_end || !target) return;
     auto at = [&](uint32_t id) {
         for (size_t i = 0; i < rows.size(); i++)
@@ -233,16 +238,16 @@ void Pointer(input::Pad& p, uint32_t held, int64_t now) {
     }
     if (f != t) {
         // a press toward it: across when they share a line, else up or down; given up if it does not get there
-        if (++steps > 32) {
-            target = 0, click = false;
-            return;
-        }
+        auto give_up = [&] { given_up = target, target = 0, click = false; };
+        if (++steps > 32) return give_up();
         if (f < 0) {  // nothing focused yet (a page waits for the d-pad's first press): one wakes it
+            if (steps > 2) return give_up();  // still on no row (a panel): not the d-pad's to move further
             play(input::kDown);
             return;
         }
         const Row &a = rows[size_t(f)], &b = rows[size_t(t)];
         bool across = std::fabs((a.y0 + a.y1) / 2 - (b.y0 + b.y1) / 2) <= 6;
+        if (across && a.value) return give_up();  // left and right on a value change it, not the focus
         play(across ? (t > f ? input::kRight : input::kLeft) : (t > f ? input::kDown : input::kUp));
         return;
     }
@@ -315,9 +320,9 @@ void MenuMouse(int port, input::Pad& p) {
             if (c < input::kA) p.buttons = uint16_t(p.buttons & ~(1u << c));
             else p.analog[c - input::kA] = 0;
         }
-        Pointer(p, held, now);
+        Pointer(p, held, now, notches != 0 || pending != 0);
     } else {
-        Pointer(p, 0, -1);  // out of the menus: nothing kept
+        Pointer(p, 0, -1, false);  // out of the menus: nothing kept
     }
     // the wheel: a d-pad press a notch
     if (menu != was_menu) pending = 0;

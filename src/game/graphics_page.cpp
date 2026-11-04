@@ -9,8 +9,10 @@
 // graphics.toml. What only Vulkan draws reads "Needs Vulkan" under the Direct3D renderers. Changing a value the
 // quality preset sets makes it Custom; choosing a preset sets them all; the style is apart from the preset.
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -159,9 +161,26 @@ std::vector<std::pair<const char*, uint32_t>> StyleItems(const gpu::GraphicsStyl
     return v;
 }
 
+// the style as the pages last asked for it: the render thread takes a request at its next frame, so a page entered
+// at once (Style Options after Graphics' Keep) would show the one before; a second later the snapshot has it (and a
+// later edit of graphics.toml wins)
+std::mutex g_asked_lock;
+std::optional<gpu::GraphicsStyle> g_asked;
+std::chrono::steady_clock::time_point g_asked_at;
+gpu::GraphicsStyle Current() {
+    std::lock_guard lock(g_asked_lock);
+    if (g_asked && std::chrono::steady_clock::now() - g_asked_at > std::chrono::seconds(1)) g_asked.reset();
+    return g_asked ? *g_asked : gpu::StyleSnapshot();
+}
+void Request(const gpu::GraphicsStyle& st) {
+    gpu::RequestStyle(st);
+    std::lock_guard lock(g_asked_lock);
+    g_asked = st, g_asked_at = std::chrono::steady_clock::now();
+}
+
 void EnterGraphics(X86Context& ctx, uint32_t player) {
     const app::Settings& s = app::Get();
-    gpu::GraphicsStyle st = gpu::StyleSnapshot();
+    gpu::GraphicsStyle st = Current();
     g_entered_quality = uint32_t(gpu::MatchQuality(st, s.aniso, s.fxaa));
     nf::MenuChoice(ctx, player, kQuality,
                    {{"Low", 0}, {"Medium", 1}, {"High", 2}, {"Ultra", 3}, {"Custom", 4}}, g_entered_quality);
@@ -190,7 +209,7 @@ void EnterGraphics(X86Context& ctx, uint32_t player) {
 
 // the page's values into the settings and the style; the style's options pages are opened with it kept
 void KeepGraphics(X86Context& ctx, uint32_t player) {
-    gpu::GraphicsStyle st = gpu::StyleSnapshot();
+    gpu::GraphicsStyle st = Current();
     uint32_t quality = nf::MenuChoiceValue(ctx, player, kQuality);
     uint32_t aniso = uint32_t(ReadOption(ctx, player, kFilter, kFilters));
     uint32_t aa = nf::MenuChoiceValue(ctx, player, kAa);
@@ -234,7 +253,7 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
         if (renderer <= 2) s.renderer = renderer;
         app::Save();
     }
-    gpu::RequestStyle(st);
+    Request(st);
     LOGR("nightfire: Graphics kept: quality %s, style %s, filtering %u, AO %d, bloom %d, FXAA %d, sharpen %u, scale "
          "%u%%, renderer %u, packs %d",
          kQualityNames[st.quality], st.preset.empty() ? "edited" : st.preset.c_str(), aniso, st.quality_ao,
@@ -243,7 +262,7 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
 
 void RestoreDefaults(X86Context& ctx, uint32_t player) {
     gpu::GraphicsStyle st;
-    gpu::GraphicsStyle cur = gpu::StyleSnapshot();
+    gpu::GraphicsStyle cur = Current();
     st.texture_pack = true;
     st.dump_textures = cur.dump_textures;
     {
@@ -254,7 +273,7 @@ void RestoreDefaults(X86Context& ctx, uint32_t player) {
         app::Save();
         st.quality = gpu::MatchQuality(st, s.aniso, s.fxaa);
     }
-    gpu::RequestStyle(st);
+    Request(st);
     // the rows show it (the request is taken at the next frame: the page is filled from the values set here)
     LOGR("nightfire: Graphics restored to defaults");
     (void)ctx, (void)player;
@@ -262,7 +281,7 @@ void RestoreDefaults(X86Context& ctx, uint32_t player) {
 
 // the style pages
 void EnterStyle(X86Context& ctx, uint32_t player, uint32_t page) {
-    gpu::GraphicsStyle st = gpu::StyleSnapshot();
+    gpu::GraphicsStyle st = Current();
     if (page == kEnhPage) {
         ShowOptions(ctx, player, kExposure, kExposures, st.exposure);
         ShowOptions(ctx, player, kTonemap, kTonemaps, float(st.tonemap));
@@ -298,7 +317,7 @@ void EnterStyle(X86Context& ctx, uint32_t player, uint32_t page) {
 }
 
 void KeepStyle(X86Context& ctx, uint32_t player, uint32_t page) {
-    gpu::GraphicsStyle st = gpu::StyleSnapshot(), before = st;
+    gpu::GraphicsStyle st = Current(), before = st;
     if (page == kEnhPage) {
         st.mode = gpu::kStyleEnhanced;
         st.exposure = ReadOption(ctx, player, kExposure, kExposures);
@@ -336,7 +355,7 @@ void KeepStyle(X86Context& ctx, uint32_t player, uint32_t page) {
                 a.tex_filter == b.tex_filter && a.vertex_snap == b.vertex_snap && a.retro_tint == b.retro_tint &&
                 std::equal(std::begin(a.outline_color), std::end(a.outline_color), std::begin(b.outline_color));
     if (!same) st.preset.clear();
-    gpu::RequestStyle(st);
+    Request(st);
     LOGR("nightfire: %s options kept%s", page == kEnhPage ? "Enhanced" : page == kToonPage ? "Toon" : "Retro",
          same ? " (unchanged)" : "");
 }
@@ -362,6 +381,15 @@ void ShowStyleRows(X86Context& ctx, uint32_t player, uint32_t which) {
 }  // namespace
 
 namespace nf {
+
+bool MenuRowHidden(uint32_t page, uint32_t id) {
+    if (page != kStylePage) return false;
+    for (uint32_t set : {kEnhPage, kToonPage, kRetroPage})
+        if (set != g_style_rows)
+            for (const MenuRow& r : RowsOf(set))
+                if (r.id == id) return true;
+    return false;
+}
 
 std::vector<std::vector<uint8_t>> GraphicsPages(const std::vector<uint8_t>& av, uint32_t (*record_size)(uint32_t)) {
     std::vector<std::vector<uint8_t>> pages = {BuildPage(av, record_size, kGfxPage, "Graphics", kGfxRows, kFirstY, kStep),
@@ -395,7 +423,7 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
                 KeepGraphics(ctx, player);
                 uint32_t chosen = nf::MenuChoiceValue(ctx, player, kStyle);
                 const auto& presets = gpu::StylePresets();
-                int mode = chosen < presets.size() ? presets[chosen].values.mode : gpu::StyleSnapshot().mode;
+                int mode = chosen < presets.size() ? presets[chosen].values.mode : Current().mode;
                 if (!Vulkan() || mode == gpu::kStyleOriginal) {
                     MenuHelp(ctx, player, Vulkan() ? "Original is the console's picture: it has no options."
                                                    : "The styles are drawn by the Vulkan renderer.");
