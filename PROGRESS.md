@@ -31,6 +31,24 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-05 - LAN play: the host's AI bots, players taking their places
+- The host's bot setup (0x245280..0x2452EE as its options left it; Quick Game's 3) is kept when the lobby opens and
+  put back if it goes back to the options. The lobby and the match take the network's players first, then as many
+  of the host's bots as fit in the six bot slots: a player joining a full game takes a bot's place.
+- The bots run only on the host. It sends their places with its players' (by score slot), so on the clients they are
+  puppets; their rounds are replayed there, their hits on remote players sent like a player's, their deaths too.
+- Hits are now collected from a puppet's own hit list before its think (CollectHits: our rounds' records, damage
+  and zone already in them, sent and zeroed): a client's puppets never took 0x3D900 (a bot takes its hits through its
+  AI's messages, which a puppet's AI did not handle). A hit from the network on a host's bot goes through 0x3D900 with
+  the bot's real handle (0x2FAC0: object, actor, [object+0x20], actor+0xEC: the 8-byte pair crashed), then message
+  0x42 at no health (as 0x5DCE8 does). The game counts that death as the bot's own; the host gives the kill to the
+  last network hitter within 2 s.
+- Tested: Quick Game with one client: host "1 from the network, 3 AI bots", client 4 puppets; bots killed each
+  other and both players with the same killers on both copies; NF_LAN_TEST=huntbot (the client stands before a bot,
+  aimed) took a bot 74 -> 0 and the host logged "slot 7 died (killer slot 4)", the client "by slot 0" (itself).
+  With 4 made-up players and the client, the host kept 1 of its 3 bots (6 bot slots), the client saw 6.
+- Not done: joining a match already playing.
+
 ### 2026-11-04 - The game's own font enlarged from its own edges (no more blobs)
 - With rounded_font off, the font was the glyphs' mask (alpha >= 128) through Scale2x twice, a blur and a cut: small
   letters melted ("s" like "8", a bent "t"; the player: "the weird font"). Now src/common/fonts.cpp's Enlarge takes

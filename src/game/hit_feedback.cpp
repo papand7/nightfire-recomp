@@ -53,12 +53,7 @@ void ViewCentre(int i, float& x, float& y) {
 X86_EXTERN_FUNC(__imp__sub_0003D900);
 X86_FUNC(sub_0003D900) {
     uint32_t who = R32(ctx.esp + 4), hit = R32(ctx.esp + 8);
-    if (int lan = nf::LanDamage(who, hit)) {  // LAN play: a puppet's health is its own copy's
-        if (lan == 2) {
-            float x, y;
-            ViewCentre(0, x, y);
-            app::HitMarker(x, y, kernel::G<uint16_t>(hit + 0x46) == 5 ? 1 : 0);
-        }
+    if (nf::LanDamage(who, hit)) {  // LAN play: a puppet's health is its own copy's
         ctx.esp += 4;
         return;
     }
@@ -82,6 +77,15 @@ X86_FUNC(sub_0003D900) {
     }
     app::HitMarker(x, y, kind);
 }
+
+namespace nf {
+// LAN play: a hit of our player on another copy's player (src/game/lan_play.cpp), its mark as a hit here would show
+void LanHitMark(int player, bool head) {
+    float x, y;
+    ViewCentre(player, x, y);
+    app::HitMarker(x, y, head ? 1 : 0);
+}
+}  // namespace nf
 
 // NF_HIT_TEST=1: each player view's mark (hit, head, kill in turn) every second, from the HUD pass (0xDAC20), to
 // see and hear the feedback without a hit

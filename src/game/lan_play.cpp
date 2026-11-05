@@ -145,7 +145,7 @@ std::mutex g_lock;
 bool g_on = false, g_host = false;
 std::atomic<int> g_me{-1};                // this copy's peer id (the host 0), -1 not yet welcomed
 std::atomic<int64_t> g_offset{0};         // the host's clock minus ours
-std::vector<Body> g_local;                // this copy's players, from the game's thread
+std::vector<std::pair<uint8_t, Body>> g_local;  // this copy's players (0-3) and the host's bots (their slot)
 bool g_in_match = false;                  // g_local is theirs (else one player in the menus)
 std::map<uint16_t, Remote> g_remotes;     // (peer << 8 | local): other copies' players
 std::map<uint16_t, int> g_slot_of;        // a remote's bot slot in this match
@@ -158,6 +158,12 @@ uint8_t g_settings[kSettingsSize];
 bool g_have_settings = false;
 uint32_t g_starts = 0;                    // the host's count of matches started from the lobby
 std::atomic<bool> g_send_now{false};
+// the host's bot setup (0x245280..0x2452EE: its own bots, how many, six records), as its options left it; the lobby
+// and the match put the network's players first, then as many of these as there is room for (six bots in all)
+constexpr uint32_t kBotSetup = 0x245280, kBotSetupSize = 2 + 6 * 0x12;
+uint8_t g_bot_cfg[kBotSetupSize];
+bool g_bot_cfg_saved = false;
+bool g_launching = false;  // the host's A: the match loads (its bot setup is the match's, not restored)
 std::string g_server_name, g_map_name;    // the host's PC and the lobby's map (its answer to a search)
 uint16_t g_port = 0;
 std::atomic<bool> g_quit{false};
@@ -194,13 +200,36 @@ void SendRaw(const sockaddr_in& to, uint8_t type, const void* body, size_t size,
     sendto(g_sock, buf, int(sizeof h + size), 0, (const sockaddr*)&to, sizeof to);
 }
 
-// the host's lobby: its own players, then each client's
+// the host's AI bots (its bot setup, or the game's count without one), as many as fit after `others` players from
+// the network: their score slots follow those players'
+std::vector<Named> HostBots(size_t others) {
+    std::vector<Named> bots;
+    if (!g_bot_cfg_saved) return bots;
+    size_t want = g_bot_cfg[1], room = others < size_t(kMostBots) ? kMostBots - others : 0;
+    for (size_t i = 0; i < std::min(want, room); i++) {
+        const uint8_t* rec = g_bot_cfg + 2 + i * 0x12;
+        Named n{0, uint8_t(kFirstBot + others + i), rec[0x10], uint8_t(rec[0xF] == 1 ? 1 : 2), {}};
+        std::memcpy(n.name, rec, 14);
+        if (!n.name[0]) std::snprintf(n.name, sizeof n.name, "Bot %zu", i + 1);
+        bots.push_back(n);
+    }
+    return bots;
+}
+
+// the host's lobby: its own players, then each client's, then its AI bots in the room left
 std::vector<Named> LobbyList() {
     std::vector<Named> all;
     for (Named n : g_local_names) n.peer = 0, all.push_back(n);
+    size_t others = 0;
     for (auto& [peer, names] : g_infos)
         if (g_clients.count(peer))
-            for (Named n : names) n.peer = uint8_t(peer), all.push_back(n);
+            for (Named n : names) n.peer = uint8_t(peer), all.push_back(n), others++;
+    static const int fake_n = [] {
+        const char* e = std::getenv("NF_LAN_FAKE");
+        return e ? std::atoi(e) : 0;
+    }();
+    others += size_t(fake_n);
+    std::vector<Named> bots = HostBots(others);
     static const int fake = [] {  // NF_LAN_FAKE=N (diagnostic): N made-up players in the lobby, alternate teams
         const char* e = std::getenv("NF_LAN_FAKE");
         return e ? std::atoi(e) : 0;
@@ -210,6 +239,7 @@ std::vector<Named> LobbyList() {
         std::snprintf(n.name, sizeof n.name, "Test %d", i + 1);
         all.push_back(n);
     }
+    all.insert(all.end(), bots.begin(), bots.end());
     return all;
 }
 void SendLobby() {
@@ -357,8 +387,8 @@ void Loop() {
             std::vector<Entry> mine;
             for (size_t i = 0; i < g_local.size(); i++) {
                 Entry e{};
-                e.peer = uint8_t(std::max(0, g_me.load())), e.local = uint8_t(i), e.time = uint32_t(now + g_offset);
-                e.body = g_local[i], e.valid = g_in_match;
+                e.peer = uint8_t(std::max(0, g_me.load())), e.local = g_local[i].first, e.time = uint32_t(now + g_offset);
+                e.body = g_local[i].second, e.valid = g_in_match;
                 mine.push_back(e);
             }
             if (g_host) {
@@ -592,6 +622,13 @@ void TestFrame();  // below
 void Queue(Event e);
 bool g_replaying = false;  // a remote shot being fired from its puppet (0x211F0 lets it)
 void Inject(X86Context& ctx, uint32_t obj);
+void HitBot(X86Context& ctx, uint32_t obj);
+void CollectHits(uint32_t obj);
+struct NetHitter {
+    int slot = -1;
+    int64_t when = -100000;
+};
+NetHitter g_net_hitter[16];  // the host's bots: who from the network hit each last (0xA1FC0 credits no one for it)
 void ApplyEvents(X86Context& ctx);
 void WatchDeaths();
 // a puppet's posture: standing, walking, running, sprinting by its speed (m/s); ours asked, the AI's refused
@@ -727,18 +764,25 @@ void LanFrame(X86Context& ctx) {
     }
     if (!g_on) return;
     uint32_t humans = std::min<uint32_t>(R32(kHumans), 4);
-    std::vector<Body> local;
+    std::vector<std::pair<uint8_t, Body>> local;
     bool in_match = MatchOn();
-    for (uint32_t i = 0; in_match && i < humans; i++) {
-        uint32_t obj = SlotObject(int(i));
-        if (!obj) break;
+    auto body = [](uint32_t obj) {
         Body b;
         for (int k = 0; k < 3; k++) b.pos[k] = GetF(obj + kPos + k * 4);
         b.yaw = GetF(obj + kYaw);
-        local.push_back(b);
+        return b;
+    };
+    for (uint32_t i = 0; in_match && i < humans; i++) {
+        uint32_t obj = SlotObject(int(i));
+        if (!obj) break;
+        local.push_back({uint8_t(i), body(obj)});
     }
     in_match = !local.empty();
-    if (!in_match) local.resize(std::max<uint32_t>(humans, 1), Body{});
+    if (in_match && g_host)  // the host's AI bots: the clients' puppets
+        for (int sl = kFirstBot; sl < 10; sl++)
+            if (uint32_t obj = SlotObject(sl); obj && !LanPuppet(obj)) local.push_back({uint8_t(sl), body(obj)});
+    if (!in_match)
+        for (uint32_t i = 0; i < std::max<uint32_t>(humans, 1); i++) local.push_back({uint8_t(i), Body{}});
     std::vector<Named> names;
     for (uint32_t i = 0; i < 4; i++) {
         if (!kernel::G<uint8_t>(kJoined + i * kJoinSize)) continue;
@@ -789,10 +833,21 @@ X86_FUNC(sub_000A25F0) {  // a multiplayer match starts: the bots are the other 
             kernel::G<uint8_t>(rec + 0x10) = m.character;
             g_slot_of[uint16_t(m.peer << 8 | m.local)] = kFirstBot + n++;
         }
+        int puppets = n;
+        if (g_host)  // its AI bots after them, as many as fit
+            for (const Named& m : HostBots(size_t(n))) {
+                uint32_t rec = kBotRecords + uint32_t(n) * kBotRecordSize;
+                std::memset(&kernel::G<uint8_t>(rec), 0, kBotRecordSize);
+                std::memcpy(&kernel::G<char>(rec), m.name, 14);
+                kernel::G<uint8_t>(rec + 0xF) = BotTeam(m.team);
+                kernel::G<uint8_t>(rec + 0x10) = m.character;
+                n++;
+            }
+        g_launching = false, g_bot_cfg_saved = false;
         kernel::G<uint8_t>(kOwnBots) = 1;
         kernel::G<uint8_t>(kBotCount) = uint8_t(n);
         W32(kBots, uint32_t(n));
-        LOGR("nightfire: LAN match: %u players here, %d from the network (bots %d..)", R32(kHumans), n, kFirstBot);
+        LOGR("nightfire: LAN match: %u players here, %d from the network, %d AI bots", R32(kHumans), puppets, n - puppets);
     }
     __imp__sub_000A25F0(ctx, base);
     if (g_on) {  // the puppets go by their players' names
@@ -832,7 +887,7 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
             move_yaw = std::atan2(dx, dz);
         }
     }
-    if (key0 >= 0) Inject(ctx, obj);
+    if (key0 >= 0) CollectHits(obj);
     if (key0 >= 0 && R32(obj + 0xBC)) {  // its legs: the posture for its speed, played by the think's last step
         static uint32_t pair = mem::AllocHostContiguous(8, 16);
         W32(pair, obj), W32(pair + 4, R32(obj + 0xBC));
@@ -843,6 +898,7 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
         ctx.eax = eax;
     }
     __imp__sub_00031530(ctx, base);
+    if (slot >= kFirstBot && key0 < 0) HitBot(ctx, obj);  // the host's own bot hit from the network: its next think
     if (slot < kFirstBot) return;
     // a puppet: the AI's own frame ran (it spawns the body and animates it; 0x37C10 gives it no target), then moved
     std::lock_guard<std::mutex> lock(g_lock);
@@ -903,7 +959,8 @@ X86_FUNC(sub_000211F0) {
     uint32_t snd = R32(ctx.esp + 0x1C) & 0xFFFF;
     int slot = g_on && !g_replaying ? SlotOf(shooter) : -1;
     __imp__sub_000211F0(ctx, base);
-    if (slot < 0 || slot >= kFirstBot || !origin || !dir || entry < 0x18CFA0) return;
+    if (slot < 0 || !origin || !dir || entry < 0x18CFA0) return;
+    if (slot >= kFirstBot && (!g_host || nf::LanPuppet(shooter))) return;  // the host's bots' rounds go out too
     Event e{};
     e.kind = kShotEvent, e.killer_peer = uint8_t(std::max(0, g_me.load())), e.killer_local = uint8_t(slot);
     e.victim_peer = e.victim_local = 0xFF;
@@ -952,7 +1009,9 @@ struct Listed {
     int list;
 };
 std::vector<Named> LobbyBots(std::vector<Listed>& listed) {
-    std::vector<Named> rs = Remotes(), bots;
+    std::vector<Named> rs, bots;
+    for (const Named& m : g_lobby)  // everyone but this copy's players: the network's, and the host's bots
+        if (m.peer != g_me.load() || m.local >= kFirstBot) rs.push_back(m);
     if (rs.size() > size_t(kMostBots)) rs.resize(kMostBots);
     listed.clear();
     bool teams = R32(0x26003C) & kTeams;
@@ -961,6 +1020,10 @@ std::vector<Named> LobbyBots(std::vector<Listed>& listed) {
         if (kernel::G<uint8_t>(kJoined + i * kJoinSize))
             used[teams && R32(kJoined + i * kJoinSize + kJoinTeam) != 1 ? 1 : 0]++;
     for (const Named& m : rs) {
+        if (m.local >= kFirstBot) {  // an AI bot: the bot list
+            bots.push_back(m);
+            continue;
+        }
         int list = teams ? (m.team == 1 ? 0 : 1) : (used[0] < kListRows ? 0 : 1);
         if (used[list] < kListRows) used[list]++, listed.push_back({m, ShownName(m, Place(m)), list});
         else bots.push_back(m);
@@ -988,8 +1051,24 @@ std::string Shown() {
 X86_EXTERN_FUNC(__imp__sub_000891E0);
 X86_FUNC(sub_000891E0) {  // the summary page's messages (player, ?, ?, message, ...)
     uint32_t player = R32(ctx.esp + 4), msg = R32(ctx.esp + 0x10);
-    if (g_on && msg == 0x4C) g_page = Page::kLobby;
-    if (g_on && msg == 0x4D && g_page == Page::kLobby) g_page = Page::kOther;
+    if (g_on && msg == 0x4C) {
+        g_page = Page::kLobby;
+        std::lock_guard<std::mutex> lock(g_lock);
+        if (g_host && !g_bot_cfg_saved) {  // the host's bots as its options left them (the lobby writes its own)
+            std::memcpy(g_bot_cfg, kernel::HostPtr(kBotSetup), kBotSetupSize);
+            if (!g_bot_cfg[0]) g_bot_cfg[1] = uint8_t(std::min<uint32_t>(R32(kBotTotal), kMostBots));
+            g_bot_cfg_saved = true, g_send_now = true;
+            LOGR("nightfire: LAN lobby: the host's options have %u AI bots", g_bot_cfg[1]);
+        }
+    }
+    if (g_on && msg == 0x4D && g_page == Page::kLobby) {
+        g_page = Page::kOther;
+        std::lock_guard<std::mutex> lock(g_lock);
+        if (g_host && g_bot_cfg_saved && !g_launching) {  // back to the options: theirs again
+            std::memcpy(kernel::HostPtr(kBotSetup), g_bot_cfg, kBotSetupSize);
+            g_bot_cfg_saved = false;
+        }
+    }
     if (!g_on || g_page != Page::kLobby) return __imp__sub_000891E0(ctx, base);
     auto fill = [&] {
         std::vector<Named> bots;
@@ -1074,7 +1153,7 @@ X86_FUNC(sub_000891E0) {  // the summary page's messages (player, ?, ?, message,
             g_starts++;
             g_seen_starts = g_starts;
         }
-        g_send_now = true;
+        g_send_now = true, g_launching = true;
         LOGR("nightfire: LAN lobby: the host starts the match (map %08X)", R32(0x260040));
     }
     __imp__sub_000891E0(ctx, base);
@@ -1161,7 +1240,7 @@ uint32_t WeaponEntry(uint32_t obj) {
 
 // the object of a player (peer, local) in this copy's match: ours, or its puppet
 uint32_t ObjectOf(uint8_t peer, uint8_t local) {
-    if (peer == g_me.load()) return local < 4 ? SlotObject(local) : 0;
+    if (peer == g_me.load()) return local < 10 ? SlotObject(local) : 0;
     auto it = g_slot_of.find(uint16_t(peer << 8 | local));
     return it == g_slot_of.end() ? 0 : SlotObject(it->second);
 }
@@ -1169,7 +1248,10 @@ uint32_t ObjectOf(uint8_t peer, uint8_t local) {
 bool WhoIs(int slot, uint8_t& peer, uint8_t& local) {
     if (slot >= 0 && slot < kFirstBot) return peer = uint8_t(std::max(0, g_me.load())), local = uint8_t(slot), true;
     int key = PuppetKey(slot);
-    if (key < 0) return false;
+    if (key < 0) {  // the host's own AI bot: by its slot
+        if (!g_host || slot < kFirstBot || slot >= 10 || !SlotObject(slot)) return false;
+        return peer = 0, local = uint8_t(slot), true;
+    }
     peer = uint8_t(key >> 8), local = uint8_t(key & 0xFF);
     return true;
 }
@@ -1197,7 +1279,7 @@ void ApplyEvents(X86Context& ctx) {
             std::memcpy(&time, e.node + 4, 4);  // the record's +0xC
             Pending p{src, time, {}};
             std::memcpy(p.node, e.node, 0x40);
-            g_pending[victim].push_back(p);
+            g_pending[victim].push_back(p);  // a player: after its collisions (0xAB450); a bot: before its think
             static int said = 0;
             float dmg;
             std::memcpy(&dmg, e.node, 4);
@@ -1253,21 +1335,97 @@ void Inject(X86Context& ctx, uint32_t obj) {
     g_pending.erase(it);
 }
 
+// a hit from the network on the host's AI bot, after its think: in its hit list (a death's credit reads the sources
+// there) and through the bots' damage as their hit handler does (0x5DCE8): 0x3D900 with the bot's handle (0x2FAC0:
+// object, actor, [object+0x20], actor+0xEC), then at no health the message 0x42 (0x4E320: handle +0xC, 0x42, 0)
+void HitBot(X86Context& ctx, uint32_t obj) {
+    auto it = g_pending.find(obj);
+    if (it == g_pending.end()) return;
+    static uint32_t h = mem::AllocHostContiguous(16, 16);
+    uint32_t eax = ctx.eax;
+    if (kernel::CallGuest(ctx, 0x2FAC0, {obj, h}) & 0xFF)
+        for (const Pending& p : it->second) {
+            uint32_t node = kernel::CallGuest(ctx, kAddHit, {obj + kHitList, p.time, 0, p.source});
+            if (!node) continue;
+            std::memcpy(kernel::HostPtr(node + 8), p.node, 0x40);
+            uint32_t actor = R32(h + 4);
+            float before = GetF(actor + 0x90);
+            kernel::CallGuest(ctx, 0x3D900, {h, node, 0x3F800000});
+            float after = GetF(actor + 0x90);
+            if (before > 0 && after <= 0) kernel::CallGuest(ctx, 0x4E320, {R32(h + 0xC), 0x42, 0});
+            uint32_t sd = R32(p.source + 0xBC);  // its shooter (a puppet here): the kill's if the bot dies of it
+            g_net_hitter[SlotOf(obj) & 15] = {SlotOf(sd ? R32(sd + 0x24) : 0), Now()};
+            static int said = 0;
+            if (said++ < 5) LOGR("nightfire: LAN: bot slot %d hit from the network: health %.1f -> %.1f", SlotOf(obj), before, after);
+        }
+    ctx.eax = eax;
+    g_pending.erase(it);
+}
+
+// our rounds in a puppet's hit list (before its think; a bot's list is handled by its AI's messages, which a puppet's
+// AI did not always take): each to the victim's copy, its damage zeroed here; our player's shot shows its hit mark
+void CollectHits(uint32_t obj) {
+    int vslot = SlotOf(obj);
+    uint8_t vpeer, vlocal;
+    {
+        std::lock_guard<std::mutex> lock(g_lock);
+        if (!WhoIs(vslot, vpeer, vlocal)) return;
+    }
+    for (uint32_t n = R32(obj + kHitList), guard = 0; n && guard < 64; n = R32(n + 4), guard++) {
+        uint32_t src = R32(n + 0x4C);
+        if (!src || kernel::G<uint8_t>(src + 0xDB) != kProjClass || R32(src + 0xBC) == src + 0x100) continue;
+        if (!(GetF(n + 8) > 0)) continue;  // sent already, or harmless
+        uint32_t pdata = R32(src + 0xBC), shooter = pdata ? R32(pdata + 0x24) : 0;
+        int sslot = SlotOf(shooter);
+        uint8_t kpeer, klocal;
+        bool ours = sslot >= 0 && !nf::LanPuppet(shooter);  // (it locks)
+        if (ours) {
+            std::lock_guard<std::mutex> lock(g_lock);
+            ours = WhoIs(sslot, kpeer, klocal);
+        }
+        if (ours) {
+            Event e{};
+            e.kind = kHitEvent, e.victim_peer = vpeer, e.victim_local = vlocal;
+            e.killer_peer = kpeer, e.killer_local = klocal;
+            uint32_t entry = pdata ? R32(pdata + 0x38) : 0;
+            e.weapon = uint16_t(entry >= 0x18CFA0 ? (entry - 0x18CFA0) / 0x10C : 0);
+            std::memcpy(e.node, kernel::HostPtr(n + 8), 0x40);
+            Queue(e);
+            if (sslot < kFirstBot) nf::LanHitMark(sslot, kernel::G<uint16_t>(n + 0x46) == 5);
+            static int said = 0;
+            if (said++ < 5) LOGR("nightfire: LAN: our slot %d hit %u:%u: sent to its copy", sslot, vpeer, vlocal);
+        }
+        SetF(n + 8, 0);
+    }
+}
+
 // our players' deaths (the score slot's deaths went up): to every copy
 void WatchDeaths() {
-    static uint32_t deaths[4] = {};
+    static uint32_t deaths[10] = {};
     static bool was_on = false;
     bool on = MatchOn();
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 10; i++) {
         uint32_t d = R32(kScores + uint32_t(i) * kSlotSize + kDeaths);
-        if (on && was_on && SlotObject(i) && d > deaths[i] && i < int(R32(kHumans))) {
+        bool ours = i < kFirstBot ? i < int(R32(kHumans)) : g_host && SlotObject(i) && !nf::LanPuppet(SlotObject(i));
+        if (on && was_on && SlotObject(i) && d > deaths[i] && ours) {
             Event e{};
             e.kind = kDeathEvent, e.victim_peer = uint8_t(std::max(0, g_me.load())), e.victim_local = uint8_t(i);
             e.killer_peer = e.killer_local = 0xFF;
             int by = kernel::G<int16_t>(kScores + uint32_t(i) * kSlotSize + kKiller);
+            NetHitter& nh = g_net_hitter[i];
+            if (i >= kFirstBot && (by < 0 || by == i) && nh.slot >= 0 && Now() - nh.when < 2000) {
+                // a host's bot killed by a hit from the network, counted as its own death: the kill is the hitter's
+                uint32_t v = kScores + uint32_t(i) * kSlotSize, k = kScores + uint32_t(nh.slot) * kSlotSize;
+                bool points = R32(0x260028) == 0;
+                W32(v + 0x04, R32(v + 0x04) + 1);
+                if (points) SetF(v + 0x18, GetF(v + 0x18) + 1), SetF(k + 0x18, GetF(k + 0x18) + 1);
+                W32(k + 0x04, R32(k + 0x04) + 1), W32(k + 0x10, R32(k + 0x10) + 1);
+                kernel::G<int16_t>(v + kKiller) = int16_t(nh.slot);
+                by = nh.slot, nh.slot = -1;
+            }
             if (by >= 0 && by != i) WhoIs(by, e.killer_peer, e.killer_local);
             Queue(e);
-            LOGR("nightfire: LAN: player %d died (killer slot %d), told the others", i + 1, by);
+            LOGR("nightfire: LAN: slot %d died (killer slot %d), told the others", i, by);
         }
         deaths[i] = d;
     }
@@ -1287,25 +1445,29 @@ int LanDamage(uint32_t pair, uint32_t hit) {
     uint32_t victim = R32(pair);
     int vslot = SlotOf(victim);
     if (vslot < kFirstBot) return 0;
-    uint8_t vpeer, vlocal;
-    {
-        std::lock_guard<std::mutex> lock(g_lock);
-        if (!WhoIs(vslot, vpeer, vlocal)) return 0;  // a real bot
-    }
     uint32_t proj = R32(hit + 0x4C);
+    if (proj && R32(proj + 0xBC) == proj + 0x100) return 0;  // a stand-in's record: a hit from the network, applied
     uint32_t pdata = proj ? R32(proj + 0xBC) : 0, shooter = pdata ? R32(pdata + 0x24) : 0;
     int sslot = SlotOf(shooter);
-    if (sslot < 0 || sslot >= kFirstBot) return 1;
+    bool shooter_puppet = shooter && nf::LanPuppet(shooter);
+    if (!nf::LanPuppet(victim)) return shooter_puppet ? 1 : 0;  // the host's own bot: the game's, but replayed rounds
+    return 1;  // a puppet takes nothing here (our rounds' records were sent before its think: CollectHits)
+    (void)sslot;
+    uint8_t vpeer, vlocal, kpeer, klocal;
+    {
+        std::lock_guard<std::mutex> lock(g_lock);
+        if (!WhoIs(vslot, vpeer, vlocal) || !WhoIs(sslot, kpeer, klocal)) return 1;
+    }
     Event e{};
     e.kind = kHitEvent, e.victim_peer = vpeer, e.victim_local = vlocal;
-    e.killer_peer = uint8_t(std::max(0, g_me.load())), e.killer_local = uint8_t(sslot);
+    e.killer_peer = kpeer, e.killer_local = klocal;
     uint32_t entry = pdata ? R32(pdata + 0x38) : 0;
     e.weapon = uint16_t(entry >= 0x18CFA0 ? (entry - 0x18CFA0) / 0x10C : 0);
     std::memcpy(e.node, kernel::HostPtr(hit + 8), 0x40);
     Queue(e);
     static int said = 0;
-    if (said++ < 5) LOGR("nightfire: LAN: our player %d hit %u:%u's player: sent to its copy", sslot + 1, vpeer, vlocal);
-    return 2;
+    if (said++ < 5) LOGR("nightfire: LAN: our slot %d hit %u:%u: sent to its copy", sslot, vpeer, vlocal);
+    return sslot < kFirstBot ? 2 : 1;  // our player's hit: its mark
 }
 }  // namespace nf
 
@@ -1320,7 +1482,7 @@ X86_FUNC(sub_000341C0) {  // a bot's posture request
     __imp__sub_000341C0(ctx, base);
 }
 
-// NF_LAN_TEST (diagnostics): "aim" turns player 1 to the nearest puppet each frame; "meet" stands player 1 5 m in
+// NF_LAN_TEST (diagnostics): "aim" turns player 1 to the nearest puppet each frame ("aimbot": of the host's bots); "meet" stands player 1 5 m in
 // front of the first puppet, facing it, once a second
 namespace {
 void TestFrame() {
@@ -1336,11 +1498,22 @@ void TestFrame() {
     for (int s = kFirstBot; s < 10; s++) {
         uint32_t o = SlotObject(s);
         if (!o || !nf::LanPuppet(o)) continue;
+        if ((test == "aimbot" || test == "huntbot") && (PuppetKey(s) & 0xFF) < kFirstBot) continue;  // the host's AI bots only
         float dx = GetF(o + kPos) - GetF(me + kPos), dz = GetF(o + kPos + 8) - GetF(me + kPos + 8);
         if (dx * dx + dz * dz < bd) bd = dx * dx + dz * dz, best = o;
     }
     if (!best) return;
-    if (test == "aim") {
+    if (test == "huntbot") {  // before it, 5 m away, once a second; then aimed as "aim"
+        static int64_t last = 0;
+        if (Now() - last > 1000) {
+            last = Now();
+            float yaw = GetF(best + kYaw);
+            SetF(me + kPos, GetF(best + kPos) + std::sin(yaw) * 5);
+            SetF(me + kPos + 4, GetF(best + kPos + 4));
+            SetF(me + kPos + 8, GetF(best + kPos + 8) + std::cos(yaw) * 5);
+        }
+    }
+    if (test == "aim" || test == "aimbot" || test == "huntbot") {
         float dx = GetF(best + kPos) - GetF(me + kPos), dz = GetF(best + kPos + 8) - GetF(me + kPos + 8);
         float dy = GetF(best + kPos + 4) - GetF(me + kPos + 4);  // feet to feet: the chest from the eye is about as low
         SetF(me + kYaw, std::atan2(dx, dz));
