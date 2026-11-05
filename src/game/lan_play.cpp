@@ -14,6 +14,16 @@
 // +0x28, +0x2C, metres, +0x28 up) and heading (+0x40, radians) are set from the network. In a LAN match the bots are
 // the other copies' players (as many as were connected when it started, at most 6).
 //
+// Joining a match already running: the host keeps the match's roster (the lobby's list at its start, everyone in
+// score slot order) and sends it while the match runs. A player who joins then takes the place of one of the host's
+// AI bots: the host makes that bot slot its puppet, the other copies move their puppet of that bot to the new player
+// (its name in the score table), and the new copy, waiting in the lobby, starts the same match with the roster's
+// players as its bots and its own player as the bot's character and team. With no AI bot left the new player waits
+// in the lobby for the next match. The match's clock (0x262928 seconds played, 0x26292C the limit) goes with the
+// roster: every client keeps the host's. Its scores and the bot's character are not carried over. The
+// bot slots no one has (up to six bots, seven players) are made open places: bots named "Open" on every copy, kept
+// out of sight above the map (puppets with no player), that a joining player takes before an AI bot's.
+//
 // NF_LAN=host hosts (UDP port 27787, NF_LAN_PORT another); NF_LAN=<address> joins that host. NF_LAN_TRACE=1 logs
 // player 1's and the puppets' places every 5 s.
 #include <algorithm>
@@ -56,6 +66,7 @@ constexpr uint32_t kHumans = 0x260044, kBots = 0x260048;
 constexpr uint32_t kScores = 0x262738, kSlotSize = 0x30, kSlotObject = 0x1C;
 constexpr uint32_t kPos = 0x24, kYaw = 0x40;
 constexpr int kFirstBot = 4, kMostBots = 6;
+constexpr uint8_t kOpen = 0xFE;  // a roster entry's peer: an open place (a hidden bot slot kept for a player joining)
 // the MP block's player slots (names, C strings), the join page's records (+0 joined, +4 team, +8 character), the
 // bot setup (0x245280 its own bots, 0x245281 how many, records of 0x12: +0 name, +0xF team, +0x10 character)
 constexpr uint32_t kSlots = 0x25FE38, kJoined = 0x245240, kJoinSize = 0x10, kJoinTeam = 4, kJoinCharacter = 8;
@@ -81,7 +92,7 @@ int SlotOf(uint32_t obj) {
 // ---- the network --------------------------------------------------------------------------------------------------
 
 constexpr uint32_t kMagic = 0x314C464E;  // "NFL1"
-enum : uint8_t { kHello = 1, kWelcome, kState, kSnap, kPing, kPong, kInfo, kLobby, kQuery, kServer, kEvent };
+enum : uint8_t { kHello = 1, kWelcome, kState, kSnap, kPing, kPong, kInfo, kLobby, kQuery, kServer, kEvent, kRoster };
 constexpr uint16_t kPort = 27787;
 constexpr int kRate = 30;                // states and snapshots a second
 constexpr int64_t kDelay = 100;          // ms in the past remote players are drawn
@@ -171,6 +182,17 @@ std::thread g_thread;
 std::deque<Event> g_events_in, g_events_out;  // to apply on the game's thread; to send
 std::map<uint32_t, bool> g_events_seen;       // origin << 24 | id
 uint32_t g_event_id = 0;
+// joining a running match: the host's roster (its lobby at the match's start; a late player in an AI bot's place)
+std::vector<Named> g_roster;           // the host's, and as a client last heard it
+uint32_t g_roster_id = 0;              // the match it is for (the host's start count)
+int64_t g_roster_heard = -100000;      // a client's: when it last came
+std::vector<Named> g_roster_applied;   // this copy's view of the match's players (their puppets' slots follow it)
+bool g_roster_pending = false;         // the host's: a match was started, its roster made once it is played
+bool g_was_in_match = false;
+bool g_late_start = false;             // a client starting a running match: its bots from the roster
+uint32_t g_joined_id = ~0u;            // a client's: the match it last started (not joined again)
+constexpr uint32_t kPlayed = 0x262928, kLimit = 0x26292C;  // the match's clock: seconds played, the limit (0x9CD09)
+float g_clock[2] = {};                 // the host's played and limit (sent with the roster)
 
 #ifdef _WIN32
 SOCKET g_sock = INVALID_SOCKET;
@@ -240,6 +262,13 @@ std::vector<Named> LobbyList() {
         all.push_back(n);
     }
     all.insert(all.end(), bots.begin(), bots.end());
+    // the open places: bot slots no one has (each copy has at most six bots: seven players with one each)
+    int used = int(others + bots.size()), here = int(g_local_names.size());
+    int open = std::max(0, std::min(kMostBots - used, kMostBots + 1 - here - used));
+    for (int i = 0; i < open; i++) {
+        Named n{kOpen, uint8_t(kFirstBot + used + i), 0, uint8_t(i % 2 ? 2 : 1), "Open"};
+        all.push_back(n);
+    }
     return all;
 }
 void SendLobby() {
@@ -297,6 +326,17 @@ void Receive() {
             if (g_events_seen.size() > 4096) g_events_seen.erase(g_events_seen.begin());
             if (g_host) g_events_out.push_back(e);  // to the other clients too
             g_events_in.push_back(e);
+            continue;
+        }
+        if (h.type == kRoster) {
+            if (g_host || n < int(sizeof h + 12 + h.count * sizeof(Named))) continue;
+            std::lock_guard<std::mutex> lock(g_lock);
+            std::memcpy(&g_roster_id, buf + sizeof h, 4);
+            std::memcpy(g_clock, buf + sizeof h + 4, 8);
+            g_roster.assign(h.count, Named{});
+            std::memcpy(g_roster.data(), buf + sizeof h + 12, h.count * sizeof(Named));
+            for (Named& m : g_roster) m.name[15] = 0;
+            g_roster_heard = Now();
             continue;
         }
         if (h.type == kInfo || h.type == kLobby) {
@@ -402,7 +442,17 @@ void Loop() {
                         ++it;
                     }
                 }
-                if (now - last_lobby > 500 || g_send_now.exchange(false)) last_lobby = now, SendLobby();
+                if (now - last_lobby > 500 || g_send_now.exchange(false)) {
+                    last_lobby = now, SendLobby();
+                    if (!g_roster.empty()) {  // the match running: its players, for those joining it
+                        std::vector<uint8_t> body(12);
+                        std::memcpy(body.data(), &g_roster_id, 4);
+                        std::memcpy(body.data() + 4, g_clock, 8);
+                        size_t k = std::min<size_t>(g_roster.size(), 40);
+                        body.insert(body.end(), (const uint8_t*)g_roster.data(), (const uint8_t*)(g_roster.data() + k));
+                        for (auto& [id, c] : g_clients) SendRaw(c.addr, kRoster, body.data(), body.size(), uint8_t(k));
+                    }
+                }
                 for (const Event& e : g_events_out)
                     for (auto& [id, c] : g_clients)
                         if (id != e.origin)
@@ -446,6 +496,8 @@ bool Begin(bool host, uint32_t ip, uint16_t port) {
         std::lock_guard<std::mutex> lock(g_lock);
         g_remotes.clear(), g_latest.clear(), g_infos.clear(), g_lobby.clear(), g_clients.clear(), g_slot_of.clear();
         g_have_settings = false, g_starts = 0, g_heard_host = Now();
+        g_roster.clear(), g_roster_applied.clear(), g_roster_pending = false, g_was_in_match = false;
+        g_roster_heard = -100000, g_late_start = false, g_joined_id = ~0u;
         g_events_in.clear(), g_events_out.clear(), g_events_seen.clear();
         char name[64] = {};
         DWORD n = sizeof name;
@@ -700,6 +752,88 @@ int PuppetKey(int slot) {  // the remote driving bot slot, else -1
         if (s == slot) return k;
     return -1;
 }
+
+std::vector<Named> RosterOthers() {  // the running match's players but this copy's, in its order
+    std::vector<Named> out;
+    for (const Named& m : g_roster)
+        if (m.peer != g_me.load()) out.push_back(m);
+    return out;
+}
+
+void SlotName(int slot, const Named& m) {  // a score slot's name (its puppet's player)
+    char* name = &kernel::G<char>(kSlots + uint32_t(slot) * kSlotSize);
+    std::memset(name, 0, 16);
+    std::memcpy(name, m.name, strnlen(m.name, 15));
+}
+
+// each frame (g_lock held): in a match, the host gives a player who joined it an AI bot's place and the clients move
+// their puppet of that bot to the new player
+void RosterFrame(bool in_match) {
+    if (g_host && !in_match && g_was_in_match) g_roster.clear();  // the match over
+    g_was_in_match = in_match;
+    if (!in_match) return;
+    auto key = [](const Named& m) { return uint16_t(m.peer << 8 | m.local); };
+    if (g_host) {
+        if (g_roster.empty()) return;
+        g_clock[0] = GetF(kPlayed), g_clock[1] = GetF(kLimit);
+        for (auto& [peer, names] : g_infos) {
+            if (!g_clients.count(peer)) continue;
+            for (const Named& n : names) {
+                Named r = n;
+                r.peer = uint8_t(peer);
+                uint16_t k = key(r);
+                if (std::any_of(g_roster.begin(), g_roster.end(), [&](const Named& m) { return key(m) == k; })) continue;
+                int j = -1;
+                for (int pass = 0; pass < 2 && j < 0; pass++)  // an open place, else an AI bot's
+                    for (size_t i = 0; i < g_roster.size() && j < 0; i++)
+                        if (g_roster[i].peer == (pass ? 0 : kOpen) && g_roster[i].local >= kFirstBot &&
+                            g_roster[i].local < 10 && SlotObject(g_roster[i].local))
+                            j = int(i);
+                static std::map<uint16_t, bool> said_full;
+                if (j < 0) {
+                    if (!said_full[k])
+                        said_full[k] = true,
+                        LOGR("nightfire: LAN: client %d's player %d waits for the next match (no AI bot to replace)",
+                             peer, n.local + 1);
+                    continue;
+                }
+                int slot = g_roster[j].local;
+                bool was_open = g_roster[j].peer == kOpen;
+                g_slot_of.erase(key(g_roster[j]));  // an open place's
+                r.character = g_roster[j].character, r.team = g_roster[j].team;
+                g_roster[j] = r;
+                g_slot_of[k] = slot;
+                g_remotes[k].samples.clear();
+                SlotName(slot, r);
+                g_send_now = true;
+                LOGR("nightfire: LAN: client %d's player %d joins the match running, in slot %d (%s)", peer,
+                     n.local + 1, slot, was_open ? "an open place" : "an AI bot's");
+            }
+        }
+        return;
+    }
+    if (Now() - g_roster_heard > 1500 || g_roster_id != g_joined_id) return;
+    // the host's clock (as it was when the roster came), when this copy's is a second or more off it
+    float played = g_clock[0] + float(Now() - g_roster_heard) / 1000.0f;
+    if (std::fabs(GetF(kPlayed) - played) > 1.0f || GetF(kLimit) != g_clock[1]) {
+        static bool said = false;
+        if (!said) said = true, LOGR("nightfire: LAN: the match's clock set to the host's (%.0f of %.0f s)", played, g_clock[1]);
+        SetF(kPlayed, played), SetF(kLimit, g_clock[1]);
+    }
+    if (g_roster.size() != g_roster_applied.size()) return;
+    for (size_t i = 0; i < g_roster.size(); i++) {
+        uint16_t was = key(g_roster_applied[i]), now = key(g_roster[i]);
+        if (was == now || g_roster[i].peer == g_me.load() || g_slot_of.count(now)) continue;
+        auto it = g_slot_of.find(was);
+        if (it == g_slot_of.end()) continue;
+        int slot = it->second;
+        g_slot_of.erase(it);
+        g_slot_of[now] = slot;
+        SlotName(slot, g_roster[i]);
+        LOGR("nightfire: LAN: client %d's player %d joined the match, in slot %d", now >> 8, (now & 0xFF) + 1, slot);
+    }
+    g_roster_applied = g_roster;
+}
 }  // namespace
 
 namespace {
@@ -810,6 +944,7 @@ void LanFrame(X86Context& ctx) {
         names.push_back(n);
     }
     std::lock_guard<std::mutex> lock(g_lock);
+    RosterFrame(in_match);
     g_local = local;
     g_in_match = in_match;
     if (names.size() != g_local_names.size()) g_send_now = true;
@@ -825,10 +960,12 @@ X86_FUNC(sub_000A25F0) {  // a multiplayer match starts: the bots are the other 
         std::lock_guard<std::mutex> lock(g_lock);
         g_slot_of.clear();
         int n = 0;
-        for (const Named& m : Remotes()) {
+        std::vector<Named> others = g_late_start ? RosterOthers() : Remotes();
+        for (const Named& m : others) {
             if (n >= kMostBots) break;
+            if (g_host && m.peer == kOpen) continue;  // the host's open places: after its AI bots
             uint32_t rec = kBotRecords + uint32_t(n) * kBotRecordSize;  // its look and team in the match (0xA27D1)
-            std::string shown = ShownName(m, Place(m));
+            std::string shown = g_late_start ? std::string(m.name, strnlen(m.name, 15)) : ShownName(m, Place(m));
             std::memset(&kernel::G<uint8_t>(rec), 0, 0xF);
             std::memcpy(&kernel::G<char>(rec), shown.data(), std::min<size_t>(shown.size(), 14));
             kernel::G<uint8_t>(rec + 0xF) = BotTeam(m.team);
@@ -845,7 +982,18 @@ X86_FUNC(sub_000A25F0) {  // a multiplayer match starts: the bots are the other 
                 kernel::G<uint8_t>(rec + 0x10) = m.character;
                 n++;
             }
+        if (g_host)  // the open places, in their slots
+            for (const Named& m : g_lobby) {
+                if (m.peer != kOpen || n >= kMostBots) continue;
+                uint32_t rec = kBotRecords + uint32_t(n) * kBotRecordSize;
+                std::memset(&kernel::G<uint8_t>(rec), 0, kBotRecordSize);
+                std::memcpy(&kernel::G<char>(rec), m.name, 14);
+                kernel::G<uint8_t>(rec + 0xF) = BotTeam(m.team);
+                g_slot_of[uint16_t(m.peer << 8 | m.local)] = kFirstBot + n++;
+            }
         g_launching = false, g_bot_cfg_saved = false;
+        if (g_host) g_roster = g_lobby, g_roster_id = g_starts;  // the match's players, for those joining it later
+        else g_roster_applied = g_late_start ? g_roster : g_lobby, g_joined_id = g_late_start ? g_roster_id : g_starts;
         kernel::G<uint8_t>(kOwnBots) = 1;
         kernel::G<uint8_t>(kBotCount) = uint8_t(n);
         W32(kBots, uint32_t(n));
@@ -854,14 +1002,15 @@ X86_FUNC(sub_000A25F0) {  // a multiplayer match starts: the bots are the other 
     __imp__sub_000A25F0(ctx, base);
     if (g_on) {  // the puppets go by their players' names
         std::lock_guard<std::mutex> lock(g_lock);
-        for (const Named& m : Remotes()) {
+        for (const Named& m : g_late_start ? RosterOthers() : Remotes()) {
             auto it = g_slot_of.find(uint16_t(m.peer << 8 | m.local));
             if (it == g_slot_of.end()) continue;
             char* name = &kernel::G<char>(kSlots + uint32_t(it->second) * kSlotSize);
-            std::string shown = ShownName(m, Place(m));
+            std::string shown = g_late_start ? std::string(m.name, strnlen(m.name, 15)) : ShownName(m, Place(m));
             std::memset(name, 0, 16);
             std::memcpy(name, shown.data(), std::min<size_t>(shown.size(), 15));
         }
+        g_late_start = false;
     }
 }
 
@@ -907,6 +1056,10 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
     int key = PuppetKey(slot);
     if (key < 0) return;
     Body b;
+    if ((key >> 8) == kOpen) {  // an open place: kept out of sight, high above the map's middle
+        SetF(obj + kPos, 0), SetF(obj + kPos + 4, 400.0f), SetF(obj + kPos + 8, 0);
+        return;
+    }
     if (!Interpolate(g_remotes[uint16_t(key)].samples, Now() + g_offset - kDelay, b)) return;
     for (int k = 0; k < 3; k++) SetF(obj + kPos + k * 4, b.pos[k]);
     SetF(obj + kYaw, speed >= 0.4f ? move_yaw : b.yaw);  // running the way it goes (bots only run forward)
@@ -1013,7 +1166,7 @@ struct Listed {
 std::vector<Named> LobbyBots(std::vector<Listed>& listed) {
     std::vector<Named> rs, bots;
     for (const Named& m : g_lobby)  // everyone but this copy's players: the network's, and the host's bots
-        if (m.peer != g_me.load() || m.local >= kFirstBot) rs.push_back(m);
+        if ((m.peer != g_me.load() || m.local >= kFirstBot) && m.peer != kOpen) rs.push_back(m);
     if (rs.size() > size_t(kMostBots)) rs.resize(kMostBots);
     listed.clear();
     bool teams = R32(0x26003C) & kTeams;
@@ -1125,6 +1278,17 @@ X86_FUNC(sub_000891E0) {  // the summary page's messages (player, ?, ?, message,
         start = !g_host && g_starts != g_seen_starts;
         refill = Shown() != g_shown;
         if (start) g_seen_starts = g_starts;
+        // a match running that has a place for this copy's players: started here too, they as the bots they replace
+        if (!start && !g_host && Now() - g_roster_heard < 1500 && g_roster_id != g_joined_id &&
+            std::any_of(g_roster.begin(), g_roster.end(), [](const Named& m) { return m.peer == g_me.load(); })) {
+            for (const Named& m : g_roster)
+                if (m.peer == g_me.load() && m.local < 4) {
+                    W32(kJoined + m.local * kJoinSize + kJoinTeam, m.team);
+                    W32(kJoined + m.local * kJoinSize + kJoinCharacter, m.character);
+                }
+            start = g_late_start = true;
+            LOGR("nightfire: LAN lobby: joining the match running");
+        }
     }
     if (start) {  // the host started the match: this copy too, with its options
         {

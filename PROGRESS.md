@@ -31,6 +31,19 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-05 - Netplay: joining a match already running
+- src/game/lan_play.cpp: the host keeps the match's roster (its lobby list at 0xA25F0) and sends it (kRoster, with
+  the clock: 0x262928 seconds played, 0x26292C the limit) every 500 ms while it plays. A player who joins then gets
+  an open place, else one of the host's AI bots: the host makes that slot its puppet, the other clients move their
+  puppet of it to the new player (RosterFrame), and the new copy, in the lobby, starts the match from the roster
+  with its player as that place's character and team. Every client keeps the host's clock (set when a second off).
+- Open places: the bot slots no one has (to six bots, seven players) are bots named "Open" on every copy, puppets
+  with no player kept 400 m above the map's middle; so a match with no AI bots can still be joined.
+- Tested (`.local/vk/late_join.sh`, two copies on this PC): host Quick Game (3 AI bots, 3 open places), the client
+  joined 40 s in: slot 7 (an open place) on the host, both in the match, both clocks 08:42, kills reported alike.
+  Not tested: taking an AI bot's place (all six slots used), a team match, two real PCs. The scoreboard lists the
+  open places; scores from before the join are not sent.
+
 ### 2026-11-05 - Keys 1 to 9 pick a weapon (as in Counter-Strike)
 - src/game/weapon_keys.cpp (called from aim.cpp's 0xBD740 hook for player 1, not in the menus): key N asks for the
   Nth weapon carried, in the cycle's order (0xBA280's walk: table entries 1-0x47 whose +4 is 1, carried at actor
