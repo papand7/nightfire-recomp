@@ -31,6 +31,18 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-05 - Ground detail checked on screen and fixed; on by default
+- It never showed: the shader took the vertex programs' clip w as metres (it is the game's scaled W), so its fade
+  was 0 everywhere (XBE_DETAIL_SPLIT=2 drew the fade and depth as colours). The view depth is now the mask pass's
+  (wlin * wdepth.w * wdepth.z * 4096, 1 m bands confirmed), with nothing nearer than a metre (the gun and hands were
+  tagged). Textures are now tagged when first drawn with the setting on (switching it on in play did nothing to
+  textures already loaded). XBE_PERF logs the detail draws a frame (90 drawn in a snow map).
+- Seen (`.local/vk/detail_pair.sh`, the same place off then on, graphics.toml read again live): grass gets fine blade
+  relief over the blurry original, in its own colour; snow gets glints. Strength 1.0 looked like carpet with dark
+  pits, 0.6 (the default) visible but quiet. ground_detail is on by default again (Materials: Detail).
+- The single-player route scripts broke: the main menu and the mission list keep their last row (Netplay, Equinox);
+  `.local/vk/route.sh` clicks NightFire, `.local/vk/exchange.sh` goes up the list, but its timing is not reliable.
+
 ### 2026-11-05 - Netplay: a remote player's muzzle flash seen on screen
 - NF_FLASH_SHOTS=folder (diagnostic, src/game/lan_play.cpp): the frame a replayed shot's flash is made, a picture
   (flash_N.png, the first 8) when the shooter is within 10 m of player 1; the script's own shots came too late for a
