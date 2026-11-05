@@ -17,6 +17,7 @@ extern bool skip_intro;
 extern bool rounded_font;  // the fonts drawn from Sour Gummy Black, not the game's letters (src/common/fonts.cpp)
 extern bool skip_paris;  // a new game's START goes to the menus, not into Paris (src/game/start.cpp)
 extern bool hide_hud;  // no HUD, for screenshots (src/game/hud.cpp, src/driving/hud.cpp)
+extern bool ads_focus_blur;  // aiming down the sights blurs what lies behind the target (src/game/aim.cpp)
 extern bool aim_down_sights;  // L raises the gun and zooms in, not the game's manual aim (src/game/aim.cpp)
 extern uint32_t fov_percent;  // the 3D views' field of view, percent of the game's (src/game/view.cpp, src/driving/view.cpp)
 float Ultrawide();            // how much wider than 16:9 the frame is shown, 1 on a 16:9 or 4:3 screen

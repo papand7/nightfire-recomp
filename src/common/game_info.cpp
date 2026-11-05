@@ -19,6 +19,7 @@ bool skip_intro = false;
 bool skip_paris = true;
 bool hide_hud = false;
 bool aim_down_sights = true;
+bool ads_focus_blur = true;
 uint32_t fov_percent = 100;
 extern bool modern_buttons;  // src/common/buttons.cpp
 
@@ -210,6 +211,8 @@ const app::GameInfo app::kGame = {
                 {"skip_paris", &nf::skip_paris, nullptr, "Menus at start, not Paris",
                  "START at the title opens the menus; Paris is then started from the single player missions."},
                 {"hide_hud", &nf::hide_hud, nullptr, "Hide the HUD", "For screenshots; at once, on foot and driving. The menus and pause screens stay."},
+                {"ads_focus_blur", &nf::ads_focus_blur, nullptr, "Focus blur when aiming",
+                 "Aiming down the sights blurs what lies behind the target (Vulkan; one view, not split screen)."},
                 {"aim_down_sights", &nf::aim_down_sights, nullptr, "Aim down sights",
                  "L (the right mouse button) raises the gun and zooms in a little, instead of the game's manual aim and its red crosshair. Scopes stay as they are."},
                 {"rounded_font", &nf::rounded_font, nullptr, "Rounded font",

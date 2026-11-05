@@ -53,7 +53,7 @@ constexpr uint32_t kPixel = 0x1000FC51, kDepth = 0x1000FC52, kDither = 0x1000FC5
 // More Settings' rows
 constexpr uint32_t kFps = 0x1000FC61, kPauseBg = 0x1000FC62, kHideHud = 0x1000FC63, kButtonPics = 0x1000FC64,
                    kStartMenus = 0x1000FC65, kKeyboard = 0x1000FC66, kMouseLook = 0x1000FC67, kLanguage = 0x1000FC68,
-                   kKeys = 0x1000FC69, kAds = 0x1000FC6B;
+                   kKeys = 0x1000FC69, kMenuColors = 0x1000FC6A, kAds = 0x1000FC6B;
 
 const std::vector<MenuRow> kGfxRows = {
     {kQuality, nf::kMenuChoice, "Graphics Quality", "Low to Ultra set the rows below at once; changing one makes it Custom."},
@@ -107,7 +107,8 @@ const std::vector<MenuRow> kMoreRows = {
     {kMouseLook, nf::kMenuChoice, "Mouse Look", "The mouse turns and aims on foot.", 6},
     {kLanguage, nf::kMenuChoice, "Language", "The game's language, at the next start.", 7},
     {kKeys, nf::kMenuChoice, "Keys and Wheel", "Key bindings and a steering wheel: A opens the settings window.", 8},
-    {kAds, nf::kMenuChoice, "Aim Down Sights", "L (right mouse) raises the gun and zooms in, not the red manual aim crosshair.", 9},
+    {kMenuColors, nf::kMenuChoice, "Menu Colours", "The menus as the game has them, or blue and silver as on the PS2's box.", 9},
+    {kAds, nf::kMenuChoice, "Aim Down Sights", "L (right mouse) raises the gun and zooms in, not the red crosshair. Blur: the background too.", 10},
 };
 // Netplay's rows (the main menu's Netplay item): host, the games found on this network, join the one chosen
 constexpr uint32_t kNetHost = 0x1000FC91, kNetServer = 0x1000FC92, kNetJoin = 0x1000FC93;
@@ -130,10 +131,10 @@ uint32_t Nearest(const Options& o, float v) {
         if (std::fabs(o[i].value - v) < std::fabs(o[best].value - v)) best = i;
     return best;
 }
-// the shared page (Style Options, More Settings): ten rows of its own, kShared0 + the line, each set's rows drawn
+// the shared page (Style Options, More Settings): eleven rows of its own, kShared0 + the line, each set's rows drawn
 // on them by their slot; the page's widgets stay as few as the menu builder takes (a page of every set's rows, 28,
 // crashed it as the front end loaded). A set's row id stands for the shared row on its line
-constexpr uint32_t kShared0 = 0x1000FC71, kSharedRows = 10;
+constexpr uint32_t kShared0 = 0x1000FC71, kSharedRows = 11;
 uint32_t Wid(uint32_t id);
 void Choice(X86Context& ctx, uint32_t player, uint32_t id, const std::vector<std::pair<const char*, uint32_t>>& items,
             uint32_t value) {
@@ -411,10 +412,13 @@ void EnterMore(X86Context& ctx, uint32_t player) {
     if (langs.empty()) langs.push_back({LanguageName(s.language), s.language});
     Choice(ctx, player, kLanguage, langs, s.language);
     Choice(ctx, player, kKeys, {{"Open", 0}}, 0);
-    ShowOptions(ctx, player, kAds, kOffOn, nf::aim_down_sights ? 1.0f : 0.0f);
+    Choice(ctx, player, kMenuColors, {{"Original", 0}, {"Blue and Silver", 1}}, s.menu_colors ? 1 : 0);
+    Choice(ctx, player, kAds, {{"Off", 0}, {"On", 1}, {"On, Blur", 2}},
+           !nf::aim_down_sights ? 0 : nf::ads_focus_blur ? 2 : 1);
 }
 void KeepMore(X86Context& ctx, uint32_t player) {
     uint32_t kb = ChoiceValue(ctx, player, kKeyboard), lang = ChoiceValue(ctx, player, kLanguage);
+    uint32_t colors = ChoiceValue(ctx, player, kMenuColors);
     std::lock_guard<std::recursive_mutex> lock(app::UiLock());
     app::Settings& s = app::Get();
     s.show_fps = ReadOption(ctx, player, kFps, kOffOn) > 0;
@@ -424,14 +428,16 @@ void KeepMore(X86Context& ctx, uint32_t player) {
     nf::skip_paris = ReadOption(ctx, player, kStartMenus, kOffOn) > 0;
     if (kb <= 2) s.keyboard = kb != 2, s.keyboard_alone = kb == 1;
     s.mouse_look = ReadOption(ctx, player, kMouseLook, kOffOn) > 0;
-    nf::aim_down_sights = ReadOption(ctx, player, kAds, kOffOn) > 0;
+    if (colors <= 1) s.menu_colors = colors;
+    uint32_t ads = ChoiceValue(ctx, player, kAds);
+    if (ads <= 2) nf::aim_down_sights = ads > 0, nf::ads_focus_blur = ads == 2;
     for (uint32_t l : app::kGame.languages)
         if (l == lang) s.language = l;
     app::Save();
     LOGR("nightfire: More Settings kept: frame counter %d, pause in background %d, hide HUD %d, modern buttons %d, "
-         "start in menus %d, keyboard %d alone %d, mouse look %d, language %u, aim down sights %d",
+         "start in menus %d, keyboard %d alone %d, mouse look %d, language %u, menu colours %u, aim down sights %d",
          s.show_fps, s.pause_unfocused, nf::hide_hud, nf::modern_buttons, nf::skip_paris, s.keyboard,
-         s.keyboard_alone, s.mouse_look, s.language, nf::aim_down_sights);
+         s.keyboard_alone, s.mouse_look, s.language, s.menu_colors, nf::aim_down_sights);
 }
 
 void KeepStyle(X86Context& ctx, uint32_t player, uint32_t page) {

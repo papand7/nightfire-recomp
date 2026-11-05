@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "app/app.h"
 #include "common/nightfire.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
@@ -34,6 +35,7 @@ constexpr uint32_t kZoomTarget = 0x864, kZoomMost = 0x868, kGun = 0x778, kGunPos
 constexpr float kZoom = 1.3f;                          // the view's angle divided by this
 constexpr float kSight[3] = {0.25f, 0.06f, 0.0f};      // the gun moved to the middle (its model's frame: +x left)
 constexpr float kEase = 0.125f;                        // of the way in or out a frame
+constexpr uint32_t kCameras = 0x1F661C;                // the player views' cameras (a second: split screen)
 
 struct Player {
     bool held = false;    // L held last frame (the toggle's edge)
@@ -140,6 +142,11 @@ X86_FUNC(sub_000BD740) {  // the first person gun placed (cdecl: the object)
     if (i < 0) return;
     Player& p = g_players[i];
     p.t = std::clamp(p.t + (p.aiming ? kEase : -kEase), 0.0f, 1.0f);
+    if (i == 0) {  // player 1's sights: the focus blur, with one view only (split screen's would blur the others')
+        bool one_view = !R32(kCameras + 4);
+        float s = p.t * p.t * (3 - 2 * p.t);
+        app::SetFocusBlur(nf::ads_focus_blur && one_view ? s : 0.0f);
+    }
     uint32_t gun = R32(R32(obj + kActor) + kGun);
     if (!gun || p.t <= 0) return;
     float s = p.t * p.t * (3 - 2 * p.t);

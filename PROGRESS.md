@@ -31,6 +31,19 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-05 - Focus blur when aiming down the sights; menu colours committed (off)
+- Aiming down the sights blurs what lies behind the point aimed at (sdk Vulkan FocusPass, kFocusHlsl, after the style
+  pass): the focus is the nearest of seven taps about the middle and just above it, ignoring anything nearer than 2
+  (the raised gun); behind it a 24-tap golden-angle disc up to 7 console pixels, taps nearer than the focus left out
+  (no halo of the target or gun). src/game/aim.cpp sets app::SetFocusBlur from player 1's eased aim, only with one
+  view (no second camera at 0x1F6620: split screen's would blur the others'). Setting ads_focus_blur (default on);
+  More Settings' Aim Down Sights row is now Off / On / On, Blur.
+- Tested (`.local/vk/ads_blur.sh`, a netplay match, LT held): the background blurred, gun and target sharp, 58-60
+  fps; the first version focused on the gun's sight (the whole scene blurred) until the taps moved above it and the
+  gun's distance was left out.
+- The SDK commit also holds the menu colours pass (menu_colors, off by default; the main menu's Bond question is
+  still open) and the light shafts and fog (atmosphere, off: see the entry below).
+
 ### 2026-11-05 - Light shafts and fog: three attempts, stopped (off by default, SDK work uncommitted)
 - Asked for: a clearly visible graphics upgrade; the player chose light shafts and fog. sdk/runtime/gpu/vulkan.cpp
   AtmospherePass (kAtmoHlsl) before the style pass: a quarter-size picture of what lights the air (sky by brightness,
