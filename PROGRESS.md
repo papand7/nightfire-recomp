@@ -31,6 +31,14 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-05 - Ground detail (Vulkan), off until checked on screen
+- SDK 7ecb019: the scenery's seamless tiling textures are tagged once by their colours (grass, snow, rock, dirt,
+  concrete; mods/details.toml overrides), and up close a procedural detail picture of the kind (normal, brightness)
+  shades the game's own colour, fading out by detail_distance. Graphics page: Materials row gains Detail choices.
+- Evidence: builds; in a Fort Knox match 30+ textures tagged, every kind's picture made, no shader errors. Not yet
+  seen on screen: off/on shots never matched (spawns, bots). So ground_detail defaults to false.
+- Next: an off/on pair from a still view (single player), XBE_DETAIL_SPLIT=1 for a same-frame half/half.
+
 ### 2026-11-05 - Netplay: other players' shots, muzzle flash and death
 - Remote shots were never replayed: ApplyEvents skipped every event without a victim, and a shot has none. Now each
   is fired from its puppet (0x211F0) and, as a bot's fire event does after it (0x18307), gets the muzzle flash: the

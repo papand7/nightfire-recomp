@@ -65,7 +65,7 @@ const std::vector<MenuRow> kGfxRows = {
     {kBloom, nf::kMenuChoice, "Bloom", "A glow around lights and bright surfaces."},
     {kReflect, nf::kMenuChoice, "Reflections", "Glass mirrors what is on screen (screen-space reflections)."},
     {kParticles, nf::kMenuChoice, "Particles", "Soft: effects fade into walls. Lights: flashes and fire light the room."},
-    {kMaterials, nf::kMenuChoice, "Materials", "The HD pack's maps (next start). Relief: uneven walls in depth."},
+    {kMaterials, nf::kMenuChoice, "Materials", "Detail: grass, snow, rock up close. PBR: the HD pack's maps (next start)."},
     {kLighting, nf::kMenuChoice, "Lighting", "Fog: depth in the distance. Bounce: rooms take on their lights' and walls' colour."},
     {kAa, nf::kMenuChoice, "Anti-Aliasing", "SMAA smooths the scene's edges, the HUD stays sharp; FXAA the whole picture."},
     {kSharpen, nf::kMenuChoice, "Sharpening", "Contrast adaptive sharpening of the finished picture."},
@@ -246,8 +246,10 @@ void EnterGraphics(X86Context& ctx, uint32_t player) {
         ShowOptions(ctx, player, kReflect, kReflectLevels, float(st.reflections));
         Choice(ctx, player, kParticles, {{"Original", 0}, {"Soft", 1}, {"Soft + Lights", 2}},
                st.effect_lights ? 2 : st.soft_particles ? 1 : 0);
-        Choice(ctx, player, kMaterials, {{"Original", 0}, {"PBR", 1}, {"PBR + Relief", 2}},
-               !st.materials ? 0 : st.surface_depth > 0 ? 2 : 1);
+        // bit 0 the pack's maps, bit 1 relief, bit 2 ground detail
+        Choice(ctx, player, kMaterials,
+               {{"Original", 0}, {"Detail", 4}, {"Detail + PBR", 5}, {"Detail + Relief", 7}, {"PBR", 1}, {"PBR + Relief", 3}},
+               (st.materials ? 1u : 0u) | (st.materials && st.surface_depth > 0 ? 2u : 0u) | (st.ground_detail ? 4u : 0u));
         Choice(ctx, player, kLighting, {{"Original", 0}, {"Fog", 1}, {"Bounce", 2}, {"Fog + Bounce", 3}},
                (st.atmosphere ? 1u : 0u) | (st.bounce_light ? 2u : 0u));
     } else {
@@ -295,6 +297,8 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
             st.effect_lights = keep.effect_lights, st.light_strength = keep.light_strength;
             st.materials = keep.materials, st.material_strength = keep.material_strength;
             st.surface_depth = keep.surface_depth;
+            st.ground_detail = keep.ground_detail, st.detail_strength = keep.detail_strength;
+            st.detail_distance = keep.detail_distance;
             st.atmosphere = keep.atmosphere, st.fog_strength = keep.fog_strength, st.shaft_strength = keep.shaft_strength;
             st.bounce_light = keep.bounce_light, st.bounce_strength = keep.bounce_strength;
         }
@@ -307,9 +311,10 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
             st.effect_lights = pv == 2;
         }
         uint32_t mat = ChoiceValue(ctx, player, kMaterials);
-        if (mat <= 2) {
-            st.materials = mat >= 1;
-            st.surface_depth = mat == 2 ? std::max(st.surface_depth, 0.6f) : 0.0f;
+        if (mat <= 7) {
+            st.materials = mat & 1;
+            st.surface_depth = mat & 2 ? std::max(st.surface_depth, 0.6f) : 0.0f;
+            st.ground_detail = mat & 4;
         }
         st.texture_pack = ReadOption(ctx, player, kPack, kOffOn) > 0;
     }
