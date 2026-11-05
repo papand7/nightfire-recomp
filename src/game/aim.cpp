@@ -182,6 +182,7 @@ X86_FUNC(sub_000BD740) {  // the first person gun placed (cdecl: the object)
     __imp__sub_000BD740(ctx, base);
     int i = PlayerOf(obj);
     if (i < 0) return;
+    if (i == 0) nf::WeaponKeys(ctx, obj);  // the number keys (src/game/weapon_keys.cpp)
     if (i == 0 && WeaponsTest()) {
         static uint32_t frames = 0, idx = uint32_t(WeaponsTest()) - 1;
         if (frames % 200 == 120 && std::getenv("NF_ADS_SHOTS")) {  // its picture: the renderer's shot file

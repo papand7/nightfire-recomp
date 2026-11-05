@@ -106,12 +106,12 @@ std::array<uint16_t, 2> ShooterKeys(int c) {
         case kY: return {kSpace, 0};         // jump
         case kB: return {'Q', kBackspace};   // next weapon; back in the menus
         case kWhite: return {kMouseMiddle, 'F'};  // alt. fire
-        case kBlack: return {'G', '2'};      // next gadget
+        case kBlack: return {'G', 0};        // next gadget
         case kBack: return {'V', kTab};      // vision mode
         case kUp: return {kArrowUp, 0};      // the d-pad: gadget and zoom up and down, the weapon left and right
         case kDown: return {kArrowDown, 0};
-        case kLeft: return {kArrowLeft, '3'};
-        case kRight: return {kArrowRight, '1'};  // 1 the next weapon, 2 the next gadget (Black)
+        case kLeft: return {kArrowLeft, 0};
+        case kRight: return {kArrowRight, 0};  // 1 to 9 pick a weapon (src/game/weapon_keys.cpp)
         case kStart: return {kEscape, 'P'};
         default: return {0, 0};
     }

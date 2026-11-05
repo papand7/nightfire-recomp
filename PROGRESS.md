@@ -31,6 +31,14 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-05 - Keys 1 to 9 pick a weapon (as in Counter-Strike)
+- src/game/weapon_keys.cpp (called from aim.cpp's 0xBD740 hook for player 1, not in the menus): key N asks for the
+  Nth weapon carried, in the cycle's order (0xBA280's walk: table entries 1-0x47 whose +4 is 1, carried at actor
+  +0x15E + i*12, its variant +0x160, drawable by 0xB9EB0), at the weapon state's +0x53. The keys 1, 2 and 3 were
+  second keys of next weapon, next gadget and d-pad left; those now have one key each (Q / G / arrows).
+- Tested (NF_SLOT_TEST=1, `.local/vk/mp_match.sh`): carried 1 and 6; key 1 drew 1, key 2 drew 6 again, keys 3-9
+  did nothing. Not tested: a real keyboard press, a level with many weapons, Driving.xbe (not added there).
+
 ### 2026-11-05 - Menu colours: the background movies blue (PC version), Bond and the text as they are
 - Asked for: Bond's face normal, only the backgrounds and menu frames changed, after the PC version, the console's
   animations kept. src/common/menu_colors.cpp (GameInfo::texture_bound): the menus' backgrounds are XMV movies in

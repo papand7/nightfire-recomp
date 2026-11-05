@@ -19,6 +19,7 @@ extern bool skip_paris;  // a new game's START goes to the menus, not into Paris
 extern bool hide_hud;  // no HUD, for screenshots (src/game/hud.cpp, src/driving/hud.cpp)
 extern bool view_motion;     // subtle weapon sway and head bob (src/game/sway.cpp)
 void GunSway(int player, uint32_t gun, float keep);
+void WeaponKeys(X86Context& ctx, uint32_t obj);  // 1-9 pick a weapon (src/game/weapon_keys.cpp)
 extern bool ads_focus_blur;  // aiming down the sights blurs what lies behind the target (src/game/aim.cpp)
 extern bool aim_down_sights;  // L raises the gun and zooms in, not the game's manual aim (src/game/aim.cpp)
 extern uint32_t fov_percent;  // the 3D views' field of view, percent of the game's (src/game/view.cpp, src/driving/view.cpp)
