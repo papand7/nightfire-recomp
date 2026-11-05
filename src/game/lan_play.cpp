@@ -619,6 +619,7 @@ bool Interpolate(const std::deque<Sample>& s, int64_t t, Body& out) {
 }
 
 void TestFrame();  // below
+void Unlocks();
 void Queue(Event e);
 bool g_replaying = false;  // a remote shot being fired from its puppet (0x211F0 lets it)
 void Inject(X86Context& ctx, uint32_t obj);
@@ -746,6 +747,7 @@ void LanFrame(X86Context& ctx) {
     NetplayPageFrame(ctx);
     LobbyFrame(ctx);
     if (g_on) ApplyEvents(ctx), WatchDeaths(), TestFrame();
+    Unlocks();
     if (g_on && g_host) {  // the map's name for searches (the maps' table 0x17C6A0: 0x18 each, +4 its text, +0xC its id)
         static uint32_t shown = ~0u;
         uint32_t map = R32(0x260040);
@@ -1550,4 +1552,51 @@ X86_FUNC(sub_000AB450) {
         if (data && nf::LanPuppet(R32(data + 0x24))) W32(n + 8, 0);
     }
     Inject(ctx, obj);
+}
+
+// ---- everything unlocked in network play: the game's own "all unlocked" byte (0x25D79E: a locked entry can be chosen,
+// 0x874DA, 0x87809 ...) and each entry's own unlock byte in its list (+0x10 of 0x18-byte entries, what the lists draw
+// dimmed and call locked: 0x17C580 12, the maps 0x17C6A0 8, 0x17C760 3, the scenarios 0x17C7A8 13, the characters
+// 0x17C8E0 29; one run of tables to 0x17CB98) are set while a session is on and put back after. The profile (0x19A10
+// saves them, 0x19B05) is saved with the player's own; a profile loaded meanwhile is taken as the player's own.
+namespace {
+constexpr uint32_t kUnlockAll = 0x25D79E, kUnlockTables = 0x17C580, kUnlockEnd = 0x17CB98, kEntry = 0x18;
+bool g_unlocking = false;
+std::vector<std::pair<uint32_t, uint8_t>> g_own_unlocks;  // each byte and the player's own value
+
+std::vector<uint32_t> UnlockBytes() {
+    std::vector<uint32_t> v = {kUnlockAll};
+    for (uint32_t a = kUnlockTables; a < kUnlockEnd; a += kEntry) v.push_back(a + 0x10);
+    return v;
+}
+void PutOwn(bool own) {
+    for (auto& [a, v] : g_own_unlocks) kernel::G<uint8_t>(a) = own ? v : 1;
+}
+
+void Unlocks() {
+    if (g_on) {
+        if (!g_unlocking) {
+            g_unlocking = true;
+            g_own_unlocks.clear();
+            for (uint32_t a : UnlockBytes()) g_own_unlocks.push_back({a, kernel::G<uint8_t>(a)});
+            LOGR("nightfire: LAN: everything unlocked for network play (%zu entries; the profile keeps its own)",
+                 g_own_unlocks.size());
+        } else {
+            for (auto& [a, v] : g_own_unlocks)  // a profile loaded meanwhile: its own
+                if (kernel::G<uint8_t>(a) != 1) v = kernel::G<uint8_t>(a);
+        }
+        PutOwn(false);
+    } else if (g_unlocking) {
+        g_unlocking = false;
+        PutOwn(true);
+        LOGR("nightfire: LAN: unlocks as the profile has them again");
+    }
+}
+}  // namespace
+
+X86_EXTERN_FUNC(__imp__sub_00019A10);
+X86_FUNC(sub_00019A10) {  // the profile saved: with the player's own unlocks, not network play's
+    if (g_unlocking) PutOwn(true);
+    __imp__sub_00019A10(ctx, base);
+    if (g_unlocking) PutOwn(false);
 }

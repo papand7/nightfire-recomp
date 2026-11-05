@@ -31,6 +31,18 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-05 - Everything unlocked in network play
+- While a LAN session is on, the game's "all unlocked" byte (0x25D79E: locked entries can be chosen, 0x874DA,
+  0x87809, 0x8AC29 ...) and every list entry's own unlock byte (+0x10 of 0x18-byte entries: 0x17C580 12, the maps
+  0x17C6A0 8, 0x17C760 3, the scenarios 0x17C7A8 13, the characters 0x17C8E0 29; 66 bytes in all) are set; the
+  player's own values are kept and put back when the session ends and around every profile save (0x19A10, which
+  writes the byte at 0x19B05), so network play unlocks nothing for good. A profile loaded meanwhile is taken as the
+  player's own. The byte alone was not enough: the lists draw entries dimmed and "locked" from their own bytes.
+- Tested (`.local/vk/unlock_test.sh`, hosting): Uplink and Demolition, "This scenario is locked." before, now bright
+  with their own descriptions ("MI6 attack a site while Phoenix defends").
+- Not checked on screen: the character and map lists, the bot setup page (its list at 0x245338 is not touched),
+  the unlocks put back after leaving Netplay.
+
 ### 2026-11-05 - Focus blur when aiming down the sights; menu colours committed (off)
 - Aiming down the sights blurs what lies behind the point aimed at (sdk Vulkan FocusPass, kFocusHlsl, after the style
   pass): the focus is the nearest of seven taps about the middle and just above it, ignoring anything nearer than 2
