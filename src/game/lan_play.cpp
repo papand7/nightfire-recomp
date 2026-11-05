@@ -777,6 +777,22 @@ void RosterFrame(bool in_match) {
     if (g_host) {
         if (g_roster.empty()) return;
         g_clock[0] = GetF(kPlayed), g_clock[1] = GetF(kLimit), g_clock_read = true;
+        // a player who left (its copy gone): its slot an AI bot again, the host's (its AI runs, its state sent as the
+        // host's bot's: the clients move their puppet of it to that, as for a join)
+        for (Named& m : g_roster) {
+            if (m.peer == 0 || m.peer == kOpen || g_clients.count(m.peer)) continue;
+            auto it = g_slot_of.find(key(m));
+            if (it == g_slot_of.end()) continue;
+            int slot = it->second;
+            g_slot_of.erase(it);
+            g_remotes.erase(key(m));
+            LOGR("nightfire: LAN: client %d's player %d left the match: an AI bot takes slot %d", m.peer, m.local + 1, slot);
+            Named bot{0, uint8_t(slot), m.character, m.team, {}};
+            std::snprintf(bot.name, sizeof bot.name, "Bot %d", slot - kFirstBot + 1);
+            m = bot;
+            SlotName(slot, m);
+            g_send_now = true;
+        }
         for (auto& [peer, names] : g_infos) {
             if (!g_clients.count(peer)) continue;
             for (const Named& n : names) {
@@ -831,7 +847,11 @@ void RosterFrame(bool in_match) {
         g_slot_of.erase(it);
         g_slot_of[now] = slot;
         SlotName(slot, g_roster[i]);
-        LOGR("nightfire: LAN: client %d's player %d joined the match, in slot %d", now >> 8, (now & 0xFF) + 1, slot);
+        if ((now >> 8) == 0 && (now & 0xFF) >= kFirstBot && (was >> 8) != kOpen)
+            LOGR("nightfire: LAN: client %d's player %d left the match: the host's AI bot in slot %d", was >> 8,
+                 (was & 0xFF) + 1, slot);
+        else
+            LOGR("nightfire: LAN: client %d's player %d joined the match, in slot %d", now >> 8, (now & 0xFF) + 1, slot);
     }
     g_roster_applied = g_roster;
 }
@@ -918,6 +938,19 @@ void LanFrame(X86Context& ctx) {
     if (in_match && g_host)  // the host's AI bots: the clients' puppets
         for (int sl = kFirstBot; sl < 10; sl++)
             if (uint32_t obj = SlotObject(sl); obj && !LanPuppet(obj)) local.push_back({uint8_t(sl), body(obj)});
+    static const bool trace = [] {
+        const char* e = std::getenv("NF_LAN_TRACE");
+        return e && *e == '1';
+    }();
+    static int64_t traced = 0;
+    if (trace && in_match && g_host && Now() - traced > 5000) {  // the host's AI bots' places
+        traced = Now();
+        std::string line;
+        char buf[64];
+        for (auto& [sl, b] : local)
+            if (sl >= kFirstBot) std::snprintf(buf, sizeof buf, " %d:%.1f,%.1f", sl, b.pos[0], b.pos[2]), line += buf;
+        LOGR("nightfire: LAN: the host's AI bots%s", line.c_str());
+    }
     if (!in_match)
         for (uint32_t i = 0; i < std::max<uint32_t>(humans, 1); i++) local.push_back({uint8_t(i), Body{}});
     std::vector<Named> names;
@@ -1014,6 +1047,8 @@ X86_FUNC(sub_000A25F0) {  // a multiplayer match starts: the bots are the other 
             std::memset(name, 0, 16);
             std::memcpy(name, shown.data(), std::min<size_t>(shown.size(), 15));
         }
+        for (auto& [k, sl] : g_slot_of)  // an open place nameless (a team game shows a teammate's name over it)
+            if ((k >> 8) == kOpen) std::memset(&kernel::G<char>(kSlots + uint32_t(sl) * kSlotSize), 0, 16);
         g_late_start = false;
     }
 }
@@ -1314,7 +1349,14 @@ X86_FUNC(sub_000891E0) {  // the summary page's messages (player, ?, ?, message,
         return;
     }
     if (msg == 0x4B) {
-        if (!g_host) {  // a client's A: only the host starts
+        if (!g_host) {  // a client's A: only the host starts; in a team game it changes its player's team
+            // (the join page opened again skips the team choice: it goes straight back here)
+            if ((R32(0x26003C) & kTeams) && player < 4 && kernel::G<uint8_t>(kJoined + player * kJoinSize)) {
+                uint32_t at = kJoined + player * kJoinSize + kJoinTeam, team = R32(at) == 1 ? 0 : 1;
+                W32(at, team);
+                g_send_now = true, g_refill = player + 1;
+                LOGR("nightfire: LAN lobby: a client's player %u changes team (%u)", player + 1, team);
+            }
             ctx.eax = 1;
             ctx.esp += 4;
             return;
@@ -1328,6 +1370,53 @@ X86_FUNC(sub_000891E0) {  // the summary page's messages (player, ?, ?, message,
         LOGR("nightfire: LAN lobby: the host starts the match (map %08X)", R32(0x260040));
     }
     __imp__sub_000891E0(ctx, base);
+}
+
+// the scenario options page's messages (0x88EA0; its Continue, 0x89006, counts the players and bots of each team from
+// the join records and the bot setup, and refuses a team game with an empty team): the host's A with the network's
+// players counted as bots of their teams (added to the bot setup for the call, then the setup put back)
+X86_EXTERN_FUNC(__imp__sub_00088EA0);
+X86_FUNC(sub_00088EA0) {
+    if (!g_on || !g_host || R32(ctx.esp + 0x10) != 0x4B) return __imp__sub_00088EA0(ctx, base);
+    // kept: the bot setup, the bots' count and their score slots' names (0x75DD0 packs the records in use, +0xE set,
+    // and copies their names there)
+    constexpr uint32_t kBotNames = kSlots + kFirstBot * kSlotSize, kBotNamesSize = kMostBots * kSlotSize;
+    std::vector<uint8_t> keep(kBotSetupSize), names(kBotNamesSize);
+    std::memcpy(keep.data(), kernel::HostPtr(kBotSetup), kBotSetupSize);
+    std::memcpy(names.data(), kernel::HostPtr(kBotNames), kBotNamesSize);
+    uint32_t bots = R32(kBotTotal);
+    int added = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_lock);
+        uint32_t i = 0;
+        for (const Named& m : g_lobby) {
+            if (m.peer == 0 || m.peer == kOpen || m.local >= kFirstBot) continue;
+            while (i < uint32_t(kMostBots) && kernel::G<uint8_t>(kBotRecords + i * kBotRecordSize + 0xE)) i++;
+            if (i >= uint32_t(kMostBots)) break;
+            uint32_t rec = kBotRecords + i * kBotRecordSize;
+            std::memset(&kernel::G<uint8_t>(rec), 0, kBotRecordSize);
+            std::memcpy(&kernel::G<char>(rec), m.name, 13);
+            kernel::G<uint8_t>(rec + 0xE) = 1;
+            kernel::G<uint8_t>(rec + 0xF) = BotTeam(m.team);
+            kernel::G<uint8_t>(rec + 0x10) = m.character;
+            added++;
+        }
+    }
+    __imp__sub_00088EA0(ctx, base);
+    if (added) {
+        {  // the lobby opened in the call: the host's bots it kept are the setup's from before
+            std::lock_guard<std::mutex> lock(g_lock);
+            if (g_bot_cfg_saved) {
+                std::memcpy(g_bot_cfg, keep.data(), kBotSetupSize);
+                if (!g_bot_cfg[0]) g_bot_cfg[1] = uint8_t(std::min<uint32_t>(bots, kMostBots));
+                g_send_now = true;
+            }
+        }
+        std::memcpy(kernel::HostPtr(kBotSetup), keep.data(), kBotSetupSize);
+        std::memcpy(kernel::HostPtr(kBotNames), names.data(), kBotNamesSize);
+        W32(kBotTotal, bots);
+        LOGR("nightfire: LAN: the scenario's Continue with %d players from the network counted", added);
+    }
 }
 
 namespace {

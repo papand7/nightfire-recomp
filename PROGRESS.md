@@ -31,6 +31,24 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-05 - Netplay: an AI bot takes a leaver's place; team games
+- A player whose copy leaves mid-match (5 s silent): the host gives its slot back to an AI bot ("Bot N", the
+  player's character and team) in the roster; its AI runs again and its state goes out as the host's bot's, and the
+  clients move their puppet of it to that bot (RosterFrame). Tested (`.local/vk/leave_test.sh`, three copies, copy
+  3 killed 35 s in): host "an AI bot takes slot 5", copy 2 "the host's AI bot in slot 5"; NF_LAN_TRACE=1 showed
+  slot 5 moving about (-6.9,-11.5 to -18.7,3.0) after.
+- Team games: the scenario options' Continue (0x89006 in 0x88EA0) counts each team from the join records and the bot
+  setup and refused a team with only network players ("no players or bots on the MI6 team"). The host's A there now
+  has the lobby's network players in free bot records (+0xE in use, +0xF team) for the call, then the setup, the bot
+  names and the count put back (the lobby opens inside the call: its saved bot setup is the one from before).
+- A client chose no team (it joined before the host picked a team game, and its join page opened again goes straight
+  back to the lobby): in a team game a client's A in the lobby now changes its player's team.
+- Open places have no name (a team game showed "Open 4" floating over the map).
+- Tested (`.local/vk/team_test.sh`, two copies, Team Arena on Skyrail): the check passes with the client on the
+  other team, refuses with both on MI6; the client's A moved it MI6 -> Phoenix on both lobbies; in the match the
+  host's HUD was blue (MI6), the client's red. Not tested: team kills/scores over the network, Capture The Flag.
+  Seen once and not again: the host's team score at -1 with no death logged.
+
 ### 2026-11-05 - Ground detail (Vulkan), off until checked on screen
 - SDK 7ecb019: the scenery's seamless tiling textures are tagged once by their colours (grass, snow, rock, dirt,
   concrete; mods/details.toml overrides), and up close a procedural detail picture of the kind (normal, brightness)
