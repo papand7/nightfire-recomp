@@ -31,6 +31,14 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-05 - Aim down sights: every weapon checked; grenades keep the game's aim
+- NF_ADS_WEAPONS now shoots each weapon at frame 195 of its 200 (at 120 the silenced pistols were still screwing the
+  silencer on, which looked like a gun far off the middle) and logs its place at 190.
+- Seen aimed (`.local/vk/ads_weapons.sh`): the pistols 2-9 (silenced or not) and the shotgun 28-29 with their sights
+  on the middle; 50-51 (flag 0x40) keep the game's scope, as meant. The thrown weapons 52-56 (grenades, remote
+  mine) were pulled to the middle and zoomed: src/game/aim.cpp now treats them like the scoped ones (L the game's own
+  aim, no sights). Weapon 1 (no gun model) not judged.
+
 ### 2026-11-05 - Netplay: an AI bot takes a leaver's place; team games
 - A player whose copy leaves mid-match (5 s silent): the host gives its slot back to an AI bot ("Bot N", the
   player's character and team) in the roster; its AI runs again and its state goes out as the host's bot's, and the

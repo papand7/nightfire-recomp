@@ -148,7 +148,10 @@ X86_FUNC(sub_000BA8F0) {  // a player's weapon update (cdecl: the object)
     int i = PlayerOf(obj);
     if (i >= 0) {
         Player& p = g_players[i];
-        p.scoped = R32(Weapon(obj) + kWeaponFlags) & kScoped;
+        // the game's scoped weapons keep its scope; the thrown ones (52-56: the grenades, NF_ADS_WEAPONS shots
+        // 2026-11-05) have no sights: L is the game's own aim for both
+        int idx = kernel::G<int8_t>(R32(obj + kWeaponState) + kWeaponIndex);
+        p.scoped = (R32(Weapon(obj) + kWeaponFlags) & kScoped) || (idx >= 52 && idx <= 56);
         if (p.scoped) p.aiming = false;
     }
     __imp__sub_000BA8F0(ctx, base);
@@ -185,7 +188,7 @@ X86_FUNC(sub_000BD740) {  // the first person gun placed (cdecl: the object)
     if (i == 0) nf::WeaponKeys(ctx, obj);  // the number keys (src/game/weapon_keys.cpp)
     if (i == 0 && WeaponsTest()) {
         static uint32_t frames = 0, idx = uint32_t(WeaponsTest()) - 1;
-        if (frames % 200 == 120 && std::getenv("NF_ADS_SHOTS")) {  // its picture: the renderer's shot file
+        if (frames % 200 == 195 && std::getenv("NF_ADS_SHOTS")) {  // its picture: the renderer's shot file
             if (FILE* sf = std::fopen("shot", "w")) std::fprintf(sf, "%s\\w_%02u.png\n", std::getenv("NF_ADS_SHOTS"), idx), std::fclose(sf);
         }
         if (++frames % 200 == 0) {
@@ -218,7 +221,7 @@ X86_FUNC(sub_000BD740) {  // the first person gun placed (cdecl: the object)
         int held = kernel::G<int8_t>(R32(obj + kWeaponState) + kWeaponIndex);
         static int settle = 0;
         if (held != last) last = held, settle = 0;
-        if (++settle == 90)
+        if (++settle == 190)
             LOGR("nightfire: ADS test: weapon %d at %.3f %.3f %.3f", held, GetF(gun + kGunPos), GetF(gun + kGunPos + 4),
                  GetF(gun + kGunPos + 8));
     }
