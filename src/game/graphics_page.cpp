@@ -42,7 +42,8 @@ constexpr uint32_t kEnhPage = 1, kToonPage = 2, kRetroPage = 3, kMorePage = 4, k
 constexpr uint32_t kQuality = 0x1000FC21, kStyle = 0x1000FC22, kStyleOptions = 0x1000FC23, kFilter = 0x1000FC24,
                    kAo = 0x1000FC25, kBloom = 0x1000FC26, kAa = 0x1000FC27, kSharpen = 0x1000FC28,
                    kScale = 0x1000FC29, kRenderer = 0x1000FC2A, kPack = 0x1000FC2B, kDefaults = 0x1000FC2C,
-                   kReflect = 0x1000FC2D, kParticles = 0x1000FC2E, kMaterials = 0x1000FC2F;
+                   kReflect = 0x1000FC2D, kParticles = 0x1000FC2E, kMaterials = 0x1000FC2F,
+                   kLighting = 0x1000FC30;
 // the style pages' rows
 constexpr uint32_t kExposure = 0x1000FC31, kTonemap = 0x1000FC32, kContrast = 0x1000FC33, kSaturation = 0x1000FC34,
                    kVignette = 0x1000FC35, kGrain = 0x1000FC36, kSceneSharpen = 0x1000FC37;
@@ -65,6 +66,7 @@ const std::vector<MenuRow> kGfxRows = {
     {kReflect, nf::kMenuChoice, "Reflections", "Glass mirrors what is on screen (screen-space reflections)."},
     {kParticles, nf::kMenuChoice, "Particles", "Soft: effects fade into walls. Lights: flashes and fire light the room."},
     {kMaterials, nf::kMenuChoice, "Materials", "The HD pack's maps (next start). Relief: uneven walls in depth."},
+    {kLighting, nf::kMenuChoice, "Lighting", "Fog: depth in the distance. Bounce: rooms take on their lights' and walls' colour."},
     {kAa, nf::kMenuChoice, "Anti-Aliasing", "SMAA smooths the scene's edges, the HUD stays sharp; FXAA the whole picture."},
     {kSharpen, nf::kMenuChoice, "Sharpening", "Contrast adaptive sharpening of the finished picture."},
     {kScale, nf::kMenuChoice, "Render Scale", "The 3D picture's size against the screen's: lower is faster, higher smoother."},
@@ -118,7 +120,7 @@ const std::vector<MenuRow> kNetRows = {
     {kNetServer, nf::kMenuChoice, "Game", "The games found on this network: PC, map, players.", 1},
     {kNetJoin, nf::kMenuChoice, "Join Game", "Join the game chosen above.", 2},
 };
-constexpr int16_t kFirstY = 78, kStep = 22;
+constexpr int16_t kFirstY = 76, kStep = 18;  // sixteen rows above the help line
 
 // a choice of labelled values: shown at the one nearest the current value
 struct Option {
@@ -246,6 +248,8 @@ void EnterGraphics(X86Context& ctx, uint32_t player) {
                st.effect_lights ? 2 : st.soft_particles ? 1 : 0);
         Choice(ctx, player, kMaterials, {{"Original", 0}, {"PBR", 1}, {"PBR + Relief", 2}},
                !st.materials ? 0 : st.surface_depth > 0 ? 2 : 1);
+        Choice(ctx, player, kLighting, {{"Original", 0}, {"Fog", 1}, {"Bounce", 2}, {"Fog + Bounce", 3}},
+               (st.atmosphere ? 1u : 0u) | (st.bounce_light ? 2u : 0u));
     } else {
         Choice(ctx, player, kStyle, {{"Original (Needs Vulkan)", 0xFF}}, 0xFF);
         Choice(ctx, player, kAo, {{"Needs Vulkan", 0xFF}}, 0xFF);
@@ -253,6 +257,7 @@ void EnterGraphics(X86Context& ctx, uint32_t player) {
         Choice(ctx, player, kReflect, {{"Needs Vulkan", 0xFF}}, 0xFF);
         Choice(ctx, player, kParticles, {{"Needs Vulkan", 0xFF}}, 0xFF);
         Choice(ctx, player, kMaterials, {{"Needs Vulkan", 0xFF}}, 0xFF);
+        Choice(ctx, player, kLighting, {{"Needs Vulkan", 0xFF}}, 0xFF);
     }
     ShowOptions(ctx, player, kFilter, kFilters, float(s.aniso));
     uint32_t aa = s.msaa && !Vulkan() ? 1 + std::min<uint32_t>(s.msaa, 3) : s.smaa && Vulkan() ? kAaSmaa : s.fxaa ? 1 : 0;
@@ -290,7 +295,10 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
             st.effect_lights = keep.effect_lights, st.light_strength = keep.light_strength;
             st.materials = keep.materials, st.material_strength = keep.material_strength;
             st.surface_depth = keep.surface_depth;
+            st.atmosphere = keep.atmosphere, st.fog_strength = keep.fog_strength, st.shaft_strength = keep.shaft_strength;
+            st.bounce_light = keep.bounce_light, st.bounce_strength = keep.bounce_strength;
         }
+        if (uint32_t lv = ChoiceValue(ctx, player, kLighting); lv <= 3) st.atmosphere = lv & 1, st.bounce_light = lv & 2;
         st.quality_ao = int(ReadOption(ctx, player, kAo, kAoLevels));
         st.quality_bloom = ReadOption(ctx, player, kBloom, kOffOn) > 0;
         st.reflections = int(ReadOption(ctx, player, kReflect, kReflectLevels));

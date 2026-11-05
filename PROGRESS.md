@@ -31,6 +31,19 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-05 - Lighting: fog and bounced light (Graphics' Lighting row)
+- Bounced light (sdk Vulkan BouncePass, kBounceHlsl, before the fog and the style pass): at a quarter size each
+  pixel averages the scene's colour over a disc about 2 m across at its distance (16 golden-angle taps, weighted by
+  how near their distance is to its own), and the scene is lit by it in its colour (most of the gathered brightness
+  taken out: a tint and a little light). bounce_light / bounce_strength, default on, 1.0.
+- Fog: the light shafts work's fog alone (atmosphere on by default, shaft_strength 0, fog_strength 0.5).
+- Graphics page: a Lighting row (Original / Fog / Bounce / Fog + Bounce); 16 rows now, 18 apart from y 76 (at 22
+  the last fell off the panel and the help line overlapped Renderer). XBE_GI_TEST=1 left half with, right without;
+  2 the gathered light alone (`.local/vk/gi_test.sh N`).
+- Tested: split views in Sub Pen (green rooms tinted greener, a corridor taking its walls' red); frames late in a
+  two-copy run (both on one GPU): over 25 ms 1-2 of 600 with both off, 2-9 fog, 1-6 fog + bounce: no measurable cost
+  there. Seen by eye only in screenshots.
+
 ### 2026-11-05 - Subtle weapon sway and head bob (view_motion, on by default)
 - src/game/sway.cpp: after 0x24530 places a player's camera (the eye at camera +0x138, from 0xA89C4: the object's
   place plus its height +0x898 less the crouch +0x89C) the eye dips up to 2.2 cm at each step (a bob every 1.6 m
