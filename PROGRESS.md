@@ -31,6 +31,21 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-05 - Aim down sights per weapon: sights on the middle, optics looked through
+- src/game/aim.cpp SightOf: each weapon's own move to the middle (by group of its gun's place at the hip; 0xBCAA0
+  puts the model's origin from 0.03,0.29,-1.40 to -0.30,-0.13,-0.74), measured from NF_ADS_WEAPONS shots (the
+  sight's pixels from the middle times the model's depth over the focal length: 1221 px for a 1410-px view, 1587
+  zoomed 1.3x when aiming) and corrected once from aimed shots. Optics (24-25 a scoped rifle at 3x, 42-43 at 2x, the
+  launchers 44-49 at 1.6x; not the game's scoped weapons, flag 0x40, which keep its scope) zoom by their own amount,
+  their gun moved out of sight at full aim and the game's crosshair left on.
+- NF_ADS_WEAPONS=N (diagnostic): player 1 aims, kept alive, and is given each weapon from N in turn (0xBA5E0: actor,
+  index, ammo; then the weapon state's +0x53 asked for, the gun's state machine draws it; writing +0x52 alone did not
+  change the model), its gun's place logged; with NF_ADS_SHOTS=folder each is shot as w_NN.png
+  (`.local/vk/ads_weapons.sh`).
+- Seen aimed: 14 and 20 on the middle, 22 and 10 within about 60 px (2% of the view; sway and the draw animation move
+  them that much between shots), optics 24/42/44 zoomed with the crosshair. Not seen: weapons 1-9 (no model drawn in
+  the test: single player's?), 28, 50-56.
+
 ### 2026-11-05 - Everything unlocked in network play
 - While a LAN session is on, the game's "all unlocked" byte (0x25D79E: locked entries can be chosen, 0x874DA,
   0x87809, 0x8AC29 ...) and every list entry's own unlock byte (+0x10 of 0x18-byte entries: 0x17C580 12, the maps
