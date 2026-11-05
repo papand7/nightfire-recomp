@@ -31,6 +31,16 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-05 - Subtle weapon sway and head bob (view_motion, on by default)
+- src/game/sway.cpp: after 0x24530 places a player's camera (the eye at camera +0x138, from 0xA89C4: the object's
+  place plus its height +0x898 less the crouch +0x89C) the eye dips up to 2.2 cm at each step (a bob every 1.6 m
+  walked) and sways 1 cm to the side, by the walking speed (whole at 4 m/s), eased, none in the air or after a
+  teleport. The gun (src/game/aim.cpp after 0xBD740) lags up to 1.2 cm behind the view's turn and sways with the
+  steps; a fifth of it when aimed. Setting view_motion; More Settings' "Weapon Sway" row (the shared page: 12 rows).
+- Tested (`.local/vk/sway.sh`, NF_SWAY_TRACE=1: three lines a second): running 6 m/s gave amount 1.0, eye -0.020
+  and +0.006; stopped, it faded within a second; a turn (right stick) gave a gun lag of 0.010, easing back to 0.
+  Not judged by eye in play yet. The test pad's UP is the D-pad: the stick is LS / RS.
+
 ### 2026-11-05 - Aim down sights per weapon: sights on the middle, optics looked through
 - src/game/aim.cpp SightOf: each weapon's own move to the middle (by group of its gun's place at the hip; 0xBCAA0
   puts the model's origin from 0.03,0.29,-1.40 to -0.30,-0.13,-0.74), measured from NF_ADS_WEAPONS shots (the

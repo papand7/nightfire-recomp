@@ -221,6 +221,7 @@ X86_FUNC(sub_000BD740) {  // the first person gun placed (cdecl: the object)
             LOGR("nightfire: ADS test: weapon %d at %.3f %.3f %.3f", held, GetF(gun + kGunPos), GetF(gun + kGunPos + 4),
                  GetF(gun + kGunPos + 8));
     }
+    if (gun) nf::GunSway(i, gun, 1 - 0.8f * p.t * p.t * (3 - 2 * p.t));  // sway: a fifth of it when aimed
     if (!gun || p.t <= 0) return;
     float s = p.t * p.t * (3 - 2 * p.t);
     Sight sight = SightOf(kernel::G<int8_t>(R32(obj + kWeaponState) + kWeaponIndex));
