@@ -193,6 +193,7 @@ constexpr void (*SaveKeys)(void*) = nullptr;
 // GameInfo::texture_bound: the fonts (src/common/fonts.cpp), the button pictures (src/common/buttons.cpp)
 bool TextureBound(uint32_t header, uint32_t palette) {
     nf::FontPicture(header);
+    if (nf::MenuMovie(header)) return true;
     return nf::ButtonPictures(header, palette);
 }
 

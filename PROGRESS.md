@@ -31,6 +31,18 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-05 - Menu colours: the background movies blue (PC version), Bond and the text as they are
+- Asked for: Bond's face normal, only the backgrounds and menu frames changed, after the PC version, the console's
+  animations kept. src/common/menu_colors.cpp (GameInfo::texture_bound): the menus' backgrounds are XMV movies in
+  640 x 480 linear YUY2 textures (format 0x24, pitch 1280); each new frame's warm chroma is turned to steel blue in
+  guest memory as it is bound (a cool pixel is left; a sparse sum skips a frame already done). On the main menu
+  (MenuGeometry page 0x40000002: the context's +0x1B8 keeps 0x40000043 in the front end) Bond's columns (movie x
+  382-578, above y 414) keep everything but the background's strong orange (chroma above about 56).
+- The SDK's whole-frame pass is gone (it turned the gold text and Bond blue). Setting row: Original / PC Blue.
+- Tested (`.local/vk/colors.sh 1`): main menu blue with Bond's skin, the gold text and the sparks' movement as the
+  console's; the Settings page's background blue, text and sliders gold. Not checked: other front-end pages' movies,
+  Driving.xbe's menus.
+
 ### 2026-11-05 - Lighting: fog and bounced light (Graphics' Lighting row)
 - Bounced light (sdk Vulkan BouncePass, kBounceHlsl, before the fog and the style pass): at a quarter size each
   pixel averages the scene's colour over a disc about 2 m across at its distance (16 golden-angle taps, weighted by

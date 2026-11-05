@@ -109,7 +109,7 @@ const std::vector<MenuRow> kMoreRows = {
     {kMouseLook, nf::kMenuChoice, "Mouse Look", "The mouse turns and aims on foot.", 6},
     {kLanguage, nf::kMenuChoice, "Language", "The game's language, at the next start.", 7},
     {kKeys, nf::kMenuChoice, "Keys and Wheel", "Key bindings and a steering wheel: A opens the settings window.", 8},
-    {kMenuColors, nf::kMenuChoice, "Menu Colours", "The menus as the game has them, or blue and silver as on the PS2's box.", 9},
+    {kMenuColors, nf::kMenuChoice, "Menu Colours", "The menu backgrounds as the game has them, or blue as on the PC version. Text and Bond stay.", 9},
     {kAds, nf::kMenuChoice, "Aim Down Sights", "L (right mouse) raises the gun and zooms in, not the red crosshair. Blur: the background too.", 10},
     {kMotion, nf::kMenuChoice, "Weapon Sway", "A very light head bob and weapon sway as you move and turn.", 11},
 };
@@ -421,7 +421,7 @@ void EnterMore(X86Context& ctx, uint32_t player) {
     if (langs.empty()) langs.push_back({LanguageName(s.language), s.language});
     Choice(ctx, player, kLanguage, langs, s.language);
     Choice(ctx, player, kKeys, {{"Open", 0}}, 0);
-    Choice(ctx, player, kMenuColors, {{"Original", 0}, {"Blue and Silver", 1}}, s.menu_colors ? 1 : 0);
+    Choice(ctx, player, kMenuColors, {{"Original", 0}, {"PC Blue", 1}}, s.menu_colors ? 1 : 0);
     Choice(ctx, player, kAds, {{"Off", 0}, {"On", 1}, {"On, Blur", 2}},
            !nf::aim_down_sights ? 0 : nf::ads_focus_blur ? 2 : 1);
     ShowOptions(ctx, player, kMotion, kOffOn, nf::view_motion ? 1.0f : 0.0f);
