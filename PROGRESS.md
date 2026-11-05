@@ -31,6 +31,22 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-05 - Light shafts and fog: three attempts, stopped (off by default, SDK work uncommitted)
+- Asked for: a clearly visible graphics upgrade; the player chose light shafts and fog. sdk/runtime/gpu/vulkan.cpp
+  AtmospherePass (kAtmoHlsl) before the style pass: a quarter-size picture of what lights the air (sky by brightness,
+  bright surfaces), halved four times; distance fog in the sky's colour; shafts marched toward the light. Settings
+  atmosphere / shaft_strength / fog_strength in graphics.toml and the F1 window. XBE_ATMO_TEST=1 left half with,
+  right without; 2 the fog and distance; 3 the shafts alone. `.local/vk/atmo_test.sh N`.
+- Tried: (1) marching up the slope of the halved picture: smeared copies of the bright sky, washed the scene out;
+  (2) each quarter's bright centre as a light, GPU Gems 3 radial gather (4 lights x 32 taps): barely visible in the
+  split view, indoors nothing; (3) each quarter's brightest spot, stronger: still barely visible, and the frame rate
+  fell from 60 to about 27 (the gather at full size).
+- Learned: distances (viewz of the W-buffer) are about 60-100 for a room's far walls; fog 0.006 a unit there gives
+  20-40%. Indoor maps have no sky: the lights are small lamps.
+- Next, if taken up again: the gather at quarter size and upsampled (cost), real light positions (the game's lights
+  or the sun from its sky draws) instead of picking bright pixels, fog as its own cheap option.
+- Not committed: the SDK's working tree also holds the unfinished menu colours; both wait.
+
 ### 2026-11-05 - LAN play: the host's AI bots, players taking their places
 - The host's bot setup (0x245280..0x2452EE as its options left it; Quick Game's 3) is kept when the lobby opens and
   put back if it goes back to the options. The lobby and the match take the network's players first, then as many
