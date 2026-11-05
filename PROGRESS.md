@@ -31,6 +31,21 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-05 - Netplay: other players' shots, muzzle flash and death
+- Remote shots were never replayed: ApplyEvents skipped every event without a victim, and a shot has none. Now each
+  is fired from its puppet (0x211F0) and, as a bot's fire event does after it (0x18307), gets the muzzle flash: the
+  gun's muzzle node (0x13630, 0x13070), a light in the weapon's colour (0x6D530) and the flash sprite 0x2000039
+  (0xCD140) unless the weapon has none (entry +0x68 & 0x2000).
+- A remote player's death kills its puppet as a bot dies (health at actor +0x90 to 0, message 0x42 via 0x4E320): its
+  AI plays the death and respawns it; the think's hook leaves a dead puppet where it fell. Its score slot is held as
+  the victim's copy counted it for 4 s (the game would count the bot's death again).
+- The roster waits for the host's clock (the first client had been set to 0 of 0 s). The LAN tests' aim skips open
+  places.
+- Tested (two copies: `.local/vk/fx_fight.sh`, `flash_net.sh`): shots replayed on both copies (logs: projectiles
+  made), the host's puppet of the client killed on its death and back after the respawn, bodies on the ground in
+  the client's shots, the client's shots seen as red tracers in the host's. The flash itself not made out in a
+  screenshot (the puppet too far).
+
 ### 2026-11-05 - Netplay: joining a match already running
 - src/game/lan_play.cpp: the host keeps the match's roster (its lobby list at 0xA25F0) and sends it (kRoster, with
   the clock: 0x262928 seconds played, 0x26292C the limit) every 500 ms while it plays. A player who joins then gets

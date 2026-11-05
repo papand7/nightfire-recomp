@@ -193,6 +193,7 @@ bool g_late_start = false;             // a client starting a running match: its
 uint32_t g_joined_id = ~0u;            // a client's: the match it last started (not joined again)
 constexpr uint32_t kPlayed = 0x262928, kLimit = 0x26292C;  // the match's clock: seconds played, the limit (0x9CD09)
 float g_clock[2] = {};                 // the host's played and limit (sent with the roster)
+bool g_clock_read = false;             // the host's: read in this match (the roster waits for it)
 
 #ifdef _WIN32
 SOCKET g_sock = INVALID_SOCKET;
@@ -444,7 +445,7 @@ void Loop() {
                 }
                 if (now - last_lobby > 500 || g_send_now.exchange(false)) {
                     last_lobby = now, SendLobby();
-                    if (!g_roster.empty()) {  // the match running: its players, for those joining it
+                    if (!g_roster.empty() && g_clock_read) {  // the match running: its players, for those joining it
                         std::vector<uint8_t> body(12);
                         std::memcpy(body.data(), &g_roster_id, 4);
                         std::memcpy(body.data() + 4, g_clock, 8);
@@ -775,7 +776,7 @@ void RosterFrame(bool in_match) {
     auto key = [](const Named& m) { return uint16_t(m.peer << 8 | m.local); };
     if (g_host) {
         if (g_roster.empty()) return;
-        g_clock[0] = GetF(kPlayed), g_clock[1] = GetF(kLimit);
+        g_clock[0] = GetF(kPlayed), g_clock[1] = GetF(kLimit), g_clock_read = true;
         for (auto& [peer, names] : g_infos) {
             if (!g_clients.count(peer)) continue;
             for (const Named& n : names) {
@@ -992,12 +993,15 @@ X86_FUNC(sub_000A25F0) {  // a multiplayer match starts: the bots are the other 
                 g_slot_of[uint16_t(m.peer << 8 | m.local)] = kFirstBot + n++;
             }
         g_launching = false, g_bot_cfg_saved = false;
-        if (g_host) g_roster = g_lobby, g_roster_id = g_starts;  // the match's players, for those joining it later
+        if (g_host) g_roster = g_lobby, g_roster_id = g_starts, g_clock_read = false;  // for those joining it later
         else g_roster_applied = g_late_start ? g_roster : g_lobby, g_joined_id = g_late_start ? g_roster_id : g_starts;
         kernel::G<uint8_t>(kOwnBots) = 1;
         kernel::G<uint8_t>(kBotCount) = uint8_t(n);
         W32(kBots, uint32_t(n));
         LOGR("nightfire: LAN match: %u players here, %d from the network, %d AI bots", R32(kHumans), puppets, n - puppets);
+        std::string map;
+        for (auto& [k, sl] : g_slot_of) map += " " + std::to_string(k >> 8) + ":" + std::to_string(k & 0xFF) + "=" + std::to_string(sl);
+        LOGR("nightfire: LAN match: puppets (peer:player=slot)%s", map.c_str());
     }
     __imp__sub_000A25F0(ctx, base);
     if (g_on) {  // the puppets go by their players' names
@@ -1039,7 +1043,8 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
         }
     }
     if (key0 >= 0) CollectHits(obj);
-    if (key0 >= 0 && R32(obj + 0xBC)) {  // its legs: the posture for its speed, played by the think's last step
+    bool dead = key0 >= 0 && R32(obj + 0xBC) && GetF(R32(obj + 0xBC) + 0x90) <= 0;  // its death playing
+    if (key0 >= 0 && R32(obj + 0xBC) && !dead) {  // its legs: the posture for its speed, played by the think's last step
         static uint32_t pair = mem::AllocHostContiguous(8, 16);
         W32(pair, obj), W32(pair + 4, R32(obj + 0xBC));
         uint32_t eax = ctx.eax;
@@ -1054,7 +1059,7 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
     // a puppet: the AI's own frame ran (it spawns the body and animates it; 0x37C10 gives it no target), then moved
     std::lock_guard<std::mutex> lock(g_lock);
     int key = PuppetKey(slot);
-    if (key < 0) return;
+    if (key < 0 || dead) return;
     Body b;
     if ((key >> 8) == kOpen) {  // an open place: kept out of sight, high above the map's middle
         SetF(obj + kPos, 0), SetF(obj + kPos + 4, 400.0f), SetF(obj + kPos + 8, 0);
@@ -1428,7 +1433,64 @@ void Queue(Event e) {  // ours: applied here as well when it is for this copy (t
     g_events_out.push_back(e);
 }
 
+// a replayed shot's muzzle flash, as a bot's fire event makes it after the projectile (0x18307): the gun's muzzle
+// (0x13630: its node, 0x13070: its place), a light in the weapon's colour (entry +0x54, its size +0x58; 0x6D530) and,
+// unless the weapon has none (entry +0x68 & 0x2000), the flash sprite 0x2000039 turned at random (0xCD140)
+void MuzzleFlash(X86Context& ctx, uint32_t obj, uint32_t entry, uint32_t origin) {
+    static uint32_t buf = mem::AllocHostContiguous(0x100, 16);
+    uint32_t pos = buf + 0x10, rot = buf + 0x20, mat = buf + 0x40;
+    int node = int(kernel::CallGuest(ctx, 0x13630, {obj, 0, buf + 4, buf}));
+    if (node >= 0) kernel::CallGuest(ctx, 0x13070, {obj, uint32_t(node), 1, pos, mat});
+    else std::memcpy(kernel::HostPtr(pos), kernel::HostPtr(origin), 12);
+    uint32_t color = R32(entry + 0x54);
+    kernel::CallGuest(ctx, 0x6D530, {pos, color >> 16, color >> 8, color & 0xFF, R32(entry + 0x58), 0, 3, 1,
+                                     0x40000000, 0, 0, 0, 0xFFFF});
+    if (R32(entry + 0x68) & 0x2000) return;
+    SetF(rot, 0), SetF(rot + 4, 0), SetF(rot + 8, float(std::rand()) / float(RAND_MAX) * 6.2831853f);
+    kernel::CallGuest(ctx, 0xCD140, {R32(obj + 0x20), pos, rot, 0, 0x3D4CCCCD, 0x3DCCCCCD, 0x2000039, 7, 0x48403080, 1,
+                                     0x80, 0x40C90FDB});
+}
+
+// a puppet whose player died on its copy: killed here too, as a bot dies (HitBot: no health at actor +0x90, then the
+// message 0x42), so its AI plays the death and later respawns it (it stays where it fell meanwhile: the bot think's
+// hook). The death is the victim copy's, already counted (ApplyEvents): the score slot's numbers are kept as they are
+// for a while (the game would count the bot's death again, as its own)
+struct Kept {
+    uint8_t score[0x1C];
+    int16_t killer;
+    int64_t until;
+};
+std::map<int, Kept> g_kept;
+void KillPuppet(X86Context& ctx, uint32_t obj, int slot) {
+    static uint32_t h = mem::AllocHostContiguous(16, 16);
+    if (!(kernel::CallGuest(ctx, 0x2FAC0, {obj, h}) & 0xFF)) {
+        LOGR("nightfire: LAN: puppet slot %d: no handle", slot);
+        return;
+    }
+    uint32_t actor = R32(h + 4);
+    if (!actor || GetF(actor + 0x90) <= 0) {
+        LOGR("nightfire: LAN: puppet slot %d: actor %08X health %.1f", slot, actor, actor ? GetF(actor + 0x90) : 0.0f);
+        return;
+    }
+    SetF(actor + 0x90, 0);
+    kernel::CallGuest(ctx, 0x4E320, {R32(h + 0xC), 0x42, 0});
+    static int said = 0;
+    if (said++ < 10) LOGR("nightfire: LAN: puppet slot %d killed (its player died)", slot);
+}
+void KeepScores() {
+    for (auto it = g_kept.begin(); it != g_kept.end();) {
+        uint32_t v = kScores + uint32_t(it->first) * kSlotSize;
+        if (std::memcmp(kernel::HostPtr(v), it->second.score, 0x1C) ||
+            kernel::G<int16_t>(v + kKiller) != it->second.killer) {
+            std::memcpy(kernel::HostPtr(v), it->second.score, 0x1C);
+            kernel::G<int16_t>(v + kKiller) = it->second.killer;
+        }
+        it = Now() > it->second.until ? g_kept.erase(it) : std::next(it);
+    }
+}
+
 void ApplyEvents(X86Context& ctx) {
+    KeepScores();
     std::deque<Event> in;
     {
         std::lock_guard<std::mutex> lock(g_lock);
@@ -1437,7 +1499,7 @@ void ApplyEvents(X86Context& ctx) {
     for (const Event& e : in) {
         uint32_t victim = ObjectOf(e.victim_peer, e.victim_local);
         uint32_t killer = e.killer_peer == 0xFF ? 0 : ObjectOf(e.killer_peer, e.killer_local);
-        if (!victim) continue;
+        if (!victim && e.kind != kShotEvent) continue;
         uint32_t eax = ctx.eax;
         if (e.kind == kHitEvent && e.victim_peer == g_me.load()) {
             if (!killer) continue;
@@ -1462,9 +1524,12 @@ void ApplyEvents(X86Context& ctx) {
             uint16_t snd;
             std::memcpy(&snd, e.node + 24, 2);
             g_replaying = true;
-            kernel::CallGuest(ctx, 0x211F0, {0xFFFFFFFF, shooter, shooter, 0x18CFA0 + uint32_t(e.weapon) * 0x10C, vec,
-                                             vec + 12, snd});
+            uint32_t entry = 0x18CFA0 + uint32_t(e.weapon) * 0x10C;
+            uint32_t made = kernel::CallGuest(ctx, 0x211F0, {0xFFFFFFFF, shooter, shooter, entry, vec, vec + 12, snd});
             g_replaying = false;
+            if (made) MuzzleFlash(ctx, shooter, entry, vec);
+            static int said = 0;
+            if (said++ < 5) LOGR("nightfire: LAN: shot replayed from slot %d (weapon %u): projectile %08X", SlotOf(shooter), e.weapon, made);
         } else if (e.kind == kDeathEvent && e.victim_peer != g_me.load()) {
             // the scores as the victim's copy counted them (0xA2211-0xA230E): the killer's kills, streak and score,
             // the victim's deaths and killer; a death of one's own costs a kill and a point
@@ -1483,6 +1548,14 @@ void ApplyEvents(X86Context& ctx) {
                 if (points) SetF(v + 0x18, GetF(v + 0x18) - 1);
             }
             LOGR("nightfire: LAN: %u:%u died (slot %d, by slot %d)", e.victim_peer, e.victim_local, vslot, kslot);
+            if (vslot >= kFirstBot && nf::LanPuppet(victim)) {
+                Kept k{};
+                std::memcpy(k.score, kernel::HostPtr(v), 0x1C);
+                k.killer = kernel::G<int16_t>(v + kKiller);
+                k.until = Now() + 4000;
+                g_kept[vslot] = k;
+                KillPuppet(ctx, victim, vslot);
+            }
         }
         ctx.eax = eax;
     }
@@ -1663,7 +1736,7 @@ void TestFrame() {
     float bd = 1e9f;
     for (int s = kFirstBot; s < 10; s++) {
         uint32_t o = SlotObject(s);
-        if (!o || !nf::LanPuppet(o)) continue;
+        if (!o || !nf::LanPuppet(o) || (PuppetKey(s) >> 8) == kOpen) continue;  // not an open place
         if ((test == "aimbot" || test == "huntbot") && (PuppetKey(s) & 0xFF) < kFirstBot) continue;  // the host's AI bots only
         float dx = GetF(o + kPos) - GetF(me + kPos), dz = GetF(o + kPos + 8) - GetF(me + kPos + 8);
         if (dx * dx + dz * dz < bd) bd = dx * dx + dz * dz, best = o;
