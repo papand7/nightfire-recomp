@@ -1617,6 +1617,13 @@ void ApplyEvents(X86Context& ctx) {
             uint32_t made = kernel::CallGuest(ctx, 0x211F0, {0xFFFFFFFF, shooter, shooter, entry, vec, vec + 12, snd});
             g_replaying = false;
             if (made) MuzzleFlash(ctx, shooter, entry, vec);
+            static const char* flash_shots = std::getenv("NF_FLASH_SHOTS");  // diagnostic: a picture of each flash
+            static int flashes = 0;
+            uint32_t me = SlotObject(0);
+            float dx = me ? GetF(me + kPos) - GetF(shooter + kPos) : 99, dz = me ? GetF(me + kPos + 8) - GetF(shooter + kPos + 8) : 99;
+            if (made && flash_shots && flashes < 8 && dx * dx + dz * dz < 100)  // the shooter within 10 m
+                if (FILE* sf = std::fopen("shot", "w"))
+                    std::fprintf(sf, "%s\\flash_%d.png\n", flash_shots, ++flashes), std::fclose(sf);
             static int said = 0;
             if (said++ < 5) LOGR("nightfire: LAN: shot replayed from slot %d (weapon %u): projectile %08X", SlotOf(shooter), e.weapon, made);
         } else if (e.kind == kDeathEvent && e.victim_peer != g_me.load()) {

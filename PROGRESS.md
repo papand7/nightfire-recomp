@@ -31,6 +31,13 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-05 - Netplay: a remote player's muzzle flash seen on screen
+- NF_FLASH_SHOTS=folder (diagnostic, src/game/lan_play.cpp): the frame a replayed shot's flash is made, a picture
+  (flash_N.png, the first 8) when the shooter is within 10 m of player 1; the script's own shots came too late for a
+  flash of a frame or two.
+- Tested (`.local/vk/flash_net.sh` with it): the puppet firing 4 m away and it and the floor around lit yellow by
+  the flash's light (0x6D530). The flash sprite was not made out (its gun behind a balustrade).
+
 ### 2026-11-05 - Aim down sights: every weapon checked; grenades keep the game's aim
 - NF_ADS_WEAPONS now shoots each weapon at frame 195 of its 200 (at 120 the silenced pistols were still screwing the
   silencer on, which looked like a gun far off the middle) and logs its place at 190.
