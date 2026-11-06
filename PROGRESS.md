@@ -31,6 +31,18 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Snow sparkle; snow told at night too
+
+- Snow sparkle (GraphicsStyle::snow_sparkle, on; the weather's pass): a glint maybe in each 1.5 cm cell across the
+  ground, fixed in the world, each a facet turned its own way that shows only near its mirror direction (the view
+  and the light from above), so they twinkle as you move; on snowy ground facing up, within 25 m, outdoors, about
+  two pixels, past white (the HDR bloom takes them).
+- What counts as snow (footprints too): bright and no warmer or greener than blue. The old "unsaturated" test
+  missed The Exchange's blue moonlit snow almost everywhere.
+- The snow pass no longer clamps the float scene at white.
+- Checked (.local/vk/sparkle_test.sh): scattered glints on the snow near the feet, none off.
+
+
 ### 2026-11-06 - HDR bloom (Vulkan, with tone mapping)
 
 - With HDR tone mapping on, Bloom (the setting or the Enhanced style's) comes from the float scene: its exposed
