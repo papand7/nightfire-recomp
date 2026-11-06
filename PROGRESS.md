@@ -31,6 +31,17 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Effect lights and bounced light read the world's depth
+- The game clears the scene's depth before the gun, so the end's depth holds the gun alone: the effect lights and
+  bounced light saw the world as empty (nothing lit, nothing gathered) and only the gun took part.
+- sdk/runtime/gpu/vulkan.cpp: both passes read the nearer of the end's depth and the one kept at that clear
+  (RtKeepDepth), as the occlusion, reflections and depth of field do; the depth is now kept when either is on
+  (KeptDepthWanted). Traced light shadows from the world leave the gun out (mask 1), the gun's meet everything.
+- Fort Knox: XBE_GI_TEST=2 (the gathered light) now covers the walls, not only the gun; XBE_LIGHT_TEST=1 shows a
+  glowing window lighting the floor and wall about it. No errors, 60 fps.
+- Next: the lights' and bounce's strengths were tuned when they lit almost nothing on foot; a check by eye on a lit
+  corridor (Fort Knox's looked strong).
+
 ### 2026-11-06 - Ray tracing: cut-outs, the gun and hands, reflections
 - Asked: ray tracing left out reflections, the gun and hands, see-through and cut-out surfaces, and the lighting.
 - sdk/runtime/gpu/vulkan.cpp: the capture writes a vertex's texture coordinates and diffuse colour after its place (32
