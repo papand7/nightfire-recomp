@@ -7,6 +7,14 @@
 // controller 1 is played on the keyboard and mouse its player's style is 0, so the game's prompts and controls page
 // name the buttons the keys play (the pictures show the keys: src/common/buttons.cpp); a controller puts the chosen
 // style back, and the profile is written with it (0x6ED30 packs a player's controls for the save and the launch data).
+//
+// Crouch on the keyboard is held, not toggled: the game toggles on A (style 0's controls +0x34, set while held). A
+// character's posture is its object's word +0xD2, read by 0xA8A60 (its first person eye, a callback: the object):
+// 4 crouched (the eye lowers by up to 0.45 at actor +0x89C), 5-9 and 13-15 standing (it rises), 10-12 and 16 keep the
+// eye as it is. While the keyboard plays, A reaches the game as a single frame's press whenever the key held and the
+// posture differ (again a few frames later if the posture did not change: no room to stand).
+#include <cstdlib>
+
 #include "common/nightfire.h"
 #include "core/input.h"
 #include "core/log.h"
@@ -18,6 +26,42 @@ namespace {
 constexpr uint32_t kControls = 0x1FE6D0, kPlayerSize = 0x158, kStyle = 0xE, kPort = 0x156;
 int g_player = -1;     // controller 1's player while its style is held at 0
 uint16_t g_chosen = 0;  // its own style meanwhile
+constexpr uint32_t kCrouchSlot = 0x34, kActor = 0xBC, kPlayerIndex = 0x8DE, kPosture = 0xD2, kEyeDrop = 0x89C;
+uint32_t g_objects[4] = {};  // each player's character object, from 0xA8A60 last frame
+
+bool Crouched(uint32_t obj) {
+    int posture = kernel::G<int16_t>(obj + kPosture);
+    if (posture == 4) return true;
+    if (posture == 10 || posture == 11 || posture == 12 || posture == 16)  // the eye kept: as low as it is
+        return kernel::G<float>(kernel::R32(obj + kActor) + kEyeDrop) > 0.225f;
+    return false;
+}
+
+// the keyboard's crouch key held: A pressed for a frame when the posture is not the key's
+void HoldToCrouch() {
+    static bool sent = false;
+    static int wait = 0;
+    static const bool test = [] {  // NF_CROUCH_TEST=1: the pad's A held as the key is, the posture logged
+        const char* e = std::getenv("NF_CROUCH_TEST");
+        return e && *e == '1';
+    }();
+    int player = test ? 0 : g_player;
+    if (player < 0 || (!test && !input::UsingKeyboard())) return;
+    float& a = kernel::G<float>(kControls + uint32_t(player) * kPlayerSize + kCrouchSlot);
+    uint32_t obj = g_objects[player];
+    if (!obj) return;
+    if (test) {
+        static int said = -1;
+        int posture = kernel::G<int16_t>(obj + kPosture) * 2 + (a > 0.5f);
+        if (posture != said) LOGR("nightfire: crouch test: held %d, posture %d", posture & 1, posture >> 1);
+        said = posture;
+    }
+    bool held = a > 0.5f, want = held != Crouched(obj) && !sent && wait <= 0;
+    a = want ? 1.0f : 0.0f;
+    if (want) wait = 12;  // the posture's change waited for before another press
+    wait--;
+    sent = want;
+}
 
 void Restore() {
     if (g_player < 0) return;
@@ -52,7 +96,16 @@ X86_FUNC(sub_000DE720) {
         nf::AimDownSights(count), nf::LanFrame(ctx);
         gpu::SetAiming(nf::AimingDownSights());  // depth of field's focus blurs more while aiming
     }
+    if (players == kControls) HoldToCrouch();
     nf::MouseAsStick();
+}
+
+X86_EXTERN_FUNC(__imp__sub_000A8A60);
+X86_FUNC(sub_000A8A60) {  // a character's first person eye (cdecl: the object): the players' objects kept
+    uint32_t obj = kernel::R32(ctx.esp + 4), actor = obj ? kernel::R32(obj + kActor) : 0;
+    int i = actor ? kernel::G<int8_t>(actor + kPlayerIndex) : -1;
+    if (i >= 0 && i < 4) g_objects[i] = obj;
+    __imp__sub_000A8A60(ctx, base);
 }
 
 // a player's controls packed for the profile and the launch data (cdecl: a tag, the player, ...): with its own style

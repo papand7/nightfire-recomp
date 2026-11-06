@@ -31,6 +31,15 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Hold to crouch on the keyboard
+- C / Ctrl crouch while held instead of toggling (`src/game/controls.cpp`). The game toggles on A (style 0's controls
+  +0x34); a character's posture is its object's word +0xD2 (0xA8A60, the first person eye: 4 crouched, 5-9 and 13-15
+  standing, 10-12 and 16 keep the eye). While the keyboard plays, A reaches the game as a one-frame press whenever the
+  key held and the posture differ, again after 12 frames if the posture did not change (no room to stand). Pads keep
+  the game's toggle.
+- Evidence: `NF_CROUCH_TEST=1 .local/vk/crouch_test.sh` (the pad's A treated as the key): A held 2 s and 2.5 s,
+  posture 4 the whole time, 0 the frame after the release.
+
 ### 2026-11-06 - A random sun for each level
 - Full Lighting's sun is no longer fixed: `src/game/lights.cpp` picks a new one (any side, 26-69 degrees high) when a
   level starts, i.e. after a stop of over half a second in the light updates, if the level's placed lights (every
