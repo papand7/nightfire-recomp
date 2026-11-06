@@ -31,6 +31,14 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - HDR bloom (Vulkan, with tone mapping)
+
+- With HDR tone mapping on, Bloom (the setting or the Enhanced style's) comes from the float scene: its exposed
+  light past a soft knee about white, down six levels (13 taps) and up with a tent, mixed in before AgX / ACES. The
+  style pass's 8 bit bloom is then left out. Lamps and what the effects light past white glow softly; plain snow
+  barely (the knee). About 1 ms under another program's GPU load (.local/vk/bloom_test.sh).
+
+
 ### 2026-11-06 - Motion blur (Vulkan, optional)
 
 - MotionBlurPass (kMotionHlsl), the scene pass's last: the level's camera (rt_cams_, as the snow takes it; now also
