@@ -5,6 +5,7 @@
 // the radius, +0x34 the intensity, +0x38 red, green, blue (bytes), +0x3B its kind (2 lights its owner alone), +0x3C
 // on this frame. The game itself lights only characters and things that move with them (four each, 0x6D8F0); the
 // level's own light is baked into its vertex colours.
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -42,26 +43,42 @@ void NewSunPerLevel(uint32_t sig) {
 }  // namespace
 
 namespace {
-// the players' places for footprints in the snow: each local player's character object ([0x1F6654 + 4p], its place
-// at +0x24, the world's: coop_test.cpp)
+constexpr uint32_t kMostWalkers = 48;
+uint32_t g_noted[kMostWalkers];  // the NPCs and bots whose think ran since the last SetWalkers (the game's thread)
+uint32_t g_noted_n = 0;
+bool Character(uint32_t o) { return o >= 0x10000 && (o & 0x7FFFFFFF) < 0x8000000; }  // 0x8xxxxxxx: the mirror
+// the characters' places for footprints in the snow: each local player's character object ([0x1F6654 + 4p], its
+// place at +0x24, the world's: coop_test.cpp), then the NPCs and bots (a LAN match's other players are bots driven
+// from the network: lan_play.cpp), each by its object
 void SetWalkers() {
-    gpu::Walker ws[4];
+    gpu::Walker ws[4 + kMostWalkers];
     uint32_t n = 0;
-    for (uint32_t i = 0; i < 4; i++) {
-        uint32_t o = kernel::G<uint32_t>(0x1F6654 + 4 * i);
-        if (o < 0x10000 || (o & 0x7FFFFFFF) >= 0x8000000) continue;  // 0x8xxxxxxx: the console's mirror of its memory
+    auto add = [&](uint32_t o, uint32_t id) {
         gpu::Walker& w = ws[n];
         bool ok = true;
         for (int k = 0; k < 3; k++) {
             w.pos[k] = kernel::G<float>(o + 0x24 + 4 * k);
             ok &= std::isfinite(w.pos[k]) && std::abs(w.pos[k]) < 1e6f;
         }
-        w.id = i;
+        w.id = id;
         if (ok) n++;
+    };
+    uint32_t players[4] = {};
+    for (uint32_t i = 0; i < 4; i++) {
+        players[i] = kernel::G<uint32_t>(0x1F6654 + 4 * i);
+        if (Character(players[i])) add(players[i], i);
     }
+    for (uint32_t i = 0; i < g_noted_n; i++)
+        if (std::find(players, players + 4, g_noted[i]) == players + 4) add(g_noted[i], g_noted[i]);
+    g_noted_n = 0;
     gpu::SetWalkers(ws, n);
 }
 }  // namespace
+
+void nf::NoteWalker(uint32_t obj) {
+    if (!Character(obj) || g_noted_n >= kMostWalkers) return;
+    if (std::find(g_noted, g_noted + g_noted_n, obj) == g_noted + g_noted_n) g_noted[g_noted_n++] = obj;
+}
 
 X86_EXTERN_FUNC(__imp__sub_0006D660);
 X86_FUNC(sub_0006D660) {  // the lights' flicker and lifetime, once a frame

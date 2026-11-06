@@ -69,4 +69,8 @@ void RefreshButtons();  // each poll
 void FontPicture(uint32_t header);  // GameInfo::texture_bound (src/common/fonts.cpp)
 bool MenuKeys();  // the menu up shows Enter and Backspace for A and B (not a level's pause, whose controls page
                   // names the keys played)       // Driving.xbe on a mounted gun: its controller style (0-7); -1 in the car, on foot, in a menu  // default.xbe: after its pad reader (src/game/mouse.cpp)  // GameInfo::pad  // no EA and MGM logo movies at boot (HideFile)
+// an NPC's or bot's think ran for this character object (lan_play.cpp's 0x31530 hook): it leaves footprints in the
+// snow too (lights.cpp)
+void NoteWalker(uint32_t obj);
+
 }  // namespace nf

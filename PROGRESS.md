@@ -31,6 +31,15 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Footprints from NPCs, bots and LAN players
+
+- Every NPC and bot runs its think through 0x31530 (lan_play.cpp's hook): it notes the object (nf::NoteWalker, up to
+  48 a frame), and SetWalkers (lights.cpp) adds their places (+0x24) after the local players'. A LAN match's other
+  players are bots driven from the network, so they leave prints too. The renderer takes 64 walkers, 2400 prints.
+- Checked in The Exchange (.local/vk/walk_test.sh): 14 walkers (the player and 13 guards); 37 prints made while the
+  player stood still. Not checked in a multiplayer match (no snowy MP map tried).
+
+
 ### 2026-11-06 - HDR tone mapping: a float scene, AgX / ACES, auto exposure (Vulkan)
 
 - The scene passes from the ray traced relighting to the weather draw into an RGBA16F copy of the scene (ToneBegin

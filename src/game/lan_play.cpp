@@ -52,6 +52,7 @@
 #endif
 
 #include "common/nightfire.h"
+#include "gpu/style.h"
 #include "game/menu_page.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
@@ -1062,6 +1063,7 @@ X86_FUNC(sub_000AD520) {  // a player's think (cdecl: the object): a match is on
 X86_EXTERN_FUNC(__imp__sub_00031530);
 X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
     uint32_t obj = R32(ctx.esp + 4);
+    if (gpu::Style().weather) nf::NoteWalker(obj);
     int slot = g_on ? SlotOf(obj) : -1;
     float speed = 0, move_yaw = 0;
     int key0 = -1;
