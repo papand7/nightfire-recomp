@@ -31,6 +31,13 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Volumetric light's steps by the air's brightness
+
+- The volumetric march takes 12 steps by day, fewer as the air dims (round(12 x sqrt(strength)), 6 to 12; The
+  Exchange's night about 7): a dim air's noise is as dim. 2.2 to 1.0 ms there; every effect on, the GPU frame 8.1 ms
+  (quiet GPU, .local/vk/perf_spot.sh). No noise seen in the shot.
+
+
 ### 2026-11-07 - Smooth turning: an in-between frame turned by the mouse (Vulkan, 100 Hz+ screens)
 
 - GraphicsStyle::smooth_turn (Effects > Smooth Turning). After each present app::Pace asks the backend for a frame
