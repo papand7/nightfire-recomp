@@ -208,6 +208,11 @@ light, and adds a GGX highlight of the roughness kept in proportion to the colou
 game hands over no light directions, so the maps add relief and sheen rather than relight the scene. Vulkan, every
 style but Retro. Measured (The Exchange, RTX 5060): about 1,240 such draws a frame, 60 frames a second.
 
+The sky keeps the game's own pictures and gets no materials, ground detail or relief: a W-buffered scene's sky draw
+(fixed function, drawn about the eye, unfogged in a fogged level, or reaching hundreds of units before and behind the
+eye; the same test the ray traced lighting leaves it out by) is drawn as the game draws it. A pack's pictures are
+upscaled each apart, so a sky box's faces stopped meeting at their edges, and with Materials its faces were bumped.
+
 **Relief** (Materials > PBR + Relief, graphics.toml `surface_depth` 0-2): parallax occlusion mapping. The view's ray is
 stepped down the height map (8 to 24 steps, more at a glancing view) and the texture coordinates moved to where it
 meets it, for the game's own textures as well as the maps, so mortar sinks, stones stand out and hide one another as

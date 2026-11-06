@@ -31,6 +31,16 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - The sky box with the HD pack and Materials
+- The Exchange's moon box showed its cube: faces bumped (Materials' normal and relief maps on the sky's pack pictures),
+  dark bands and thin seams at each edge (the pack's pictures upscaled each apart, their edges padded from their
+  opposite edges, so neighbouring faces no longer meet). One searchlight beam drew as a black bar the same way.
+- Fix (SDK): `SkyDraw` (the ray traced lighting's sky test, now shared and worked out once a draw: fixed function,
+  camera at the world's middle, unfogged in a fogged level, or spanning hundreds of units about the eye); a sky draw
+  keeps the game's own picture and gets no materials or ground detail.
+- Evidence: The Exchange with the pack and PBR + relief, looking up and turning: the moon box smooth, no edges or
+  seams (a 2x zoom of an edge clean); the start view's black bar gone.
+
 ### 2026-11-06 - README: the launcher; the launcher builds this fork
 - README: the Electron launcher (screenshot docs/images/launcher.png, its Mission, Settings, HD Textures, Your music
   and Log pages, how to build it), a work in progress list (story co-op), the original project's features marked as

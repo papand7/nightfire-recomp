@@ -97,7 +97,6 @@ while its files are in use).
   (`NF_COOP_TEST`, no menus): story levels make their player apart from multiplayer's, so the second player has to be
   spawned by hand and the screen split without the multiplayer rules. Planned: a second player on foot, the driving
   missions as driver and gunner, network play by streaming the second player's view.
-- HD texture packs: one of The Exchange's searchlight beams draws as a black bar with the pack.
 
 ## From the original project (not changes of this fork)
 
