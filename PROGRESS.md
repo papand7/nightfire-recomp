@@ -31,6 +31,16 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - The sky box no longer lit as a wall; per-pass GPU times
+
+- The sky's draws (SkyDraw) no longer write depth while the scene pass is wanted (not after the mid-frame clear):
+  the passes saw the sky box as walls a few hundred metres off, lit, fogged and metered by their slopes, so its edges
+  showed toward the sun and full effects washed The Exchange out white. Checked (.local/vk/sun_test.sh): looking
+  at the moon with every effect on, no edges and no wash-out.
+- XBE_PERF logs each scene pass's GPU time ("perf: vulkan scene passes"). The Exchange, every effect on: relight
+  ~4 ms, effect lights ~2.2, snow ~1.4, the rest under 0.4 each (.local/vk/perf_test.sh). Next: optimize those three.
+
+
 ### 2026-11-06 - Footprints from NPCs, bots and LAN players
 
 - Every NPC and bot runs its think through 0x31530 (lan_play.cpp's hook): it notes the object (nf::NoteWalker, up to
