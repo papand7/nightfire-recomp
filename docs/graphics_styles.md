@@ -1,7 +1,7 @@
 # Graphics styles
 
 Settings window (F1, or Back + Start on a controller) > **Graphics Style**. Styles switch at once, in play, and are
-kept in `graphics.toml` beside the exe. They are drawn by the Vulkan renderer (Graphics > Renderer > Vulkan); the
+kept in `graphics.toml` beside the exe. They are drawn by the Vulkan renderer (the only renderer); the
 Direct3D renderers draw Original whatever is chosen.
 
 | Style | What it does |

@@ -15,7 +15,6 @@ it draws and moves as Eurocom's pages do. No ImGui.
 | Anti-Aliasing | Off, FXAA (+ MSAA 2x/4x/8x on Direct3D) | Settings::fxaa, msaa |
 | Sharpening | Off / Low / Medium / High | Settings::sharpen (both) |
 | Render Scale | 50%-200% | Settings::render_percent (both, at once) |
-| Renderer | Direct3D 12 / 11 / Vulkan | next start |
 | Texture Packs | Off / On | mods/textures (Vulkan) |
 | HDR | Off / On (the screen's peak) / On, 400-2000 nits | Settings::hdr, hdr_peak (Vulkan, an HDR10 swap chain when Windows' HDR is on; the HUD and menus at Windows' SDR white, the 3D scene's highlights raised to the peak; `XBE_HDR_TEST=1` shows the pixels taken as the scene red) |
 | Restore Defaults | button | the rows above and the style |

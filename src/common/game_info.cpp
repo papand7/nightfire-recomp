@@ -252,4 +252,5 @@ const app::GameInfo app::kGame = {
     // optional, after these: .wheel (what a steering wheel's force feedback follows)
     .menu_up = nf::MenuUp,                // the menus: the cursor shown, the mouse a pointer (src/common/menu_mouse.cpp)
     .menu_cursor = nf::MenuCursor,        // its picture: the menus' orange pointer
+    .vulkan_only = true,                  // the styles and effects are Vulkan's: no Renderer choice
 };

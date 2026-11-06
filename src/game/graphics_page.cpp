@@ -5,7 +5,7 @@
 //
 // Every row drives a value the renderers use: the quality preset (gpu::ApplyQuality's set: anisotropic filtering,
 // FXAA or SMAA, ambient occlusion, bloom), reflections, the shader style and its options (gpu/style.h, drawn by the Vulkan renderer),
-// sharpening, render scale and the renderer itself (app::Settings, saved in settings.toml); the style's values in
+// sharpening and render scale (app::Settings, saved in settings.toml); the style's values in
 // graphics.toml. What only Vulkan draws reads "Needs Vulkan" under the Direct3D renderers. Changing a value the
 // quality preset sets makes it Custom; choosing a preset sets them all; the style is apart from the preset.
 #include <algorithm>
@@ -45,7 +45,7 @@ constexpr uint32_t kEnhPage = 1, kToonPage = 2, kRetroPage = 3, kMorePage = 4, k
 // the Graphics page's rows
 constexpr uint32_t kQuality = 0x1000FC21, kStyle = 0x1000FC22, kStyleOptions = 0x1000FC23, kFilter = 0x1000FC24,
                    kAo = 0x1000FC25, kBloom = 0x1000FC26, kAa = 0x1000FC27, kSharpen = 0x1000FC28,
-                   kScale = 0x1000FC29, kRenderer = 0x1000FC2A, kPack = 0x1000FC2B, kDefaults = 0x1000FC2C,
+                   kScale = 0x1000FC29, kPack = 0x1000FC2B, kDefaults = 0x1000FC2C,
                    kReflect = 0x1000FC2D, kParticles = 0x1000FC2E, kMaterials = 0x1000FC2F,
                    kLighting = 0x1000FC30, kEffects = 0x1000FC38, kRayTracing = 0x1000FC39,
                    kDof = 0x1000FC3A, kBlood = 0x1000FC3B, kHdr = 0x1000FC3C;
@@ -70,7 +70,6 @@ const std::vector<MenuRow> kGfxRows = {
     {kAa, nf::kMenuChoice, "Anti-Aliasing", "SMAA smooths the scene's edges, the HUD stays sharp; FXAA the whole picture."},
     {kSharpen, nf::kMenuChoice, "Sharpening", "Contrast adaptive sharpening of the finished picture."},
     {kScale, nf::kMenuChoice, "Render Scale", "The 3D picture's size against the screen's: lower is faster, higher smoother."},
-    {kRenderer, nf::kMenuChoice, "Renderer", "Vulkan draws the styles and effects; changes at the next start."},
     {kPack, nf::kMenuChoice, "Texture Packs", "Pictures in mods/textures drawn in place of the game's textures."},
     {kHdr, nf::kMenuChoice, "HDR", "Brighter highlights on an HDR screen (Windows' HDR on). HUD and menus stay at SDR white."},
     {kDefaults, nf::kMenuButton, "Restore Defaults", "Every row on this page and the style options as they first were."},
@@ -310,7 +309,6 @@ void EnterGraphics(X86Context& ctx, uint32_t player) {
     Choice(ctx, player, kAa, AaItems(), aa);
     ShowOptions(ctx, player, kSharpen, kSharpenLevels, float(s.sharpen));
     ShowOptions(ctx, player, kScale, kScales, float(s.render_percent));
-    Choice(ctx, player, kRenderer, {{"Direct3D 12", 0}, {"Direct3D 11", 1}, {"Vulkan", 2}}, s.renderer % 3);
     if (Vulkan()) ShowOptions(ctx, player, kPack, kOffOn, st.texture_pack ? 1.0f : 0.0f);
     else Choice(ctx, player, kPack, {{"Needs Vulkan", 0xFF}}, 0xFF);
     // HDR: off, on at the screen's peak (1), or a peak in nits
@@ -337,7 +335,6 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
     uint32_t aa = ChoiceValue(ctx, player, kAa);
     uint32_t sharpen = uint32_t(ReadOption(ctx, player, kSharpen, kSharpenLevels));
     uint32_t scale = uint32_t(ReadOption(ctx, player, kScale, kScales));
-    uint32_t renderer = ChoiceValue(ctx, player, kRenderer);
     uint32_t hdr = ChoiceValue(ctx, player, kHdr);
     if (Vulkan()) {
         uint32_t style = ChoiceValue(ctx, player, kStyle);
@@ -389,15 +386,14 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
         if (!Vulkan()) s.msaa = msaa;
         s.sharpen = sharpen;
         s.render_percent = scale;
-        if (renderer <= 2) s.renderer = renderer;
         if (hdr != 0xFF) s.hdr = hdr != 0, s.hdr_peak = hdr > 1 ? hdr : 0;
         app::Save();
     }
     Request(st);
     LOGR("nightfire: Graphics kept: quality %s, style %s, filtering %u, AO %d, bloom %d, reflections %d, FXAA %d, "
-         "SMAA %d, sharpen %u, scale %u%%, renderer %u, packs %d",
+         "SMAA %d, sharpen %u, scale %u%%, packs %d",
          kQualityNames[st.quality], st.preset.empty() ? "edited" : st.preset.c_str(), aniso, st.quality_ao,
-         st.quality_bloom, st.reflections, fxaa, smaa, sharpen, scale, renderer, st.texture_pack);
+         st.quality_bloom, st.reflections, fxaa, smaa, sharpen, scale, st.texture_pack);
 }
 
 void RestoreDefaults(X86Context& ctx, uint32_t player) {

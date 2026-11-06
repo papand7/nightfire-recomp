@@ -31,6 +31,14 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Vulkan only: the Renderer choice gone
+
+- `GameInfo::vulkan_only` (SDK): the settings hold the renderer at Vulkan and the settings window hides its Renderer
+  choice. Direct3D 12 still starts in its place on a PC where Vulkan cannot.
+- NightFire sets it; the Graphics page's Renderer row is gone (Texture Packs, HDR and Restore Defaults one row up).
+- Checked: a settings file with `renderer = 'd3d12'` starts on Vulkan.
+
+
 ### 2026-11-06 - Sprint slower, weapon sway's steps capped
 - Sprint 1.3x the run (was 1.6x: too fast). The sway's steps followed the distance walked, so a sprint (7.8 units a
   second measured at 1.3x; about 9.6 at 1.6x) bobbed 3-4 times a second, the gun's dip twice that; now at most 1.25

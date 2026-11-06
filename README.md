@@ -26,7 +26,7 @@ Noir. Same build; only the Graphics menu changed.*
 ## What's new in this fork
 
 **Renderer and graphics**
-- **Vulkan renderer** (`renderer = "vulkan"`), alongside the original's Direct3D 12 and 11.
+- **Vulkan renderer**, always (Direct3D 12 only where Vulkan cannot start); no Renderer choice.
 - **Ray tracing** on RTX-class GPUs (Vulkan ray queries):
   - **Full Lighting:** the level's baked light is replaced by the game's own lamps, each with traced shadows. Outdoors
     there is a sun with traced shadows, in a random place for each level, its colour taken from the level's own light.
@@ -136,7 +136,7 @@ Vulkan 1.3; for ray tracing, one with ray queries (RTX-class).
 2. Put your game files in `assets`: `assets\default.xbe` with `Driving.xbe` and the game's folders beside it, or your
    disc's `.iso`.
 3. Run `build.bat`. The first build recompiles both programs and takes a while; later builds are quicker.
-4. Run `out\build\release\Nightfire.exe`, then choose **Renderer: Vulkan** in Settings > Graphics and restart.
+4. Run `out\build\release\Nightfire.exe`.
 
 Or use [the launcher](#the-launcher-new-in-this-fork), which does all of this for you.
 
