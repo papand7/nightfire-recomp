@@ -105,14 +105,27 @@ GPU with ray queries (VK_KHR_ray_query: NVIDIA RTX, AMD RX 6000 and later, Intel
 this GPU". Every style but Retro. Off by default.
 
 - Each frame the 3D scene's opaque draws write their vertices where the game's own vertex programs place them (a
-  variant of the draw's vertex shader), and the scene pass builds them into an acceleration structure: what is off
-  screen or hidden is in it, unlike the depth the screen-space passes read. Left out: the 2D, blended and cut-out
-  draws, and what is drawn after the game clears depth mid-frame (the gun and hands).
+  variant of the draw's vertex shader), with their texture coordinates and diffuse colour, and the scene pass builds
+  them into an acceleration structure: what is off screen or hidden is in it, unlike the depth the screen-space passes
+  read. Each triangle has a material word (its texture's slot in the frame's table of up to 1024, the alpha test).
+- Cut-outs (alpha tested: fences, grilles, leaves) are a second, non-opaque geometry: a ray that meets one reads its
+  texture's alpha there and passes through where the game's alpha test would discard it.
+- The gun and hands (drawn after the game clears depth mid-frame) are an instance of their own (mask 2): rays from
+  them meet the world and themselves, so they are shaded too; rays from the world leave them out (the gun reaches
+  into walls when Bond stands close to one).
+- Left out: the 2D and blended draws (glass, smoke, particles: they do not block light).
 - **Shade**: ambient occlusion traced against it at half the scene's size, in place of the screen-space one. A pixel's
   place and slope are its own triangle's, where a ray from the camera meets it (the depth's neighbours give a wrong
   slope on flat ground far off). **Shadows**: effect lights (Particles > Soft + Lights) cast traced shadows.
+- **Reflections** (with Reflections on): traced in place of the screen-space ones on the surfaces that reflect. What a
+  ray meets is the scene's colour where that point shows on screen (lit as the game lit it), else its texture by its
+  diffuse colour, brought to the scene's brightness about the surface: what is behind the camera or hidden shows.
+- Not ray traced: the game's own lighting. NightFire's levels are lit ahead of time (light maps and vertex colours,
+  with no list of lights to trace from), so the traced passes shade, shadow and reflect over that lighting.
 - Test views (read at start): `XBE_RT_TEST=1` the left half with it, `2` the occlusion alone, `3` a ray from the
-  camera against the depth (green where they agree). `.local/vk/rt_test.sh` shoots on/off pairs in a Quick Game.
+  camera against the depth (green where they agree), `4` the reflections' hits (green shown on screen, blue off it,
+  red missed; with `XBE_SSR_TEST=1` every surface reflects). `.local/vk/rt_test.sh` shoots on/off pairs in a Quick
+  Game.
 
 ## Depth of field
 

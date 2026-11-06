@@ -31,6 +31,25 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Ray tracing: cut-outs, the gun and hands, reflections
+- Asked: ray tracing left out reflections, the gun and hands, see-through and cut-out surfaces, and the lighting.
+- sdk/runtime/gpu/vulkan.cpp: the capture writes a vertex's texture coordinates and diffuse colour after its place (32
+  bytes); each triangle gets a material word (RtMaterial: its texture's slot in a per-frame table of 1024 in a
+  descriptor set of its own, set 1, the alpha test); the shared HLSL (kRtCommonHlsl) has RT_PROCEED, which alpha
+  tests a cut-out's candidate hit. shaderSampledImageArrayNonUniformIndexing is now needed for ray tracing.
+- Cut-outs: a second, non-opaque geometry (Fort Knox: 244 triangles a frame). The gun and hands: a bottom level and
+  instance of their own (custom index 1, mask 2); the occlusion traces their pixels against everything (the world's
+  rays use mask 1). Test view 3 (camera ray against depth) is green on the gun: its captured triangles match its
+  depth. In the occlusion view the slide, trigger guard and the fingers around the grip darken.
+- Reflections: RtReflectPass (kRtReflectHlsl) replaces the screen-space ones when ray tracing is on; the hit's
+  colour is the scene's where it shows on screen, else its texture by its diffuse colour at the scene's brightness
+  there. It reads the depth kept at the gun's clear (the end's holds only the gun: every hit read as hidden at
+  first). XBE_RT_TEST=4 shows the hits (with XBE_SSR_TEST=1: mostly green, blue off screen, few misses).
+- Blended draws stay out (glass and smoke do not block light). The game's own lighting is baked (light maps, vertex
+  colours) and is not replaced.
+- Next: a check by eye on a level with listed reflective surfaces; the effect lights and bounced light still read
+  the end's depth (the gun alone), as noted before.
+
 ### 2026-11-05 - Aim down sights: each gun's sights measured again, on the middle
 - Reported: most guns' sights were off the middle when aimed (shots go through the middle, so they missed). Measured
   at 1920x1080: pistols 2-5 had their front sight 30-40 px left and 30 px low, the silenced 6-9 50 px left, 13 45 px
