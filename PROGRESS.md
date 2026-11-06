@@ -31,6 +31,15 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - A random sun for each level
+- Full Lighting's sun is no longer fixed: `src/game/lights.cpp` picks a new one (any side, 26-69 degrees high) when a
+  level starts, i.e. after a stop of over half a second in the light updates, if the level's placed lights (every
+  lifetime-0 record, on or off, so strobes don't count) differ from before; a level with none rerolls after a stop of
+  over 3 s. SDK: `gpu::SetSunDirection` / `SunDirection`; the renderer makes a low sun warmer.
+- Evidence: two Quick Games, log `nightfire: the sun ...` once at the level's start (252/65 and 80/38), unchanged for
+  the rest of the match; 60 fps.
+- Next: an outdoor map's look with low suns.
+
 ### 2026-11-06 - Ray traced level lighting, Noir style, blood
 - Full Lighting (Effects > Ray Tracing; graphics.toml `rt_lighting`, `rt_sun`): the level's baked light (its vertex
   colours: world draws are texture x diffuse x 2, no light maps) divided out per pixel and new light put in. Indoors
