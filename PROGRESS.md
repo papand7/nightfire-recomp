@@ -31,6 +31,19 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - HDR tone mapping: a float scene, AgX / ACES, auto exposure (Vulkan)
+
+- The scene passes from the ray traced relighting to the weather draw into an RGBA16F copy of the scene (ToneBegin
+  blits it in and swaps it for the target's own; their pipelines take `scene_fmt_`). Their outputs are no longer
+  saturated, so the light past white is kept (a UNORM target clamps as before).
+- ToneResolve (kToneHlsl): the scene metered on a 64 x 36 grid, the exposure eased in a 1x1 image (this frame's and the
+  last in turn), then AgX (minimal fit, a touch more contrast and colour) or ACES (Narkowicz, mid grey kept) back
+  into the 8 bit target before the style pass. The style pass's own tone map and exposure are left out meanwhile.
+- `GraphicsStyle::hdr_tonemap` / `auto_exposure`; Effects > Tone Mapping: Off, AgX, ACES, each + Auto Exposure.
+- Checked in The Exchange (.local/vk/tone_test.sh): with ray traced lighting, Off clips the sunlit snow flat white,
+  AgX and ACES keep its detail. Without ray tracing the night stays dark (auto exposure between 0.7x and 1.3x).
+- Next: HDR10 output could take the float scene before the curve.
+
 ### 2026-11-06 - Vulkan only: the Renderer choice gone
 
 - `GameInfo::vulkan_only` (SDK): the settings hold the renderer at Vulkan and the settings window hides its Renderer

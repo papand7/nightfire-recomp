@@ -48,7 +48,7 @@ constexpr uint32_t kQuality = 0x1000FC21, kStyle = 0x1000FC22, kStyleOptions = 0
                    kScale = 0x1000FC29, kPack = 0x1000FC2B, kDefaults = 0x1000FC2C,
                    kReflect = 0x1000FC2D, kParticles = 0x1000FC2E, kMaterials = 0x1000FC2F,
                    kLighting = 0x1000FC30, kEffects = 0x1000FC38, kRayTracing = 0x1000FC39,
-                   kDof = 0x1000FC3A, kBlood = 0x1000FC3B, kHdr = 0x1000FC3C;
+                   kDof = 0x1000FC3A, kBlood = 0x1000FC3B, kHdr = 0x1000FC3C, kToneHdr = 0x1000FC3D;
 // the style pages' rows
 constexpr uint32_t kExposure = 0x1000FC31, kTonemap = 0x1000FC32, kContrast = 0x1000FC33, kSaturation = 0x1000FC34,
                    kVignette = 0x1000FC35, kGrain = 0x1000FC36, kSceneSharpen = 0x1000FC37;
@@ -85,6 +85,7 @@ const std::vector<MenuRow> kEffectsRows = {
     {kRayTracing, nf::kMenuChoice, "Ray Tracing", "Shade: in place of AO. Shadows: from effect lights. Full: the level lit by its lamps and a sun. + GI: light bounced off walls. RTX-class GPU.", 6},
     {kDof, nf::kMenuChoice, "Depth of Field", "Distance: far scenery soft. Focus: what you aim at stays sharp.", 7},
     {kBlood, nf::kMenuChoice, "Blood", "Blood where your shots hit, and at your view's edges when you are hit. Every style.", 8},
+    {kToneHdr, nf::kMenuChoice, "Tone Mapping", "AgX or ACES: bright light rolls off instead of clipping to white. Auto: the exposure adapts.", 9},
 };
 const std::vector<MenuRow> kEnhRows = {
     {kExposure, nf::kMenuChoice, "Exposure", "How bright the scene is drawn.", 0},
@@ -363,6 +364,7 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
             st.rt_volumetric = keep.rt_volumetric, st.rt_vol_strength = keep.rt_vol_strength;
             st.weather = keep.weather, st.snow_amount = keep.snow_amount, st.footprints = keep.footprints;
             st.dof = keep.dof, st.dof_strength = keep.dof_strength;
+            st.hdr_tonemap = keep.hdr_tonemap, st.auto_exposure = keep.auto_exposure;
         }
         st.texture_pack = ReadOption(ctx, player, kPack, kOffOn) > 0;
     }
@@ -420,7 +422,7 @@ void RestoreDefaults(X86Context& ctx, uint32_t player) {
 void EnterEffects(X86Context& ctx, uint32_t player) {
     ShowOptions(ctx, player, kBlood, kOffOn, Current().blood ? 1.0f : 0.0f);  // drawn over the picture: any renderer
     if (!Vulkan()) {
-        for (uint32_t id : {kAo, kBloom, kReflect, kParticles, kMaterials, kLighting, kRayTracing, kDof})
+        for (uint32_t id : {kAo, kBloom, kReflect, kParticles, kMaterials, kLighting, kRayTracing, kDof, kToneHdr})
             Choice(ctx, player, id, {{"Needs Vulkan", 0xFF}}, 0xFF);
         return;
     }
@@ -450,6 +452,10 @@ void EnterEffects(X86Context& ctx, uint32_t player) {
         Choice(ctx, player, kRayTracing, {{"Not on this GPU", 0xFF}}, 0xFF);
     Choice(ctx, player, kDof, {{"Off", gpu::kDofOff}, {"Distance", gpu::kDofDistance}, {"Focus", gpu::kDofFocus}},
            uint32_t(st.dof));
+    // the curve (bits 0 and 1), auto exposure (bit 2)
+    Choice(ctx, player, kToneHdr,
+           {{"Off", 0}, {"AgX", 1}, {"ACES", 2}, {"AgX + Auto Exposure", 5}, {"ACES + Auto Exposure", 6}},
+           uint32_t(st.hdr_tonemap) | (st.hdr_tonemap && st.auto_exposure ? 4u : 0u));
 }
 void KeepEffects(X86Context& ctx, uint32_t player) {
     gpu::GraphicsStyle st = Current();
@@ -485,6 +491,8 @@ void KeepEffects(X86Context& ctx, uint32_t player) {
         st.rt_volumetric = rt >= 5;
     }
     if (uint32_t dof = ChoiceValue(ctx, player, kDof); dof < uint32_t(gpu::kDofModes)) st.dof = int(dof);
+    if (uint32_t tm = ChoiceValue(ctx, player, kToneHdr); tm <= 6 && (tm & 3) < uint32_t(gpu::kHdrTones))
+        st.hdr_tonemap = int(tm & 3), st.auto_exposure = (tm & 4) != 0;
     {
         // AO and bloom are the quality preset's: a change here can make it Custom
         std::lock_guard<std::recursive_mutex> lock(app::UiLock());

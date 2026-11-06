@@ -178,6 +178,16 @@ Retro.
   two; faster in heavier snow); cleared each level. `XBE_SNOW_TEST=1` the snow over a darkened scene, `2` the prints red.
 - `.local/vk/snow_test.sh` (The Exchange via `NF_LEVEL=07000005` and the menus): the game's snow, ours, heavy, prints.
 
+## HDR tone mapping
+
+Effects > Tone Mapping (`hdr_tonemap = "agx"` or `"aces"`, `auto_exposure` in graphics.toml; Vulkan, every style but
+Retro). The passes from the ray traced relighting to the snow draw into a 16 bit float copy of the scene, so the light
+they add past white (sunlit snow, lamps, flashes) is kept instead of clipped. AgX or ACES then brings it to the screen,
+mid grey where it was. The Enhanced style's own tone map and exposure are left out while it is on. Auto exposure meters
+the scene on a 64 x 36 grid (the middle counting most) and eases toward a part of the way to mid grey in about a second
+and a half, between 0.7x and 1.3x, so a night stays a night. `XBE_TONE_TEST=1` draws the right half without it, `2`
+shows what is past white there.
+
 ## Depth of field
 
 The game's Graphics page > Effects > **Depth of Field** (Off, Distance, Focus), Graphics Style > Depth of field, or
