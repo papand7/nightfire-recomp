@@ -31,6 +31,21 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Foot IK: the characters' feet on the ground (src/game/foot_ik.cpp)
+
+- Static RE (.local/ik_notes.md): the pose solver 0xDD290 (obj, skel = [obj+0xB8]+0x58, char skin); world bone
+  matrices [skel+0x40], 0x3C bytes (rows at +0/+0x10/+0x20, place +0x30); flag 4 at skel+0x50; the 73-bone human
+  skeleton's legs 49-52 and 53-56 from the pelvis 0; the ground ray 0x2C4E0 (9 args, mask 0x0C, flags 8; hit +0x38,
+  normal +0x10), freed by 0x294D0.
+- The hook makes the world pose first (the original through CallGuest, guarded), rays under the middle and each
+  ankle, lowers the pelvis for the lower foot, two-bone IK per leg (the knee in its own bend plane), the foot tilted
+  60% with the slope, eased; then the original makes the skin from it. Not in the air or dead. Setting foot_ik (on),
+  NF_IK=0/1, NF_IK_TRACE=1.
+- Checked (.local/vk/ik_test.sh): 5 characters in The Exchange, flat ground bends about 0.01, walking up the slope
+  0.04-0.08 with the pelvis lowered; the turned knee and ankle land within 0.0001 of the solve; no crash. Not yet seen
+  close on a guard on a slope (the guards were far).
+
+
 ### 2026-11-06 - Full settings at night: the moon, not a day's sun
 
 - Ray traced lighting took The Exchange (night, snow) for a day: snow makes the outdoor baked light as bright as a

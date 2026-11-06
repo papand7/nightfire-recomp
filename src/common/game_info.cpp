@@ -20,6 +20,7 @@ bool skip_paris = true;
 bool hide_hud = false;
 bool aim_down_sights = true;
 bool view_motion = true;
+bool foot_ik = true;
 uint32_t fov_percent = 100;
 extern bool modern_buttons;  // src/common/buttons.cpp
 
@@ -57,6 +58,7 @@ void Init() {
     if (const char* e = std::getenv("NF_FOV"); e && *e) nf::fov_percent = uint32_t(std::atoi(e));
     if (const char* e = std::getenv("NF_HIDE_HUD"); e && *e) nf::hide_hud = *e == '1';
     if (const char* e = std::getenv("NF_ADS"); e && *e) nf::aim_down_sights = *e == '1';
+    if (const char* e = std::getenv("NF_IK"); e && *e) nf::foot_ik = *e == '1';
     if (const char* e = std::getenv("NF_MODERN_BUTTONS"); e && *e) nf::modern_buttons = *e == '1';
     if (const char* e = std::getenv("NF_ROUNDED_FONT"); e && *e) nf::rounded_font = *e == '1';
     // every achievement's condition parses (a typo would leave it never met)
@@ -215,6 +217,8 @@ const app::GameInfo app::kGame = {
                 {"hide_hud", &nf::hide_hud, nullptr, "Hide the HUD", "For screenshots; at once, on foot and driving. The menus and pause screens stay."},
                 {"view_motion", &nf::view_motion, nullptr, "Weapon sway and head bob",
                  "A very light bob as you walk and the gun lagging a little behind the view's turn (the original has none)."},
+                {"foot_ik", &nf::foot_ik, nullptr, "Feet on the ground",
+                 "Characters' legs bend so each foot stands on the ground under it, on slopes and steps (the original's float or sink)."},
                 {"aim_down_sights", &nf::aim_down_sights, nullptr, "Aim down sights",
                  "L (the right mouse button) raises the gun and zooms in a little, instead of the game's manual aim and its red crosshair. Scopes stay as they are."},
                 {"rounded_font", &nf::rounded_font, nullptr, "Rounded font",
