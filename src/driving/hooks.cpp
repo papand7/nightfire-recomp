@@ -31,6 +31,7 @@ uint64_t NetStateHash() { return 0; }  // no LAN play in the driving levels
 bool PlayerFree() { return true; }  // default.xbe's questions (src/game/mouse.cpp)
 bool Zoomed() { return false; }
 void ScopeZoom(int) {}
+bool ViewTurn(float&, float&, float&) { return false; }  // the driving levels turn by the stick: no in-between frames
 
 int GunStyle() {
     if (kernel::R32(0x1E455C + 4) != 1 || MenuUp()) return -1;

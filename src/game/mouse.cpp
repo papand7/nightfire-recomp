@@ -153,6 +153,19 @@ bool PlayerFree() { return g_direct <= 2; }
 bool Zoomed() { return ViewZoom() < kZoomedBelow && !AimingDownSights(); }
 void ScopeZoom(int notches) { g_zoom_notches += notches; }
 
+// GameInfo::view_turn (smooth turning): the turn the mouse's counts not yet read will make, as the update above makes
+// it, and the view's half angle's tangent (60 degrees, zoomed)
+bool ViewTurn(float& yaw, float& pitch, float& tan_half_fov) {
+    if (!PlayerFree() || MenuUp() || !input::UsingKeyboard()) return false;
+    float x, y;
+    if (!input::PeekMouse(x, y)) return false;
+    float zoom = ViewZoom();
+    float k = kRadiansPerCount * std::min(zoom, 1.0f) * (Zoomed() ? kZoomedScale : 1.0f);
+    yaw = x * k, pitch = y * k;
+    tan_half_fov = std::tan(0.5f * kGameFov * std::min(zoom, 2.0f));
+    return true;
+}
+
 // after 0xDE720 filled the controls: where the mouse does not turn the player itself, it plays the right stick
 // (style 0's: slot 0 and 3 its x, 4 and 5 its y, -1 to 1)
 void MouseAsStick() {

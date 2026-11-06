@@ -31,6 +31,20 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Smooth turning: an in-between frame turned by the mouse (Vulkan, 100 Hz+ screens)
+
+- GraphicsStyle::smooth_turn (Effects > Smooth Turning). After each present app::Pace asks the backend for a frame
+  in between (Backend::MidFrame); the render thread (render_thread.cpp, Op::Mid) runs it after that present and
+  waits there until half the presents' eased interval. It takes the turn the mouse has made since the title last read
+  it (GameInfo::view_turn: nf::ViewTurn from input::PeekMouse, the same radians a count and zoom as the mouse's
+  own turn), turns the frame's scene copy by it (kWarpHlsl: pitch, then yaw; the edge kept past the frame), the HUD
+  (where the presented frame is not its scene) and the gun (marked in the copy's alpha from the kept depth) where
+  they were, through the same blit and overlay as the title's frames. Screens under 100 Hz and HDR chains: none.
+- Checked on this PC (144 Hz): 60 in-between frames a second in The Exchange beside the title's 60;
+  XBE_WARP_TEST=5 (every one turned 5 degrees, one written to warp_test.png): the world shifted, HUD and gun still.
+  Not yet felt with a real mouse.
+
+
 ### 2026-11-06 - Draw distance; no blob shadows under ray traced lighting (src/game/distance.cpp)
 
 - Static RE (.local/lod_notes.md): on foot no model LOD and no distance cull; the view ends at the level's fog
