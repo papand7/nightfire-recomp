@@ -31,6 +31,21 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Story co-op: two players, split screen (NF_COOP_TEST=3)
+- A story level makes its player in 0xAE870 from a start record (0x2774D0 + i*0xCC: place, +0xC facing, +0x1C
+  loadout) through 0xACAB0 (cdecl: player, place*, facing*, loadout*; the object in [0x1F6654 + 4p], the actor in
+  [0x2774B8 + 4p], it reads the player's camera [0x1F661C + 4p]). Cameras are made in 0x25D10 (one a human only with
+  the multiplayer flag) and laid out by 0x25B80 (camera, x, y, w, h as floats of 640 x 480).
+- `src/game/coop_test.cpp` =3: the humans held at two from the mission's choice; after 0x25D10 and after 0xAE870 the
+  second camera made (0x25BF0) and the screen split (one above the other; side by side with [0x1F660C] 1); after
+  0xAE870 the second player made 1.2 units beside the first, with the first start record's loadout less its
+  condition (+0x2C, 0x1D: 0xACAB0 returns 0 while flag 0x1DF138[0x1D] is clear).
+- Evidence: The Exchange, two views one above the other, each player sees the other, controller 2 walks player 2
+  (`.local/vk/coop_test.sh`, 2:LS), no traps over a minute. The multiplayer flag stays clear.
+- Next: the HUD (the radar only in the lower view), the views' aspect (each half drawn with the full screen's), the
+  Vulkan passes (one camera), then the story's own: objectives and triggers from player 1, deaths, cutscenes, the
+  mission's end.
+
 ### 2026-11-06 - The sky box with the HD pack and Materials
 - The Exchange's moon box showed its cube: faces bumped (Materials' normal and relief maps on the sky's pack pictures),
   dark bands and thin seams at each edge (the pack's pictures upscaled each apart, their edges padded from their
