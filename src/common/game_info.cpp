@@ -19,7 +19,6 @@ bool skip_intro = false;
 bool skip_paris = true;
 bool hide_hud = false;
 bool aim_down_sights = true;
-bool ads_focus_blur = true;
 bool view_motion = true;
 uint32_t fov_percent = 100;
 extern bool modern_buttons;  // src/common/buttons.cpp
@@ -215,8 +214,6 @@ const app::GameInfo app::kGame = {
                 {"hide_hud", &nf::hide_hud, nullptr, "Hide the HUD", "For screenshots; at once, on foot and driving. The menus and pause screens stay."},
                 {"view_motion", &nf::view_motion, nullptr, "Weapon sway and head bob",
                  "A very light bob as you walk and the gun lagging a little behind the view's turn (the original has none)."},
-                {"ads_focus_blur", &nf::ads_focus_blur, nullptr, "Focus blur when aiming",
-                 "Aiming down the sights blurs what lies behind the target (Vulkan; one view, not split screen)."},
                 {"aim_down_sights", &nf::aim_down_sights, nullptr, "Aim down sights",
                  "L (the right mouse button) raises the gun and zooms in a little, instead of the game's manual aim and its red crosshair. Scopes stay as they are."},
                 {"rounded_font", &nf::rounded_font, nullptr, "Rounded font",

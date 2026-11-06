@@ -1153,6 +1153,16 @@ X86_FUNC(sub_000211F0) {
     uint32_t entry = R32(ctx.esp + 0x10), origin = R32(ctx.esp + 0x14), dir = R32(ctx.esp + 0x18);
     uint32_t snd = R32(ctx.esp + 0x1C) & 0xFFFF;
     int slot = g_on && !g_replaying ? SlotOf(shooter) : -1;
+    static const bool trace = std::getenv("NF_SHOT_TRACE") != nullptr;  // diagnostic: player 1's shots against the view
+    if (trace && shooter && dir && R32(shooter + 0xBC) && kernel::G<int8_t>(R32(shooter + 0xBC) + 0x8DE) == 0) {
+        float d[3], yaw, pitch;
+        std::memcpy(d, kernel::HostPtr(dir), 12);
+        std::memcpy(&yaw, kernel::HostPtr(shooter + 0x40), 4);
+        std::memcpy(&pitch, kernel::HostPtr(R32(shooter + 0xBC) + 0x838), 4);
+        LOGR("nightfire: shot: dir %+.4f %+.4f %+.4f (yaw %.2f deg, up %.2f deg), view yaw %.2f deg, pitch %.2f deg",
+             d[0], d[1], d[2], std::atan2(d[0], d[2]) * 57.29578f, std::asin(std::clamp(d[1], -1.0f, 1.0f)) * 57.29578f,
+             yaw * 57.29578f, pitch * 57.29578f);
+    }
     __imp__sub_000211F0(ctx, base);
     if (slot < 0 || !origin || !dir || entry < 0x18CFA0) return;
     if (slot >= kFirstBot && (!g_host || nf::LanPuppet(shooter))) return;  // the host's bots' rounds go out too

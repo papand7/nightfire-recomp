@@ -35,9 +35,10 @@ constexpr uint32_t kActor = 0xBC, kWeaponState = 0xB8, kWeaponIndex = 0x52, kPla
 constexpr uint32_t kZoomTarget = 0x864, kZoomMost = 0x868, kGun = 0x778, kGunPos = 0x24, kHud = 0x770;
 constexpr float kZoom = 1.3f;                          // the view's angle divided by this
 // each weapon's sights brought to the middle of the view (its model's frame: +x left, +y up): the gun's place at the
-// hip (0xBCAA0) moved by its sight's place on screen there, at the model's depth (NF_ADS_WEAPONS shots, 2026-11-05:
-// the sight's pixels from the middle times the depth over the 1221-pixel focal length of a 1410-pixel view, then
-// corrected from aimed shots at the zoomed 1587). An optic
+// hip (0xBCAA0) moved by its sight's place on screen there, at the model's depth. Each weapon its own: models that
+// shared one (the silenced pistols, 18 and 19) sat up to 100 px apart. Measured from aimed NF_ADS_CAL shots
+// (2026-11-05, a 1920x1080 view: the front sight's or the rear notch's pixels from the middle; 2 cm at a pistol's
+// depth is about 45 px, measured again per gun from pictures with it 2 cm left and up). An optic
 // (a sight that hides the view: the scoped rifles' that are not the game's scopes, the launchers) zooms by the
 // weapon's own amount and the gun is put out of sight at full aim, the crosshair left on
 struct Sight {
@@ -47,16 +48,24 @@ struct Sight {
 };
 Sight SightOf(int idx) {
     switch (idx) {
-        case 1: case 2: return {0.25f, 0.11f, kZoom, false};                    // the P2K
-        case 3: case 4: case 5: case 6: case 7: case 8: case 9:
-            return {0.287f, 0.110f, kZoom, false};
-        case 10: case 11: case 12: case 13: return {0.215f, 0.070f, kZoom, false};
-        case 14: case 15: case 16: return {0.349f, 0.104f, kZoom, false};
-        case 18: case 19: return {0.255f, 0.120f, kZoom, false};
-        case 20: case 21: return {0.250f, 0.144f, kZoom, false};
-        case 22: case 23: return {0.230f, 0.076f, kZoom, false};
+        case 1: case 2: return {0.264f, 0.135f, kZoom, false};                  // the P2K
+        case 3: return {0.270f, 0.129f, kZoom, false};
+        case 4: return {0.266f, 0.128f, kZoom, false};
+        case 5: return {0.266f, 0.128f, kZoom, false};
+        case 6: return {0.268f, 0.108f, kZoom, false};                          // 6-9 silenced: the rear notch
+        case 7: case 9: return {0.266f, 0.108f, kZoom, false};
+        case 8: return {0.267f, 0.108f, kZoom, false};
+        case 10: case 11: case 12: return {0.215f, 0.070f, kZoom, false};
+        case 13: return {0.222f, 0.090f, kZoom, false};
+        case 14: case 15: return {0.358f, 0.100f, kZoom, false};
+        case 16: return {0.359f, 0.102f, kZoom, false};
+        case 18: return {0.233f, 0.121f, kZoom, false};
+        case 19: return {0.200f, 0.073f, kZoom, false};
+        case 20: return {0.253f, 0.143f, kZoom, false};
+        case 21: return {0.254f, 0.144f, kZoom, false};
+        case 22: case 23: return {0.250f, 0.084f, kZoom, false};
         case 24: case 25: return {0.230f, 0.076f, 3.0f, true};                // the rifle with a scope
-        case 28: case 29: return {0.166f, 0.068f, kZoom, false};
+        case 28: case 29: return {0.206f, 0.041f, kZoom, false};                // the receiver's top
         case 42: case 43: return {0.0f, 0.0f, 2.0f, true};
         case 44: case 45: case 46: case 47: case 48: case 49: return {0.0f, 0.0f, 1.6f, true};  // the launchers
         case 50: return {0.160f, 0.153f, kZoom, false};
@@ -64,7 +73,6 @@ Sight SightOf(int idx) {
     }
 }
 constexpr float kEase = 0.125f;                        // of the way in or out a frame
-constexpr uint32_t kCameras = 0x1F661C;                // the player views' cameras (a second: split screen)
 
 struct Player {
     bool held = false;    // L held last frame (the toggle's edge)
@@ -81,6 +89,9 @@ float GetF(uint32_t va) {
     return f;
 }
 void SetF(uint32_t va, float f) { std::memcpy(&kernel::G<uint32_t>(va), &f, 4); }
+
+uint32_t g_test_frames = 0;  // NF_ADS_WEAPONS's count
+uint32_t TestPeriod() { return std::getenv("NF_ADS_CAL") ? 400 : 200; }  // frames a weapon
 
 // NF_ADS_WEAPONS=N (diagnostic): player 1 aims all the time and holds each weapon from N on in turn, 200 frames each
 // (given by 0xBA5E0 and asked for at the weapon state's +0x53, as a pickup does: the gun's state machine draws it)
@@ -187,16 +198,23 @@ X86_FUNC(sub_000BD740) {  // the first person gun placed (cdecl: the object)
     if (i < 0) return;
     if (i == 0) nf::WeaponKeys(ctx, obj);  // the number keys (src/game/weapon_keys.cpp)
     if (i == 0 && WeaponsTest()) {
-        static uint32_t frames = 0, idx = uint32_t(WeaponsTest()) - 1;
-        if (frames % 200 == 195 && std::getenv("NF_ADS_SHOTS")) {  // its picture: the renderer's shot file
-            if (FILE* sf = std::fopen("shot", "w")) std::fprintf(sf, "%s\\w_%02u.png\n", std::getenv("NF_ADS_SHOTS"), idx), std::fclose(sf);
+        static uint32_t idx = uint32_t(WeaponsTest()) - 1;
+        int f = int(g_test_frames % TestPeriod()) + 200 - int(TestPeriod());  // its pictures (the shot file): a as it is, b, c NF_ADS_CAL
+        if ((f == 130 || f == 160 || f == 190) && std::getenv("NF_ADS_SHOTS")) {
+            if (FILE* sf = std::fopen("shot", "w"))
+                std::fprintf(sf, "%s\\w_%02u%c.png\n", std::getenv("NF_ADS_SHOTS"), idx, 'a' + (f - 130) / 30), std::fclose(sf);
         }
-        if (++frames % 200 == 0) {
+        if (++g_test_frames % TestPeriod() == 0) {
             uint32_t state = R32(obj + kWeaponState);
             for (int tries = 0; tries < 64 && state; tries++) {
                 idx = (idx + 1) % 64;
                 uint32_t w = kWeapons + idx * kWeaponSize;
                 if (!kernel::G<uint16_t>(w)) continue;  // no weapon there
+                if (const char* only = std::getenv("NF_ADS_ONLY")) {  // NF_ADS_ONLY=,2,3,: those weapons alone
+                    char key[8];
+                    std::snprintf(key, sizeof key, ",%u,", idx);
+                    if (!std::strstr(only, key)) continue;
+                }
                 uint32_t eax = ctx.eax;  // given (0xBA5E0: the actor, the index, ammo), then asked for (+0x53)
                 kernel::CallGuest(ctx, 0xBA5E0, {R32(obj + kActor), idx, 999});
                 ctx.eax = eax;
@@ -209,11 +227,6 @@ X86_FUNC(sub_000BD740) {  // the first person gun placed (cdecl: the object)
     }
     Player& p = g_players[i];
     p.t = std::clamp(p.t + (p.aiming ? kEase : -kEase), 0.0f, 1.0f);
-    if (i == 0) {  // player 1's sights: the focus blur, with one view only (split screen's would blur the others')
-        bool one_view = !R32(kCameras + 4);
-        float s = p.t * p.t * (3 - 2 * p.t);
-        app::SetFocusBlur(nf::ads_focus_blur && one_view ? s : 0.0f);
-    }
     uint32_t gun = R32(R32(obj + kActor) + kGun);
     if (i == 0 && WeaponsTest() && gun) {  // the test: alive, and each weapon's own place (before ours) logged
         SetF(R32(obj + kActor) + 0x824, 100.0f);
@@ -221,14 +234,26 @@ X86_FUNC(sub_000BD740) {  // the first person gun placed (cdecl: the object)
         int held = kernel::G<int8_t>(R32(obj + kWeaponState) + kWeaponIndex);
         static int settle = 0;
         if (held != last) last = held, settle = 0;
-        if (++settle == 190)
-            LOGR("nightfire: ADS test: weapon %d at %.3f %.3f %.3f", held, GetF(gun + kGunPos), GetF(gun + kGunPos + 4),
-                 GetF(gun + kGunPos + 8));
+        if (++settle == TestPeriod() - 10)
+            LOGR("nightfire: ADS test: weapon %d at %.3f %.3f %.3f, turned %.4f %.4f %.4f (aim off %.3f %.3f, sway %.4f)",
+                 held, GetF(gun + kGunPos), GetF(gun + kGunPos + 4), GetF(gun + kGunPos + 8), GetF(gun + 0x3C),
+                 GetF(gun + 0x40), GetF(gun + 0x44), GetF(R32(obj + kActor) + 0xE0), GetF(R32(obj + kActor) + 0xE4),
+                 GetF(R32(obj + kActor) + 0x874));
     }
     if (gun) nf::GunSway(i, gun, 1 - 0.8f * p.t * p.t * (3 - 2 * p.t));  // sway: a fifth of it when aimed
     if (!gun || p.t <= 0) return;
     float s = p.t * p.t * (3 - 2 * p.t);
     Sight sight = SightOf(kernel::G<int8_t>(R32(obj + kWeaponState) + kWeaponIndex));
+    if (WeaponsTest()) {  // NF_ADS_NUDGE=x,y (diagnostic): added to every sight, to measure the view's scale
+        static float nx = 0, ny = 0;
+        static const bool read = [] { if (const char* e = std::getenv("NF_ADS_NUDGE")) std::sscanf(e, "%f,%f", &nx, &ny); return true; }();
+        (void)read;
+        sight.x += nx, sight.y += ny;
+        // NF_ADS_CAL=1: the gun 2 cm to the left (+x) for picture b and 2 cm up for c, the view's scale at its sight
+        int f = int(g_test_frames % TestPeriod()) + 200 - int(TestPeriod());  // the last 200 frames
+        if (std::getenv("NF_ADS_CAL") && f >= 145 && f < 175) sight.x += 0.02f;
+        if (std::getenv("NF_ADS_CAL") && f >= 175) sight.y += 0.02f;
+    }
     p.optic = sight.optic && p.t >= 1.0f;
     SetF(gun + kGunPos, GetF(gun + kGunPos) + sight.x * s);
     SetF(gun + kGunPos + 4, GetF(gun + kGunPos + 4) + (p.optic ? -50.0f : sight.y * s));  // an optic: out of sight

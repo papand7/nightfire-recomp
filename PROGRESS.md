@@ -31,6 +31,22 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-05 - Aim down sights: each gun's sights measured again, on the middle
+- Reported: most guns' sights were off the middle when aimed (shots go through the middle, so they missed). Measured
+  at 1920x1080: pistols 2-5 had their front sight 30-40 px left and 30 px low, the silenced 6-9 50 px left, 13 45 px
+  low, 19 95 px left and 70 up; models that shared one entry sat up to 100 px apart.
+- src/game/aim.cpp SightOf: one entry per weapon, corrected in three rounds. NF_ADS_CAL=1 (with NF_ADS_WEAPONS and
+  NF_ADS_SHOTS) holds each weapon 400 frames and takes picture a as it is, b with the gun 2 cm left, c 2 cm up (the
+  view's scale at that gun's sight: about 45 px per 2 cm for a pistol, 25-30 for the rifles' far front sights);
+  NF_ADS_ONLY=,2,3, limits the weapons. The weapons test logs the gun's turn and the aim offset (0 here: 0xB7EB0 turns
+  the gun only by the actor's +0xE0/+0xE4).
+- Seen aimed: 2-23 within about 10 px of the middle (the idle animation moves them that much between runs), the shotgun
+  28/29 on its receiver's top. Not the cause: looking up or down, turning, strafing, walking, firing (the same place in one run).
+- `.local/ads_run.sh` runs its own copy in `.local/ads_run` (others' games left running).
+- Shots go along the view: NF_SHOT_TRACE=1 logs player 1's rounds at the spawner 0x211F0 (src/game/lan_play.cpp);
+  aimed, their direction's yaw is the view's (80.52 deg both) and their pitch is the actor's +0x838 times 90 deg
+  (-0.864 -> -77.8 deg, sin = 0.977 = the direction's y). The test fires with `RT 30` (`RT 3` is too short to fire).
+
 ### 2026-11-05 - Ground detail checked on screen and fixed; on by default
 - It never showed: the shader took the vertex programs' clip w as metres (it is the game's scaled W), so its fade
   was 0 everywhere (XBE_DETAIL_SPLIT=2 drew the fade and depth as colours). The view depth is now the mask pass's
@@ -182,18 +198,10 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Not checked on screen: the character and map lists, the bot setup page (its list at 0x245338 is not touched),
   the unlocks put back after leaving Netplay.
 
-### 2026-11-05 - Focus blur when aiming down the sights; menu colours committed (off)
-- Aiming down the sights blurs what lies behind the point aimed at (sdk Vulkan FocusPass, kFocusHlsl, after the style
-  pass): the focus is the nearest of seven taps about the middle and just above it, ignoring anything nearer than 2
-  (the raised gun); behind it a 24-tap golden-angle disc up to 7 console pixels, taps nearer than the focus left out
-  (no halo of the target or gun). src/game/aim.cpp sets app::SetFocusBlur from player 1's eased aim, only with one
-  view (no second camera at 0x1F6620: split screen's would blur the others'). Setting ads_focus_blur (default on);
-  More Settings' Aim Down Sights row is now Off / On / On, Blur.
-- Tested (`.local/vk/ads_blur.sh`, a netplay match, LT held): the background blurred, gun and target sharp, 58-60
-  fps; the first version focused on the gun's sight (the whole scene blurred) until the taps moved above it and the
-  gun's distance was left out.
-- The SDK commit also holds the menu colours pass (menu_colors, off by default; the main menu's Bond question is
-  still open) and the light shafts and fog (atmosphere, off: see the entry below).
+### 2026-11-05 - Focus blur removed; menu colours committed (off)
+- Removed ADS focus blur and its settings choice; Aim Down Sights remains Off / On.
+- The SDK also holds the menu colours pass (menu_colors, off by default; the main menu's Bond question is still open)
+  and the light shafts and fog (atmosphere, off: see the entry below).
 
 ### 2026-11-05 - Light shafts and fog: three attempts, stopped (off by default, SDK work uncommitted)
 - Asked for: a clearly visible graphics upgrade; the player chose light shafts and fog. sdk/runtime/gpu/vulkan.cpp
