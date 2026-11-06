@@ -31,6 +31,14 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Noir: the player's hands no longer turn red
+- Skin under a red or warm lamp passed Noir's red test (red at least 2.2 times green and blue), so the hands went
+  red by the CCCP banners. Noir now asks the renderer to keep the world's depth at the game's mid-frame clear
+  (KeptDepthWanted); when it was kept, the scene's depth holds the gun and hands alone, and those pixels are never red
+  (scene pass p[10].x, `noir(c, hands)`).
+- Evidence: a temporary mods/shaders/scene_post.hlsl painting the detected pixels green in a Quick Game: exactly the
+  shotgun and both hands green, the level's red crates still red.
+
 ### 2026-11-06 - Key Bindings page in the game's menus
 - Settings > More Settings > Key Bindings (was a row opening the F1 window): two sets of rows on the shared page,
   every on-foot action with its keys; A waits for a key or mouse button and binds it (the old key kept as the

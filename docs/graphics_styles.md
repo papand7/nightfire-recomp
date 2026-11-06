@@ -9,7 +9,7 @@ Direct3D renderers draw Original whatever is chosen.
 | Original | The console's picture, untouched: no pass, no overrides. The reference. |
 | Enhanced | Scene pass: sharpening, screen-space ambient occlusion (from depth), bloom, filmic or Reinhard tone mapping, exposure, contrast, saturation, temperature, vignette, film grain; anisotropic 16x on the 3D scene's textures. |
 | Toon | Scene pass: brightness in flat bands (2 to 12), outlines from depth (silhouettes) and optionally from colour (internal edges), outline colour and thickness, halftone dots in the darker bands, grading. |
-| Noir | Toon's bands, outlines and halftone (the same options), then black and white with hard contrast; what is red (blood, lamps, the HUD's red) stays a deep red. Black ink. |
+| Noir | Toon's bands, outlines and halftone (the same options), then black and white with hard contrast; what is red (blood, lamps, the HUD's red) stays a deep red, but never your own gun and hands (skin under a red lamp passed for red). Black ink. |
 | Retro | Scene pass: blocks of 1 to 8 console pixels, 2 to 8 bits a channel, ordered (Bayer) dithering, a warm grade; nearest-texel textures and vertices snapped to the block grid. |
 
 **The HUD and menus keep the game's look.** The scene pass runs on a screen-sized target the 3D scene was drawn to
