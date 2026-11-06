@@ -31,6 +31,15 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Motion blur (Vulkan, optional)
+
+- MotionBlurPass (kMotionHlsl), the scene pass's last: the level's camera (rt_cams_, as the snow takes it; now also
+  tracked without ray tracing when motion blur is on) and the last frame's; a pixel's world place reprojected,
+  0.25 of the way blurred, capped at 0.8% of the height, 8 samples; the gun (nearer than the kept depth) sharp and
+  not sampled; no blur on a cut. GraphicsStyle::motion_blur / motion_blur_strength; Effects > Motion Blur Off/On.
+- Checked (.local/vk/mb_test.sh): blur along a turn, sharp when still, gun and HUD sharp.
+
+
 ### 2026-11-06 - Effect lights: steady glows no longer flood the scene
 
 - The Exchange's lamp halos and searchlight beams (added glows drawn every frame) lit the castle and snow white as

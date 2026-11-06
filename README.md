@@ -47,6 +47,7 @@ Noir. Same build; only the Graphics menu changed.*
   and red only), plus modded presets.
 - **Snow:** falling snow that stays in the world as you turn, blown by gusts, kept out from under roofs, a blizzard
   setting, and footprints that the snow fills in again.
+- **Motion blur:** optional, subtle: a little blur as the camera turns and moves; the gun and HUD stay sharp.
 - **HDR tone mapping:** the effects drawn in 16 bit float, then AgX or ACES, with optional auto exposure: sunlit snow
   and lamps roll off instead of clipping to white.
 - **Effects:** ground truth ambient occlusion (GTAO), bloom, screen-space reflections, soft particles, light from flashes and fire,

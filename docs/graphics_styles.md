@@ -188,6 +188,13 @@ the scene on a 64 x 36 grid (the middle counting most) and eases toward a part o
 and a half, between 0.7x and 1.15x, so a night stays a night. `XBE_TONE_TEST=1` draws the right half without it, `2`
 shows what is past white there.
 
+## Motion blur
+
+Effects > Motion Blur (`motion_blur`, `motion_blur_strength` 0 to 2 in graphics.toml; Vulkan, every style but Retro).
+Each pixel's place in the world (from the depth) is put through the last frame's camera: a quarter of the way it moved
+on screen, at most 0.8% of the picture's height, is blurred along (8 samples). The gun, hands and HUD stay sharp and are
+not smeared into the world; a jump too large to be motion (a cut) is left sharp.
+
 ## Depth of field
 
 The game's Graphics page > Effects > **Depth of Field** (Off, Distance, Focus), Graphics Style > Depth of field, or
