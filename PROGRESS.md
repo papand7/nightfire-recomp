@@ -31,6 +31,17 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - HDR10 from the float scene; bloom kept near its source
+
+- With HDR output and tone mapping on, ToneResolve also works out each pixel's HDR brightness over its SDR's (the
+  exposed float scene: as SDR's up to 0.6, then a soft shoulder toward the screen's peak), drawn into the scene's
+  copy's alpha (log2 / 4); HdrOut multiplies the presented pixel by it, so the later passes' grading, depth of field
+  and motion blur stay, and the HUD stays at SDR white. Without tone mapping the old knee expansion is used.
+  Checked on this PC's HDR screen (peak 418 nits, .local/vk/hdr10_test.sh): The Exchange 22% of the pixels above
+  SDR white (the snow a little, lamps and lit snow up to 377 nits); before, 81 nits at most.
+- HDR bloom's wider levels count less (0.55 each): the glow of the snow no longer haloes the gun before it.
+
+
 ### 2026-11-06 - Snow sparkle; snow told at night too
 
 - Snow sparkle (GraphicsStyle::snow_sparkle, on; the weather's pass): a glint maybe in each 1.5 cm cell across the
