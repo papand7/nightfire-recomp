@@ -185,7 +185,7 @@ Retro). The passes from the ray traced relighting to the snow draw into a 16 bit
 they add past white (sunlit snow, lamps, flashes) is kept instead of clipped. AgX or ACES then brings it to the screen,
 mid grey where it was. The Enhanced style's own tone map and exposure are left out while it is on. Auto exposure meters
 the scene on a 64 x 36 grid (the middle counting most) and eases toward a part of the way to mid grey in about a second
-and a half, between 0.7x and 1.3x, so a night stays a night. `XBE_TONE_TEST=1` draws the right half without it, `2`
+and a half, between 0.7x and 1.15x, so a night stays a night. `XBE_TONE_TEST=1` draws the right half without it, `2`
 shows what is past white there.
 
 ## Depth of field

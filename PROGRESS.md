@@ -31,6 +31,16 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Full settings at night: the moon, not a day's sun
+
+- Ray traced lighting took The Exchange (night, snow) for a day: snow makes the outdoor baked light as bright as a
+  day's, so a full sun washed it out white. A night is now also told by the level's fog (dark: 0.21 0.28 0.40 there):
+  the sun 65% weaker and bluer, the volumetric light 70% less. The log's "level's sun" line gives the fog too.
+- Tone mapping: AgX's punchy look (power 1.35, colour 1.4); auto exposure brightens at most 1.15x (was 1.3x).
+- Checked (.local/vk/full_test.sh, rtparts_test.sh): every effect on reads as a moonlit night with contrast; ACES
+  + auto looks best. What is left white is the game's own snow (as without ray tracing).
+
+
 ### 2026-11-06 - The sky box no longer lit as a wall; per-pass GPU times
 
 - The sky's draws (SkyDraw) no longer write depth while the scene pass is wanted (not after the mid-frame clear):
