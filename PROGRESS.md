@@ -31,6 +31,15 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Sprint on Shift
+- New (the original has no sprint): Shift held on the keyboard while moving forward, standing, walks 1.6 times as fast.
+  0xA9CF0 (cdecl: the actor, the object, a speed) makes a character's walk from its controls (field 2 forward, 0 and
+  1 sideways via the getter 0x6CA20), caps the stick at full and eases it, then multiplies by the speed argument; the
+  hook in `src/game/mouse.cpp` raises that argument (nf::SprintFactor, `src/game/controls.cpp`). Raising the forward
+  input itself did nothing (capped).
+- Evidence: `NF_SPRINT_TEST=1|2 .local/vk/sprint_test.sh` (player 1 walks / sprints, the left stick up): 6.0 units a
+  second walking, 9.6 sprinting.
+
 ### 2026-11-06 - Hold to crouch on the keyboard
 - C / Ctrl crouch while held instead of toggling (`src/game/controls.cpp`). The game toggles on A (style 0's controls
   +0x34); a character's posture is its object's word +0xD2 (0xA8A60, the first person eye: 4 crouched, 5-9 and 13-15

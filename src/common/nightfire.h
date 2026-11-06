@@ -39,6 +39,7 @@ void MenuCursor(int size, std::vector<uint32_t>& bgra, int& hot_x, int& hot_y); 
 std::vector<achievements::Def> AchievementSet();  // src/common/achievement_set.cpp
 void MenuMouse(int port, input::Pad& p);
 void MouseAsStick();
+float SprintFactor(int player);  // default.xbe: Shift held, a walk's speed times it (src/game/controls.cpp)
 void AimDownSights(uint32_t count);  // default.xbe: after its pad reader (src/game/aim.cpp)
 bool AimingDownSights();  // player 1, or the gun still on its way back
 // LAN play from the menus (src/game/lan_play.cpp): hosts found on this network, hosting, joining, leaving

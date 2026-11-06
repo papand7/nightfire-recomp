@@ -111,7 +111,12 @@ X86_FUNC(sub_000A9CF0) {
     bool mine = actor && kernel::G<int8_t>(actor + kPlayerIndex) == 0;
     uint32_t was = mine ? kernel::R32(actor + kTurn) : 0;
     if (mine) kernel::W32(actor + kTurn, kUnset);
+    // the walk's speed (the third argument) raised while the player sprints
+    float& speed = kernel::G<float>(ctx.esp + 12);
+    float speed_was = speed, sprint = actor ? nf::SprintFactor(kernel::G<int8_t>(actor + kPlayerIndex)) : 1.0f;
+    speed = speed_was * sprint;
     __imp__sub_000A9CF0(ctx, base);
+    speed = speed_was;
     if (!mine) return;
     WheelZoom(actor);
     if (kernel::R32(actor + kTurn) == kUnset) {

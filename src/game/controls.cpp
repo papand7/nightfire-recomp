@@ -13,8 +13,24 @@
 // 4 crouched (the eye lowers by up to 0.45 at actor +0x89C), 5-9 and 13-15 standing (it rises), 10-12 and 16 keep the
 // eye as it is. While the keyboard plays, A reaches the game as a single frame's press whenever the key held and the
 // posture differ (again a few frames later if the posture did not change: no room to stand).
+//
+// Sprint (the original has none): Shift held while the keyboard plays, moving forward and standing. 0xA9CF0 (cdecl:
+// the actor, the object, a speed) makes a character's walk from its controls (2 forward, 0 and 1 to the side), the
+// stick capped at full, eased, then times the speed: that speed is raised (nf::SprintFactor, src/game/mouse.cpp).
+#include <cmath>
 #include <cstdlib>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
+#include "app/app.h"
 #include "common/nightfire.h"
 #include "core/input.h"
 #include "core/log.h"
@@ -28,6 +44,49 @@ int g_player = -1;     // controller 1's player while its style is held at 0
 uint16_t g_chosen = 0;  // its own style meanwhile
 constexpr uint32_t kCrouchSlot = 0x34, kActor = 0xBC, kPlayerIndex = 0x8DE, kPosture = 0xD2, kEyeDrop = 0x89C;
 uint32_t g_objects[4] = {};  // each player's character object, from 0xA8A60 last frame
+constexpr uint32_t kForward = 0x1C, kPos = 0x24;
+constexpr float kSprint = 1.6f;
+bool g_sprint[4] = {};  // the player sprints this frame
+
+bool KeyHeld(int vk) {
+#ifdef _WIN32
+    return GetForegroundWindow() == static_cast<HWND>(app::Window()) && (GetAsyncKeyState(vk) & 0x8000);
+#else
+    (void)vk;
+    return false;
+#endif
+}
+
+bool Crouched(uint32_t obj);
+
+void Sprint() {
+    static const int test = [] {  // NF_SPRINT_TEST=1 / 2: player 1 walks / sprints whatever plays it; its speed logged
+        const char* e = std::getenv("NF_SPRINT_TEST");
+        return e && *e ? std::atoi(e) : 0;
+    }();
+    for (bool& b : g_sprint) b = false;
+    int player = test ? 0 : g_player;
+    if (player < 0 || (!test && !input::UsingKeyboard())) return;
+    uint32_t obj = g_objects[player];
+    float& fwd = kernel::G<float>(kControls + uint32_t(player) * kPlayerSize + kForward);
+    bool sprint = test ? test == 2 : KeyHeld(0x10);  // either Shift
+    g_sprint[player] = sprint && fwd > 0.3f && obj && !Crouched(obj);
+    if (test && obj) {
+        static float last[3];
+        static int frames = 0;
+        static float travelled = 0;
+        float p[3];
+        for (int k = 0; k < 3; k++) p[k] = kernel::G<float>(obj + kPos + 4 * k);
+        float d = std::sqrt((p[0] - last[0]) * (p[0] - last[0]) + (p[2] - last[2]) * (p[2] - last[2]));
+        std::copy(p, p + 3, last);
+        if (fwd <= 0.3f || d > 50.0f) return;  // moving forward only
+        travelled += d;
+        if (++frames == 60) {
+            LOGR("nightfire: sprint test: forward %.2f, %.2f units the last 60 frames", fwd, travelled);
+            frames = 0, travelled = 0;
+        }
+    }
+}
 
 bool Crouched(uint32_t obj) {
     int posture = kernel::G<int16_t>(obj + kPosture);
@@ -70,6 +129,10 @@ void Restore() {
 }
 }  // namespace
 
+namespace nf {
+float SprintFactor(int player) { return player >= 0 && player < 4 && g_sprint[player] ? kSprint : 1.0f; }
+}  // namespace nf
+
 X86_EXTERN_FUNC(__imp__sub_000DE720);
 X86_FUNC(sub_000DE720) {
     uint32_t players = kernel::R32(ctx.esp + 4), count = kernel::R32(ctx.esp + 8) & 0xFFFF;
@@ -96,7 +159,7 @@ X86_FUNC(sub_000DE720) {
         nf::AimDownSights(count), nf::LanFrame(ctx);
         gpu::SetAiming(nf::AimingDownSights());  // depth of field's focus blurs more while aiming
     }
-    if (players == kControls) HoldToCrouch();
+    if (players == kControls) HoldToCrouch(), Sprint();
     nf::MouseAsStick();
 }
 
