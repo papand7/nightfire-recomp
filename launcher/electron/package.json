@@ -8,7 +8,7 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "service": "cmd /c ..\\..\\.local\\vk\\build_launcher.bat",
+    "service": "cmd /c build_service.bat",
     "dist": "electron-builder --win portable"
   },
   "dependencies": {

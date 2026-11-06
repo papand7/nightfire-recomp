@@ -65,6 +65,32 @@ Noir. Same build; only the Graphics menu changed.*
 - **Start in Menus:** START at the title opens the menus instead of the Paris mission.
 - Blue PC-style menu backgrounds (optional); the game's own font, redrawn sharp at high resolutions.
 
+## The launcher (new in this fork)
+
+![NightFire PC Launcher](docs/images/launcher.png)
+
+**NightFire PC Launcher** (`launcher/electron`) is a new launcher drawn in Electron, alongside the original's
+plain one. It runs the same builder underneath (the runtime's `NightFireLauncherService.exe`), so nothing is
+installed in Windows and no admin rights are needed:
+- **Mission:** choose your disc image (`.iso`), accept the build tools' licence terms, then **Install** builds the
+  game on your PC from your disc (portable Clang, CMake, Ninja and Git, about 1.4 GB the first time); **Play**,
+  and **Update** when this repository has changed.
+- **Settings:** every option of `settings.toml` and `graphics.toml` (display, graphics, the shader styles, effects,
+  ray tracing, game, controls), grouped as in the game's F1 window, with the code's own defaults and ranges.
+- **HD Textures:** collect the textures as you play, then make the pack (4x or 2x, Real-ESRGAN photo or drawn
+  model, PBR normal and height maps, relief) and turn it on, with progress shown.
+- **Your music:** a folder of your songs becomes the game's custom soundtracks (converted with ffmpeg, downloaded the
+  first time).
+- **Log:** the build's and the launcher's logs.
+
+The launcher builds the repository named in `launcher/game.json` (this fork). While the repository is private, the
+launcher cannot download it: make it public, or build from source as below.
+
+To build the launcher: `launcher\electron\build_service.bat` (the builder service), then in `launcher\electron`
+`npm install` and `npm start` to run it, or `npm run dist -- -c.directories.output=C:\Temp\nf-launcher` for the
+portable `NightFireLauncher.exe` (an output folder outside the repository: electron-builder fails on one under `out\`
+while its files are in use).
+
 ## Work in progress (not included yet)
 
 - **2-player co-op in the story missions**, split screen and over the network. A first test is in
@@ -93,7 +119,7 @@ here as they are; credit is theirs.
   aspect) and the **settings window** (F1).
 - **Achievements:** 19, with pop-ups (see [ACHIEVEMENTS.md](ACHIEVEMENTS.md)).
 - **Hide HUD**, **Quit Game**, **Skip Intro Movies**, a boot splash, logs and frame captures.
-- **The launcher** (`NightFireLauncher.exe`), which builds the original project from your disc.
+- **The builder** behind both launchers: the build tools fetched portably, the game built from your disc, Play and Update (the original's own `NightFireLauncher.exe` builds the original project).
 
 ## Building
 
@@ -112,7 +138,7 @@ Vulkan 1.3; for ray tracing, one with ray queries (RTX-class).
 3. Run `build.bat`. The first build recompiles both programs and takes a while; later builds are quicker.
 4. Run `out\build\release\Nightfire.exe`, then choose **Renderer: Vulkan** in Settings > Graphics and restart.
 
-The original project's launcher builds the original, not this fork.
+Or use [the launcher](#the-launcher-new-in-this-fork), which does all of this for you.
 
 **HD textures:** turn on *Dump the game's textures* (F1 > Graphics Style > Textures), play the levels you want
 upgraded, then run `tools\hd_pack.exe --pbr` beside the game and restart it. See

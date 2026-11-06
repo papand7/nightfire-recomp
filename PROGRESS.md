@@ -31,6 +31,15 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - README: the launcher; the launcher builds this fork
+- README: the Electron launcher (screenshot docs/images/launcher.png, its Mission, Settings, HD Textures, Your music
+  and Log pages, how to build it), a work in progress list (story co-op), the original project's features marked as
+  theirs, the original README linked rather than copied, an animation of Original / Enhanced + ray tracing / Toon /
+  Noir on The Exchange.
+- launcher/game.json: this fork's repository (papand7/nightfire-recomp) and toolchain URL; while it is private the
+  launcher cannot fetch it. `launcher/electron/build_service.bat` builds the service (npm run service no longer
+  points at the ignored .local).
+
 ### 2026-11-06 - Story co-op: first test (NF_COOP_TEST)
 - `src/game/coop_test.cpp`, diagnostic only. A mission starts through 0xBDDF0 with one human [0x260044], one
   character [0x26002C] and the multiplayer flag [0x260018] clear; the pad reader takes its count from [0x260044].

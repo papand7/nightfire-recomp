@@ -15,7 +15,7 @@
         "796222e048be3595c323b4c6d9795107132dc4ca": "PAL (Europe)",
         "7e4b8f8a54bacc61a5897ba5245fdd65bddc0752": "NTSC (USA)"
     },
-    "repo": "https://github.com/hk21x/nightfire-recomp.git",
+    "repo": "https://github.com/papand7/nightfire-recomp.git",
     "branch": "main",
-    "toolchain": "https://raw.githubusercontent.com/hk21x/nightfire-recomp/main/launcher/toolchain.json"
+    "toolchain": "https://raw.githubusercontent.com/papand7/nightfire-recomp/main/launcher/toolchain.json"
 }
