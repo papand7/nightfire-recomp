@@ -91,13 +91,6 @@ To build the launcher: `launcher\electron\build_service.bat` (the builder servic
 portable `NightFireLauncher.exe` (an output folder outside the repository: electron-builder fails on one under `out\`
 while its files are in use).
 
-## Work in progress (not included yet)
-
-- **2-player co-op in the story missions**, split screen and over the network. A first test is in
-  (`NF_COOP_TEST`, no menus): story levels make their player apart from multiplayer's, so the second player has to be
-  spawned by hand and the screen split without the multiplayer rules. Planned: a second player on foot, the driving
-  missions as driver and gunner, network play by streaming the second player's view.
-
 ## From the original project (not changes of this fork)
 
 These come from [hk21x/nightfire-recomp](https://github.com/hk21x/nightfire-recomp) and its runtime, and are kept
