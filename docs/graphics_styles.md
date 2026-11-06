@@ -101,9 +101,10 @@ any texture is, by the texture pack (hd_pack). More or longer-lived particles ne
 
 ## Ray tracing
 
-The game's Graphics page > Effects > **Ray Tracing** (Off, Shade, Shade + Shadows, Full Lighting, Full + GI), Graphics Style >
-Ray tracing, or graphics.toml `ray_tracing`, `rt_ao` (0-2), `rt_radius` (0.25-6 m), `rt_rays` (1-16 a pixel),
-`rt_shadows`, `rt_lighting`, `rt_sun` (0-2), `rt_gi`, `rt_gi_strength` (0-2). Vulkan on a
+The game's Graphics page > Effects > **Ray Tracing** (Off, Shade, Shade + Shadows, Full Lighting, Full + GI, Full +
+Volumetric, Full + GI + Volumetric), Graphics Style > Ray tracing, or graphics.toml `ray_tracing`, `rt_ao` (0-2),
+`rt_radius` (0.25-6 m), `rt_rays` (1-16 a pixel), `rt_shadows`, `rt_lighting`, `rt_sun` (0-2), `rt_gi`,
+`rt_gi_strength` (0-2), `rt_volumetric`, `rt_vol_strength` (0-3). Vulkan on a
 GPU with ray queries (VK_KHR_ray_query: NVIDIA RTX, AMD RX 6000 and later, Intel Arc); elsewhere the row reads "Not on
 this GPU". Every style but Retro. Off by default.
 
@@ -138,10 +139,44 @@ this GPU". Every style but Retro. Off by default.
   frame to frame jitter). Light from walls, floors and lamps off screen reaches what is on screen, in their colour.
   The screen-space bounce (Lighting > Bounce) is left out while it draws. `XBE_RT_TEST=7` the bounced light alone;
   `.local/vk/gi_test.sh` shoots off/on pairs.
+- **Volumetric** (`rt_volumetric`, with Full Lighting): the air lit. At half the scene's size each pixel's view ray is
+  marched in 12 steps (jittered by a 4x4 pattern) up to its surface or 90 m; at each step a ray toward the sun (light
+  shafts through windows and openings, the shade of walls and trees in the air, a forward-scattering phase so the air
+  glows most toward the sun) and the game's lights about their places, each with a traced shadow. Added over the
+  relit scene with the 4x4 about a pixel weighed by distance, the scene behind dimmed by the air's thickness.
+  `XBE_RT_TEST=8` the air's light alone (the sun's red, the lamps' green).
 - Test views (read at start): `XBE_RT_TEST=1` the left half with it, `2` the occlusion alone, `3` a ray from the
   camera against the depth (green where they agree), `4` the reflections' hits (green shown on screen, blue off it,
   red missed; with `XBE_SSR_TEST=1` every surface reflects). `.local/vk/rt_test.sh` shoots on/off pairs in a Quick
   Game.
+
+## Ambient occlusion (GTAO)
+
+Effects > **Ambient Occlusion** (Low, High; graphics.toml `quality_ao`), Vulkan, every style but Retro, while ray
+traced occlusion is off: ground truth ambient occlusion (Jimenez et al. 2016, as Intel's XeGTAO) at half the scene's
+size. Each pixel's surface (its normal from the world's depth: the copy kept at the game's mid-frame clear, so the gun
+neither shades the world nor is shaded) is sliced 2 (Low) or 4 (High) times about the view ray, each slice's horizon
+found with 5 or 8 steps either side within about a metre, and the visible arc integrated; filtered by distance.
+NightFire's depth comes in steps (flat ground near the camera is terraces some 26 pixels deep), so the normal is taken
+across 24 pixels where the surface runs on, and the start lifted a step off it (bands otherwise). Driving.xbe's
+Z-buffered scene keeps the style pass's simple one. `XBE_GTAO_TEST=1` the occlusion alone.
+
+## Snow
+
+Effects > **Lighting** (Fog + Snow, Fog + Bounce + Snow), the settings window's Weather, graphics.toml `weather` (0 off,
+1 snowy levels, 2 everywhere outdoors), `snow_amount` (0.25-3, 3 a blizzard), `footprints`. Vulkan, every style but
+Retro.
+- Where: where the game draws its own snow (one draw of 4096 point sprites a frame, The Exchange's), which is then
+  left out. With ray tracing a ray up from each flake hides it under roofs; without, the game's snow says where.
+- The snow: each pixel's view ray is walked through three layers of cells (0.7, 1.6 and 3.5 m, to 7, 18 and 45 m), a
+  flake in some of them, the cells moved by the fall and a gusting wind, so flakes stay put in the world as the view
+  turns and drift; a flake its size or a pixel's (fainter), behind the scene hidden, never darker than what is behind
+  it; a light haze by distance (not on the sky dome).
+- Footprints: the local players' places (`src/game/lights.cpp`: [0x1F6654 + 4p] +0x24) make a print every 0.7 m,
+  left and right in turn (none in a jump); drawn on what looks like snow (bright, grey) up to 3 m below the place: a
+  boot's sole with its tread, pressed darker and bluer, its far wall lit. Filled in by the snow after a minute (over
+  two; faster in heavier snow); cleared each level. `XBE_SNOW_TEST=1` the snow over a darkened scene, `2` the prints red.
+- `.local/vk/snow_test.sh` (The Exchange via `NF_LEVEL=07000005` and the menus): the game's snow, ours, heavy, prints.
 
 ## Depth of field
 
@@ -223,9 +258,18 @@ upscaled each apart, so a sky box's faces stopped meeting at their edges, and wi
 **Relief** (Materials > PBR + Relief, graphics.toml `surface_depth` 0-2): parallax occlusion mapping. The view's ray is
 stepped down the height map (8 to 24 steps, more at a glancing view) and the texture coordinates moved to where it
 meets it, for the game's own textures as well as the maps, so mortar sinks, stones stand out and hide one another as
-the view moves. Not tessellation: the game's vertex programs hand over only finished screen positions, so geometry
-moved along a normal would open cracks between triangles and differ from what the player collides with. Silhouettes
-stay flat.
+the view moves. Silhouettes stay flat. **Relief High** (Materials > ... + Relief High, `relief_high`): twice the
+steps, and each surface's own shadows: from where the view's ray met the height map a second ray toward the light, so
+bricks and stones shade the mortar beside them.
+
+**Ground geometry** (Materials > Detail + Geometry or Everything, `displacement`, `displace_depth` 0-3; a prototype):
+the ground's real shape changed. A draw whose texture ground detail finds grass, snow, rock or dirt in, facing up, is
+assembled again on the CPU, each triangle cut in 16 (fewer past 6,000), and pushed into the ground by its kind's
+height (up to 8 cm at depth 1): the highest points stay on the surface the game collides with, so feet do not float.
+An edge's middle is made once for both its triangles and a place's height is read along its normal's main axis, so no
+cracks open; the mesh's own edges stay put so it still meets its neighbours. Kept in memory by its vertices' hash
+(256 MB at most), not on disk. The ray traced scene captures the cut mesh, so its shadows and light follow it.
+`XBE_DISP_TILE` the height's repeat (2 units).
 
 The pack is made from the player's own copy of the game: nothing of the game's ships with the tool, and the pack is
 not to be shared.

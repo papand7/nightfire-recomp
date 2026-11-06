@@ -354,7 +354,8 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
             st.soft_particles = keep.soft_particles, st.particle_fade = keep.particle_fade;
             st.effect_lights = keep.effect_lights, st.light_strength = keep.light_strength;
             st.materials = keep.materials, st.material_strength = keep.material_strength;
-            st.surface_depth = keep.surface_depth;
+            st.surface_depth = keep.surface_depth, st.relief_high = keep.relief_high;
+            st.displacement = keep.displacement, st.displace_depth = keep.displace_depth;
             st.ground_detail = keep.ground_detail, st.detail_strength = keep.detail_strength;
             st.detail_distance = keep.detail_distance;
             st.atmosphere = keep.atmosphere, st.fog_strength = keep.fog_strength, st.shaft_strength = keep.shaft_strength;
@@ -362,6 +363,8 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
             st.ray_tracing = keep.ray_tracing, st.rt_ao = keep.rt_ao, st.rt_radius = keep.rt_radius;
             st.rt_rays = keep.rt_rays, st.rt_shadows = keep.rt_shadows, st.rt_lighting = keep.rt_lighting;
             st.rt_sun = keep.rt_sun, st.rt_gi = keep.rt_gi, st.rt_gi_strength = keep.rt_gi_strength, st.blood = keep.blood;
+            st.rt_volumetric = keep.rt_volumetric, st.rt_vol_strength = keep.rt_vol_strength;
+            st.weather = keep.weather, st.snow_amount = keep.snow_amount, st.footprints = keep.footprints;
             st.dof = keep.dof, st.dof_strength = keep.dof_strength;
         }
         st.texture_pack = ReadOption(ctx, player, kPack, kOffOn) > 0;
@@ -431,16 +434,22 @@ void EnterEffects(X86Context& ctx, uint32_t player) {
     ShowOptions(ctx, player, kReflect, kReflectLevels, float(st.reflections));
     Choice(ctx, player, kParticles, {{"Original", 0}, {"Soft", 1}, {"Soft + Lights", 2}},
            st.effect_lights ? 2 : st.soft_particles ? 1 : 0);
-    // bit 0 the pack's maps, bit 1 relief, bit 2 ground detail
+    // bit 0 the pack's maps, bit 1 relief, bit 2 ground detail, bit 3 relief High, bit 4 ground geometry
+    const bool relief = st.materials && st.surface_depth > 0;
     Choice(ctx, player, kMaterials,
-           {{"Original", 0}, {"Detail", 4}, {"Detail + PBR", 5}, {"Detail + Relief", 7}, {"PBR", 1}, {"PBR + Relief", 3}},
-           (st.materials ? 1u : 0u) | (st.materials && st.surface_depth > 0 ? 2u : 0u) | (st.ground_detail ? 4u : 0u));
-    Choice(ctx, player, kLighting, {{"Original", 0}, {"Fog", 1}, {"Bounce", 2}, {"Fog + Bounce", 3}},
-           (st.atmosphere ? 1u : 0u) | (st.bounce_light ? 2u : 0u));
+           {{"Original", 0}, {"Detail", 4}, {"Detail + Geometry", 20}, {"Detail + PBR", 5}, {"Detail + Relief", 7},
+            {"Detail + Relief High", 15}, {"Everything", 31}, {"PBR", 1}, {"PBR + Relief", 3}, {"PBR + Relief High", 11}},
+           (st.materials ? 1u : 0u) | (relief ? 2u : 0u) | (st.ground_detail ? 4u : 0u) | (relief && st.relief_high ? 8u : 0u) |
+               (st.displacement ? 16u : 0u));
+    Choice(ctx, player, kLighting,
+           {{"Original", 0}, {"Fog", 1}, {"Bounce", 2}, {"Fog + Bounce", 3}, {"Fog + Snow", 5}, {"Fog + Bounce + Snow", 7}},
+           (st.atmosphere ? 1u : 0u) | (st.bounce_light ? 2u : 0u) | (st.weather ? 4u : 0u));
     if (gpu::RayTracingSupported())
         Choice(ctx, player, kRayTracing, {{"Off", 0}, {"Shade", 1}, {"Shade + Shadows", 2}, {"Full Lighting", 3},
-                                 {"Full + GI", 4}},
-               st.ray_tracing ? (st.rt_lighting ? (st.rt_gi ? 4 : 3) : st.rt_shadows ? 2 : 1) : 0);
+                                 {"Full + GI", 4}, {"Full + Volumetric", 5}, {"Full + GI + Volumetric", 6}},
+               st.ray_tracing ? (st.rt_lighting ? (st.rt_volumetric ? (st.rt_gi ? 6 : 5) : st.rt_gi ? 4 : 3)
+                                                : st.rt_shadows ? 2 : 1)
+                              : 0);
     else
         Choice(ctx, player, kRayTracing, {{"Not on this GPU", 0xFF}}, 0xFF);
     Choice(ctx, player, kDof, {{"Off", gpu::kDofOff}, {"Distance", gpu::kDofDistance}, {"Focus", gpu::kDofFocus}},
@@ -453,7 +462,10 @@ void KeepEffects(X86Context& ctx, uint32_t player) {
         Request(st);
         return;
     }
-    if (uint32_t lv = ChoiceValue(ctx, player, kLighting); lv <= 3) st.atmosphere = lv & 1, st.bounce_light = lv & 2;
+    if (uint32_t lv = ChoiceValue(ctx, player, kLighting); lv <= 7) {
+        st.atmosphere = lv & 1, st.bounce_light = lv & 2;
+        st.weather = lv & 4 ? std::max(st.weather, 1) : 0;
+    }
     st.quality_ao = int(ReadOption(ctx, player, kAo, kAoLevels));
     st.quality_bloom = ReadOption(ctx, player, kBloom, kOffOn) > 0;
     st.reflections = int(ReadOption(ctx, player, kReflect, kReflectLevels));
@@ -462,16 +474,19 @@ void KeepEffects(X86Context& ctx, uint32_t player) {
         st.effect_lights = pv == 2;
     }
     uint32_t mat = ChoiceValue(ctx, player, kMaterials);
-    if (mat <= 7) {
+    if (mat <= 31) {
         st.materials = mat & 1;
         st.surface_depth = mat & 2 ? std::max(st.surface_depth, 0.6f) : 0.0f;
         st.ground_detail = mat & 4;
+        st.relief_high = mat & 8;
+        st.displacement = mat & 16;
     }
-    if (uint32_t rt = ChoiceValue(ctx, player, kRayTracing); rt <= 4) {
+    if (uint32_t rt = ChoiceValue(ctx, player, kRayTracing); rt <= 6) {
         st.ray_tracing = rt >= 1;
         st.rt_shadows = rt >= 2;
         st.rt_lighting = rt >= 3;
-        st.rt_gi = rt == 4;
+        st.rt_gi = rt == 4 || rt == 6;
+        st.rt_volumetric = rt >= 5;
     }
     if (uint32_t dof = ChoiceValue(ctx, player, kDof); dof < uint32_t(gpu::kDofModes)) st.dof = int(dof);
     {

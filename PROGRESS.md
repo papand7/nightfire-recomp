@@ -31,6 +31,31 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Snow and footprints, GTAO, Relief High, volumetric light, ground geometry (Vulkan)
+- Snow (Effects > Lighting "+ Snow"; `weather`, `snow_amount`, `footprints`): kSnowHlsl over the scene after the fog:
+  the view ray walked through three layers of cells with a flake in some, moved by the fall and a gusting wind (world
+  anchored), a traced ray up hiding flakes under roofs, a light haze. Where: the game's own snow (4096 point sprites,
+  a vertex program) marks it and is left out. Footprints from the players' places ([0x1F6654 + 4p] +0x24; objects at
+  0x8xxxxxxx), every 0.7 m, a boot sole with tread pressed in, filled in after a minute or two.
+- GTAO (Effects > Ambient Occlusion Low/High, in place of the style pass's 8 taps, which read the end-of-frame depth:
+  the gun alone): half size, 2 or 4 slices, the world's kept depth; normals over 24 pixels (the depth comes in
+  terraces near the camera: bands otherwise), the start lifted a step.
+- Relief High (Materials "... + Relief High", `relief_high`): twice the steps and the surface's own shadows.
+- Volumetric light (Ray Tracing "Full + Volumetric", "Full + GI + Volumetric"; `rt_volumetric`): kRtRelightHlsl's vol
+  at half size, 12 steps a pixel, the sun traced and the game's lights shadowed; dimmed by the level's outdoor
+  brightness (a night washed out like fog otherwise).
+- Ground geometry (Materials "Detail + Geometry", "Everything"; `displacement`, a prototype; gpu/displace.cpp): ground
+  draws (ground detail's grass, snow, rock, dirt; facing up; spanning 3+ units) cut in 16 and pushed in up to 8 cm,
+  edges kept. The gloved hands passed for rock and came apart until the size test.
+- Test switch NF_LEVEL=<hex> (coop_test.cpp): the mission the menus start replaced (07000005 The Exchange);
+  `.local/vk/mission_test.sh`, `snow_test.sh`, `exchange_test.sh` drive it.
+- Evidence (The Exchange, captures private in .local/rt_run/shots): snow with the game's left out, heavy, footprints
+  (sn11_prints); GTAO alone without bands (ex11); relief flat/medium/high (ex12); volumetric at night (ex12_vol).
+- Measured: snow about 3-4 ms of GPU; ray tracing itself costs about 25 ms a frame in The Exchange on this PC (60 fps
+  in Fort Knox): big outdoor levels need ray tracing's cost looked at.
+- Not done: ground geometry shows little (the baked light does not shade new bumps); prints from bots and remote
+  players; a print's heading is the way walked (backwards shows toes behind).
+
 ### 2026-11-06 - Ray traced global illumination (Vulkan, Full + GI)
 - What: `rt_gi` / `rt_gi_strength` (graphics.toml, Graphics Style window), the Effects page's Ray Tracing row gains
   "Full + GI". kRtRelightHlsl's new `gi` entry traces, at half size, 4 cosine weighted rays from each pixel's surface;

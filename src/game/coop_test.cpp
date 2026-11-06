@@ -50,6 +50,16 @@ X86_FUNC(sub_000BDDF0) {  // a level started (the level, 0, 0): its players made
 X86_EXTERN_FUNC(__imp__sub_0006CF50);
 X86_FUNC(sub_0006CF50) {  // the players' pads read, each frame (menus too): the count held at two from the menus on
     uint32_t next = kernel::R32(kNextLevel);
+    // NF_LEVEL=<hex> (a test): whichever on-foot mission the menus start, this one instead (0x07000005 The Exchange)
+    static const uint32_t forced = [] {
+        const char* e = std::getenv("NF_LEVEL");
+        return e && *e ? uint32_t(std::strtoul(e, nullptr, 16)) : 0u;
+    }();
+    if (forced && next && next != 0x7000048 && next != forced && (next >> 24) == 7) {
+        LOGR("nightfire: NF_LEVEL: level %08X started as %08X", next, forced);
+        kernel::W32(kNextLevel, forced);
+        next = forced;
+    }
     if (CoopTest() && next && next != 0x7000048 && kernel::R32(kHumans) != 2) {  // a mission chosen
         LOGR("nightfire: coop test: %u humans made 2 (level %08X, next %08X)", kernel::R32(kHumans), kernel::R32(0x1F658C), next);
         kernel::W32(kHumans, 2);

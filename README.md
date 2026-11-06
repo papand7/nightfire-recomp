@@ -31,17 +31,23 @@ Noir. Same build; only the Graphics menu changed.*
   - **Full Lighting:** the level's baked light is replaced by the game's own lamps, each with traced shadows. Outdoors
     there is a sun with traced shadows, in a random place for each level, its colour taken from the level's own light.
   - **Full + GI:** global illumination: light bounced once off walls, floors and lamps (on screen or not), in their colour.
+  - **Volumetric:** the air lit by the sun and lamps with traced shadows: light shafts through windows and past walls.
   - Ray traced **reflections** and **ambient occlusion**, plus shadows from effect lights. The gun and hands are traced too.
 - **HD texture packs** made on your own PC from your own copy:
   - The game's textures are dumped as it plays, then `hd_pack.exe` **upscales them 4x with Real-ESRGAN** (any Vulkan
     GPU, no install), seamless on repeating textures. The game draws the pack in place of its textures.
   - **PBR materials:** `hd_pack --pbr` adds normal and roughness maps. The renderer draws bumped, glossy surfaces from
     them, and smooth surfaces reflect.
-  - **Relief:** parallax occlusion mapping makes mortar sink and stones stand out.
+  - **Relief:** parallax occlusion mapping makes mortar sink and stones stand out; **Relief High** adds more steps and
+    the surfaces' own shadows.
+- **Ground geometry** (prototype): grass, snow, rock and dirt ground cut into finer triangles and pushed in by its
+  height, so it has real lumps and hollows.
 - **Graphics styles**, live from the menus: **Original**, **Enhanced** (filmic tone mapping, grading, sharpening),
   **Toon** (cel shading and ink outlines), **Retro** (pixels, dithering, vertex snapping) and **Noir** (black, white
   and red only), plus modded presets.
-- **Effects:** ambient occlusion, bloom, screen-space reflections, soft particles, light from flashes and fire,
+- **Snow:** falling snow that stays in the world as you turn, blown by gusts, kept out from under roofs, a blizzard
+  setting, and footprints that the snow fills in again.
+- **Effects:** ground truth ambient occlusion (GTAO), bloom, screen-space reflections, soft particles, light from flashes and fire,
   bounced light, fog, ground detail up close, and depth of field (Distance or Focus).
 - **Blood** (optional, every style): a spray where your shots hit, and blood at the edges of your view when you are hit.
 - **Quality presets** (Low to Ultra), anisotropic filtering, SMAA / FXAA / MSAA, sharpening, and render scale from 50% to 200%.

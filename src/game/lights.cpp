@@ -36,13 +36,37 @@ void NewSunPerLevel(uint32_t sig) {
     float around = u(rng) * 6.2832f, up = 0.45f + u(rng) * 0.75f;  // 26 to 69 degrees high
     const float dir[3] = {std::cos(around) * std::cos(up), std::sin(up), std::sin(around) * std::cos(up)};
     gpu::SetSunDirection(dir);
+    gpu::ClearFootprints();
     LOGR("nightfire: the sun %.0f degrees round, %.0f high", around * 57.3f, up * 57.3f);
+}
+}  // namespace
+
+namespace {
+// the players' places for footprints in the snow: each local player's character object ([0x1F6654 + 4p], its place
+// at +0x24, the world's: coop_test.cpp)
+void SetWalkers() {
+    gpu::Walker ws[4];
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < 4; i++) {
+        uint32_t o = kernel::G<uint32_t>(0x1F6654 + 4 * i);
+        if (o < 0x10000 || (o & 0x7FFFFFFF) >= 0x8000000) continue;  // 0x8xxxxxxx: the console's mirror of its memory
+        gpu::Walker& w = ws[n];
+        bool ok = true;
+        for (int k = 0; k < 3; k++) {
+            w.pos[k] = kernel::G<float>(o + 0x24 + 4 * k);
+            ok &= std::isfinite(w.pos[k]) && std::abs(w.pos[k]) < 1e6f;
+        }
+        w.id = i;
+        if (ok) n++;
+    }
+    gpu::SetWalkers(ws, n);
 }
 }  // namespace
 
 X86_EXTERN_FUNC(__imp__sub_0006D660);
 X86_FUNC(sub_0006D660) {  // the lights' flicker and lifetime, once a frame
     __imp__sub_0006D660(ctx, base);
+    if (gpu::Style().weather) SetWalkers();
     gpu::SceneLight out[kMaxLights];
     uint32_t n = 0, guard = 0, sig = 0;
     for (uint32_t p = kernel::G<uint32_t>(kLightList); p && n < kMaxLights && guard < 4096; guard++) {
