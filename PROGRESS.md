@@ -31,6 +31,18 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Story co-op: first test (NF_COOP_TEST)
+- `src/game/coop_test.cpp`, diagnostic only. A mission starts through 0xBDDF0 with one human [0x260044], one
+  character [0x26002C] and the multiplayer flag [0x260018] clear; the pad reader takes its count from [0x260044].
+- =1 (both counts two from the mission's choice): The Exchange loads and plays, still one player, full screen; a
+  second controller does nothing. The story level makes its player without those counts.
+- =2 (the multiplayer flag too): the camera code would split (0x25E20 makes one camera a human only with the flag),
+  but the level then runs the multiplayer rules each frame (0xA2B80, scenario state [0x262920]) and crashes 8 s into
+  the load (null read under 0x9CC50: no multiplayer setup).
+- Next: find the player spawner the multiplayer start calls per human (the 0xA27C5 loop builds the characters,
+  0x1B170 each) and call it for a second human after a story level loaded; then the camera split without the
+  multiplayer flag (0x25E20's count).
+
 ### 2026-11-06 - Noir: the player's hands no longer turn red
 - Skin under a red or warm lamp passed Noir's red test (red at least 2.2 times green and blue), so the hands went
   red by the CCCP banners. Noir now asks the renderer to keep the world's depth at the game's mid-frame clear
