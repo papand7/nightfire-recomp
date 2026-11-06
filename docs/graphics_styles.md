@@ -9,6 +9,7 @@ Direct3D renderers draw Original whatever is chosen.
 | Original | The console's picture, untouched: no pass, no overrides. The reference. |
 | Enhanced | Scene pass: sharpening, screen-space ambient occlusion (from depth), bloom, filmic or Reinhard tone mapping, exposure, contrast, saturation, temperature, vignette, film grain; anisotropic 16x on the 3D scene's textures. |
 | Toon | Scene pass: brightness in flat bands (2 to 12), outlines from depth (silhouettes) and optionally from colour (internal edges), outline colour and thickness, halftone dots in the darker bands, grading. |
+| Noir | Toon's bands, outlines and halftone (the same options), then black and white with hard contrast; what is red (blood, lamps, the HUD's red) stays a deep red. Black ink. |
 | Retro | Scene pass: blocks of 1 to 8 console pixels, 2 to 8 bits a channel, ordered (Bayer) dithering, a warm grade; nearest-texel textures and vertices snapped to the block grid. |
 
 **The HUD and menus keep the game's look.** The scene pass runs on a screen-sized target the 3D scene was drawn to
@@ -22,21 +23,22 @@ look). Every value is clamped to its range; unknown keys and wrong types are log
 
 | Key | Values |
 |---|---|
-| `preset` | the preset the values came from (`original`, `enhanced`, `toon`, `retro`, `custom:<file>`) |
-| `mode` | `original`, `enhanced`, `toon`, `retro` |
+| `preset` | the preset the values came from (`original`, `enhanced`, `toon`, `retro`, `noir`, `custom:<file>`) |
+| `mode` | `original`, `enhanced`, `toon`, `retro`, `noir` |
 | `exposure` 0.25-4, `contrast` 0.5-2, `saturation` 0-2.5, `temperature` -1-1 | grading |
 | `tonemap` | `off`, `filmic`, `reinhard` |
 | `sharpen` 0-1, `bloom` 0-2, `bloom_threshold` 0-1, `ambient_occlusion` 0-2, `ao_radius` 0.25-4, `vignette` 0-1, `grain` 0-1 | post-processing |
 | `texture_filter` | `game`, `nearest`, `anisotropic` (the 3D scene's textures) |
-| `bands` 2-12, `outline` 0-6 (console pixels), `outline_color` [r, g, b] 0-1, `internal_edges`, `edge_threshold` 0.02-1, `halftone` 0-1 | toon |
+| `bands` 2-12, `outline` 0-6 (console pixels), `outline_color` [r, g, b] 0-1, `internal_edges`, `edge_threshold` 0.02-1, `halftone` 0-1 | toon and noir |
 | `pixel` 1-8, `color_bits` 2-8, `dither`, `retro_tint` 0-1, `vertex_snap` | retro |
 | `texture_pack`, `dump_textures` | texture packs, below |
 | `reflections` (`off`, `low`, `high`), `reflection_strength` 0-1, `reflections_auto` | reflections, below |
+| `blood` | blood, below (every style and renderer) |
 
 ## Custom presets
 
-`mods/presets/<name>.toml` beside the exe: `name` (shown in the list), `base` (`original`, `enhanced`, `toon` or
-`retro`, whose values it starts from), then any keys of graphics.toml. Example (`docs/presets/cinematic.toml`):
+`mods/presets/<name>.toml` beside the exe: `name` (shown in the list), `base` (`original`, `enhanced`, `toon`,
+`retro` or `noir`, whose values it starts from), then any keys of graphics.toml. Example (`docs/presets/cinematic.toml`):
 
 ```toml
 name = "Cinematic"
@@ -99,8 +101,9 @@ any texture is, by the texture pack (hd_pack). More or longer-lived particles ne
 
 ## Ray tracing
 
-The game's Graphics page > Effects > **Ray Tracing** (Off, Shade, Shade + Shadows), Graphics Style > Ray tracing, or
-graphics.toml `ray_tracing`, `rt_ao` (0-2), `rt_radius` (0.25-6 m), `rt_rays` (1-16 a pixel), `rt_shadows`. Vulkan on a
+The game's Graphics page > Effects > **Ray Tracing** (Off, Shade, Shade + Shadows, Full Lighting), Graphics Style >
+Ray tracing, or graphics.toml `ray_tracing`, `rt_ao` (0-2), `rt_radius` (0.25-6 m), `rt_rays` (1-16 a pixel),
+`rt_shadows`, `rt_lighting`, `rt_sun` (0-2). Vulkan on a
 GPU with ray queries (VK_KHR_ray_query: NVIDIA RTX, AMD RX 6000 and later, Intel Arc); elsewhere the row reads "Not on
 this GPU". Every style but Retro. Off by default.
 
@@ -120,8 +123,14 @@ this GPU". Every style but Retro. Off by default.
 - **Reflections** (with Reflections on): traced in place of the screen-space ones on the surfaces that reflect. What a
   ray meets is the scene's colour where that point shows on screen (lit as the game lit it), else its texture by its
   diffuse colour, brought to the scene's brightness about the surface: what is behind the camera or hidden shows.
-- Not ray traced: the game's own lighting. NightFire's levels are lit ahead of time (light maps and vertex colours,
-  with no list of lights to trace from), so the traced passes shade, shadow and reflect over that lighting.
+- **Full Lighting** (`rt_lighting`): the level lit again. Its light is baked into its vertex colours (the world's
+  draws are texture x diffuse x 2; no light maps), which the capture keeps per vertex with the fog's share. A ray from
+  the camera finds each pixel's triangle; the baked light there is divided out and the new light multiplied in (a
+  ratio, so decals and what was blended over keep theirs), the fog held apart. The new light: a little of the baked
+  (its bounce), the game's own lights (`src/game/lights.cpp` reads its light list, [0x21570C], 0x40 byte records:
+  place, radius, intensity, colour; the 64 nearest in front of the camera), each with a traced shadow, and outdoors
+  (how much of the view is sky, eased) a sun and sky light with a traced shadow. `XBE_RT_TEST=5` the new light alone,
+  `6` the lights as dots. `.local/vk/rl_test.sh` shoots off/on pairs.
 - Test views (read at start): `XBE_RT_TEST=1` the left half with it, `2` the occlusion alone, `3` a ray from the
   camera against the depth (green where they agree), `4` the reflections' hits (green shown on screen, blue off it,
   red missed; with `XBE_SSR_TEST=1` every surface reflects). `.local/vk/rt_test.sh` shoots on/off pairs in a Quick
@@ -143,6 +152,15 @@ Retro. Off by default. Drawn last over the scene (after SMAA), before the HUD.
   no halo over the blurred distance behind it.
 - Test views (read at start): `XBE_DOF_TEST=1` the left half with it, `2` the blur (white the most, blue the gun, red
   the focus point). `.local/vk/dof_test.sh` shoots off/distance/focus at three views (`NF_ADS_TEST=1` for aiming).
+
+## Blood
+
+Graphics > Effects > **Blood** (Off, On), the settings window, or graphics.toml `blood`. Every style and renderer:
+drawn over the picture in the ImGui frame (`sdk/runtime/app/blood.cpp`). When a player's shot takes health from a
+character (the hit feedback hook, 0x3D900) a spray of drops flies from that player's crosshair and falls, larger for
+the head and a kill; when a player is hit, red soaks in from the edges of their view with a few splashes, stronger
+for more health lost and for hits in a row, fading over 1.6 s. `NF_HIT_TEST=1` sprays every second (and bleeds on
+the kill mark) without a hit. Off by default.
 
 ## SMAA
 

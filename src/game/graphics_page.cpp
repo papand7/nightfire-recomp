@@ -45,7 +45,7 @@ constexpr uint32_t kQuality = 0x1000FC21, kStyle = 0x1000FC22, kStyleOptions = 0
                    kScale = 0x1000FC29, kRenderer = 0x1000FC2A, kPack = 0x1000FC2B, kDefaults = 0x1000FC2C,
                    kReflect = 0x1000FC2D, kParticles = 0x1000FC2E, kMaterials = 0x1000FC2F,
                    kLighting = 0x1000FC30, kEffects = 0x1000FC38, kRayTracing = 0x1000FC39,
-                   kDof = 0x1000FC3A;
+                   kDof = 0x1000FC3A, kBlood = 0x1000FC3B;
 // the style pages' rows
 constexpr uint32_t kExposure = 0x1000FC31, kTonemap = 0x1000FC32, kContrast = 0x1000FC33, kSaturation = 0x1000FC34,
                    kVignette = 0x1000FC35, kGrain = 0x1000FC36, kSceneSharpen = 0x1000FC37;
@@ -60,7 +60,7 @@ constexpr uint32_t kFps = 0x1000FC61, kPauseBg = 0x1000FC62, kHideHud = 0x1000FC
 
 const std::vector<MenuRow> kGfxRows = {
     {kQuality, nf::kMenuChoice, "Graphics Quality", "Low to Ultra set the rows below at once; changing one makes it Custom."},
-    {kStyle, nf::kMenuChoice, "Shader Style", "The picture's look: the console's own, Enhanced, Toon, Retro or a mod's."},
+    {kStyle, nf::kMenuChoice, "Shader Style", "The picture's look: the console's own, Enhanced, Toon, Retro, Noir or a mod's."},
     {kStyleOptions, nf::kMenuButton, "Style Options", "The chosen style's own settings."},
     {kEffects, nf::kMenuButton, "Effects", "Ambient occlusion, bloom, reflections, particles, materials, lighting, ray tracing, focus."},
     {kFilter, nf::kMenuChoice, "Texture Filtering", "How sharp textures stay at an angle: as the game draws them, or anisotropic."},
@@ -79,8 +79,9 @@ const std::vector<MenuRow> kEffectsRows = {
     {kParticles, nf::kMenuChoice, "Particles", "Soft: effects fade into walls. Lights: flashes and fire light the room.", 3},
     {kMaterials, nf::kMenuChoice, "Materials", "Detail: grass, snow, rock up close. PBR: the HD pack's maps (next start).", 4},
     {kLighting, nf::kMenuChoice, "Lighting", "Fog: depth in the distance. Bounce: rooms take on their lights' and walls' colour.", 5},
-    {kRayTracing, nf::kMenuChoice, "Ray Tracing", "Traced shade in place of Ambient Occlusion; Shadows: from effect lights. RTX-class GPU.", 6},
+    {kRayTracing, nf::kMenuChoice, "Ray Tracing", "Shade: in place of AO. Shadows: from effect lights. Full: the level lit by its lamps and a sun. RTX-class GPU.", 6},
     {kDof, nf::kMenuChoice, "Depth of Field", "Distance: far scenery soft. Focus: what you aim at stays sharp.", 7},
+    {kBlood, nf::kMenuChoice, "Blood", "Blood where your shots hit, and at your view's edges when you are hit. Every style.", 8},
 };
 const std::vector<MenuRow> kEnhRows = {
     {kExposure, nf::kMenuChoice, "Exposure", "How bright the scene is drawn.", 0},
@@ -216,8 +217,9 @@ std::vector<std::pair<const char*, uint32_t>> StyleItems(const gpu::GraphicsStyl
         if (presets[i].name == st.preset) shown = i;
     }
     if (st.preset.empty()) {
-        static const char* names[] = {"Original (Edited)", "Enhanced (Edited)", "Toon (Edited)", "Retro (Edited)"};
-        v.push_back({names[std::clamp(st.mode, 0, 3)], 0xFE});
+        static const char* names[] = {"Original (Edited)", "Enhanced (Edited)", "Toon (Edited)", "Retro (Edited)",
+                                      "Noir (Edited)"};
+        v.push_back({names[std::clamp(st.mode, 0, int(std::size(names)) - 1)], 0xFE});
         shown = 0xFE;
     }
     return v;
@@ -295,7 +297,8 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
             st.atmosphere = keep.atmosphere, st.fog_strength = keep.fog_strength, st.shaft_strength = keep.shaft_strength;
             st.bounce_light = keep.bounce_light, st.bounce_strength = keep.bounce_strength;
             st.ray_tracing = keep.ray_tracing, st.rt_ao = keep.rt_ao, st.rt_radius = keep.rt_radius;
-            st.rt_rays = keep.rt_rays, st.rt_shadows = keep.rt_shadows;
+            st.rt_rays = keep.rt_rays, st.rt_shadows = keep.rt_shadows, st.rt_lighting = keep.rt_lighting;
+            st.rt_sun = keep.rt_sun, st.blood = keep.blood;
             st.dof = keep.dof, st.dof_strength = keep.dof_strength;
         }
         st.texture_pack = ReadOption(ctx, player, kPack, kOffOn) > 0;
@@ -352,6 +355,7 @@ void RestoreDefaults(X86Context& ctx, uint32_t player) {
 
 // Effects
 void EnterEffects(X86Context& ctx, uint32_t player) {
+    ShowOptions(ctx, player, kBlood, kOffOn, Current().blood ? 1.0f : 0.0f);  // drawn over the picture: any renderer
     if (!Vulkan()) {
         for (uint32_t id : {kAo, kBloom, kReflect, kParticles, kMaterials, kLighting, kRayTracing, kDof})
             Choice(ctx, player, id, {{"Needs Vulkan", 0xFF}}, 0xFF);
@@ -370,16 +374,20 @@ void EnterEffects(X86Context& ctx, uint32_t player) {
     Choice(ctx, player, kLighting, {{"Original", 0}, {"Fog", 1}, {"Bounce", 2}, {"Fog + Bounce", 3}},
            (st.atmosphere ? 1u : 0u) | (st.bounce_light ? 2u : 0u));
     if (gpu::RayTracingSupported())
-        Choice(ctx, player, kRayTracing, {{"Off", 0}, {"Shade", 1}, {"Shade + Shadows", 2}},
-               st.ray_tracing ? (st.rt_shadows ? 2 : 1) : 0);
+        Choice(ctx, player, kRayTracing, {{"Off", 0}, {"Shade", 1}, {"Shade + Shadows", 2}, {"Full Lighting", 3}},
+               st.ray_tracing ? (st.rt_lighting ? 3 : st.rt_shadows ? 2 : 1) : 0);
     else
         Choice(ctx, player, kRayTracing, {{"Not on this GPU", 0xFF}}, 0xFF);
     Choice(ctx, player, kDof, {{"Off", gpu::kDofOff}, {"Distance", gpu::kDofDistance}, {"Focus", gpu::kDofFocus}},
            uint32_t(st.dof));
 }
 void KeepEffects(X86Context& ctx, uint32_t player) {
-    if (!Vulkan()) return;
     gpu::GraphicsStyle st = Current();
+    st.blood = ReadOption(ctx, player, kBlood, kOffOn) > 0;
+    if (!Vulkan()) {
+        Request(st);
+        return;
+    }
     if (uint32_t lv = ChoiceValue(ctx, player, kLighting); lv <= 3) st.atmosphere = lv & 1, st.bounce_light = lv & 2;
     st.quality_ao = int(ReadOption(ctx, player, kAo, kAoLevels));
     st.quality_bloom = ReadOption(ctx, player, kBloom, kOffOn) > 0;
@@ -394,9 +402,10 @@ void KeepEffects(X86Context& ctx, uint32_t player) {
         st.surface_depth = mat & 2 ? std::max(st.surface_depth, 0.6f) : 0.0f;
         st.ground_detail = mat & 4;
     }
-    if (uint32_t rt = ChoiceValue(ctx, player, kRayTracing); rt <= 2) {
+    if (uint32_t rt = ChoiceValue(ctx, player, kRayTracing); rt <= 3) {
         st.ray_tracing = rt >= 1;
-        st.rt_shadows = rt == 2;
+        st.rt_shadows = rt >= 2;
+        st.rt_lighting = rt == 3;
     }
     if (uint32_t dof = ChoiceValue(ctx, player, kDof); dof < uint32_t(gpu::kDofModes)) st.dof = int(dof);
     {
@@ -407,9 +416,10 @@ void KeepEffects(X86Context& ctx, uint32_t player) {
     }
     Request(st);
     LOGR("nightfire: Effects kept: AO %d, bloom %d, reflections %d, particles %d/%d, materials %d, ground detail %d, "
-         "fog %d, bounce %d, ray tracing %d/%d, depth of field %d",
+         "fog %d, bounce %d, ray tracing %d/%d/%d, depth of field %d, blood %d",
          st.quality_ao, st.quality_bloom, st.reflections, st.soft_particles, st.effect_lights, st.materials,
-         st.ground_detail, st.atmosphere, st.bounce_light, st.ray_tracing, st.rt_shadows, st.dof);
+         st.ground_detail, st.atmosphere, st.bounce_light, st.ray_tracing, st.rt_shadows, st.rt_lighting, st.dof,
+         st.blood);
 }
 
 // the style pages
@@ -511,7 +521,7 @@ void KeepStyle(X86Context& ctx, uint32_t player, uint32_t page) {
         st.grain = ReadOption(ctx, player, kGrain, kGrains);
         st.sharpen = ReadOption(ctx, player, kSceneSharpen, kDetails);
     } else if (page == kToonPage) {
-        st.mode = gpu::kStyleToon;
+        if (st.mode != gpu::kStyleNoir) st.mode = gpu::kStyleToon;  // Noir: Toon's options in black, white and red
         st.bands = int(ReadOption(ctx, player, kBands, kBandCounts));
         st.outline = ReadOption(ctx, player, kOutline, kOutlines);
         uint32_t ink = std::min<uint32_t>(ChoiceValue(ctx, player, kOutlineColor), std::size(kInks) - 1);
@@ -539,7 +549,7 @@ void KeepStyle(X86Context& ctx, uint32_t player, uint32_t page) {
                 std::equal(std::begin(a.outline_color), std::end(a.outline_color), std::begin(b.outline_color));
     if (!same) st.preset.clear();
     Request(st);
-    LOGR("nightfire: %s options kept%s", page == kEnhPage ? "Enhanced" : page == kToonPage ? "Toon" : "Retro",
+    LOGR("nightfire: %s options kept%s", page == kEnhPage ? "Enhanced" : page == kToonPage ? (st.mode == gpu::kStyleNoir ? "Noir" : "Toon") : "Retro",
          same ? " (unchanged)" : "");
 }
 
@@ -735,7 +745,8 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
                                                    : "The styles are drawn by the Vulkan renderer.");
                     return true;
                 }
-                SetSharedTexts(mode == gpu::kStyleEnhanced ? kEnhPage : mode == gpu::kStyleToon ? kToonPage : kRetroPage);
+                SetSharedTexts(mode == gpu::kStyleEnhanced ? kEnhPage : mode == gpu::kStyleToon || mode == gpu::kStyleNoir ? kToonPage
+                                                                                       : kRetroPage);
                 MenuGoTo(ctx, player, kStylePage);
                 return true;
             }

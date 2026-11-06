@@ -8,9 +8,9 @@ it draws and moves as Eurocom's pages do. No ImGui.
 | Row | Values | Drives |
 |---|---|---|
 | Graphics Quality | Low / Medium / High / Ultra / Custom | anisotropic filtering, FXAA, AO, bloom together |
-| Shader Style | Original, Enhanced, Toon, Retro, mod presets, "(Edited)" | gpu::GraphicsStyle (Vulkan) |
+| Shader Style | Original, Enhanced, Toon, Retro, Noir, mod presets, "(Edited)" | gpu::GraphicsStyle (Vulkan) |
 | Style Options | page | the chosen style's rows |
-| Effects | page | Ambient Occlusion, Bloom, Reflections, Particles, Materials, Lighting, Ray Tracing, Depth of Field (Vulkan; the shared page) |
+| Effects | page | Ambient Occlusion, Bloom, Reflections, Particles, Materials, Lighting, Ray Tracing, Depth of Field (Vulkan; the shared page), Blood (any renderer) |
 | Texture Filtering | As the Game, 2x-16x | Settings::aniso (both renderers) |
 | Anti-Aliasing | Off, FXAA (+ MSAA 2x/4x/8x on Direct3D) | Settings::fxaa, msaa |
 | Sharpening | Off / Low / Medium / High | Settings::sharpen (both) |

@@ -31,6 +31,20 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Ray traced level lighting, Noir style, blood
+- Full Lighting (Effects > Ray Tracing; graphics.toml `rt_lighting`, `rt_sun`): the level's baked light (its vertex
+  colours: world draws are texture x diffuse x 2, no light maps) divided out per pixel and new light put in. Indoors
+  the game's own lights (src/game/lights.cpp reads the list at [0x21570C] after 0x6D660, 0x40 byte records: place,
+  radius, intensity, RGB, kind) with traced shadows; outdoors (a ray up meets nothing) the baked light kept, darker in
+  shade and brighter in a traced sun, so night levels stay night. The sky is left out of the capture: fixed-function
+  draws, draws spanning 300+ units before and behind the eye, fog-off draws in a fogged level (measured on the snow
+  canyon: dome and mountain ring 400-600 units, fog off).
+- Noir style (mode `noir`): Toon's bands, outlines and halftone in black and white, red kept (blood, lamps); its
+  options are Toon's page. Blood (Effects > Blood, `blood`, any style or renderer, ImGui overlay app/blood.cpp):
+  a spray at the shooter's crosshair on a hit (0x3D900), red edges and splashes on the hit player's view.
+- Checked (.local/vk/rl_test.sh, noir_test.sh, Quick Game): Fort Knox lamp pools and shadows at 60 fps, castle and
+  snow canyon outdoors lit without blowing out, Noir and blood shots. Not yet: the sun's direction is fixed.
+
 ### 2026-11-06 - Effect lights and bounced light read the world's depth
 - The game clears the scene's depth before the gun, so the end's depth holds the gun alone: the effect lights and
   bounced light saw the world as empty (nothing lit, nothing gathered) and only the gun took part.
