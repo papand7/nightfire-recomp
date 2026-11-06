@@ -65,6 +65,36 @@ Noir. Same build; only the Graphics menu changed.*
 - **Start in Menus:** START at the title opens the menus instead of the Paris mission.
 - Blue PC-style menu backgrounds (optional); the game's own font, redrawn sharp at high resolutions.
 
+## Work in progress (not included yet)
+
+- **2-player co-op in the story missions**, split screen and over the network. A first test is in
+  (`NF_COOP_TEST`, no menus): story levels make their player apart from multiplayer's, so the second player has to be
+  spawned by hand and the screen split without the multiplayer rules. Planned: a second player on foot, the driving
+  missions as driver and gunner, network play by streaming the second player's view.
+- HD texture packs: one of The Exchange's searchlight beams draws as a black bar with the pack.
+
+## From the original project (not changes of this fork)
+
+These come from [hk21x/nightfire-recomp](https://github.com/hk21x/nightfire-recomp) and its runtime, and are kept
+here as they are; credit is theirs.
+
+- **Native PC port:** the game's own x86 code statically recompiled into Windows programs (not an emulator); the
+  Xbox's graphics, sound and system libraries reimplemented on Direct3D 12 or 11, XAudio2 and SDL.
+- **Both releases:** the European (PAL) and North American (NTSC) discs, the on-foot game and the driving missions
+  (a second program the game switches to and back), saves on an emulated hard disk.
+- **Display:** fullscreen, borderless or windowed at any resolution; the game's 16:9 mode; **ultrawide** (the 3D
+  view widened, the HUD and menus kept 16:9); **field of view** 50-150%; vsync, a frame rate cap and an FPS counter.
+- **Graphics:** render scale, anisotropic filtering, MSAA, FXAA and sharpening on Direct3D; sharp text and HUD
+  pictures at high resolutions; a shader cache.
+- **Keyboard and mouse:** direct mouse aiming (no stick curve, no auto-aim), the mounted guns aimed with the mouse,
+  the game's prompts showing the bound keys, every key rebindable in the settings window (F1).
+- **Modern button pictures** for today's Xbox pad.
+- **Settings** in the game's own menus (main menu and pause screen: field of view, mouse, skip intro, sharp text,
+  aspect) and the **settings window** (F1).
+- **Achievements:** 19, with pop-ups (see [ACHIEVEMENTS.md](ACHIEVEMENTS.md)).
+- **Hide HUD**, **Quit Game**, **Skip Intro Movies**, a boot splash, logs and frame captures.
+- **The launcher** (`NightFireLauncher.exe`), which builds the original project from your disc.
+
 ## Building
 
 **You need:** Windows 10 or 11 (64 bit), [Git](https://git-scm.com/download/win), Visual Studio 2022 (Community is
