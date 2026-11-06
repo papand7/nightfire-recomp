@@ -20,7 +20,7 @@ namespace {
 using kernel::R32;
 
 constexpr uint32_t kActor = 0xBC, kPos = 0x24, kYaw = 0x40, kPitch = 0x838, kPlayerIndex = 0x8DE, kEye = 0x138;
-constexpr float kStep = 1.6f;          // metres a full bob (two steps)
+constexpr float kStep = 2.8f;          // metres a full bob (two steps): the pace of a jog, not a sprint of tiny steps
 constexpr float kBobUp = 0.022f;       // the eye's dip at a step, metres
 constexpr float kBobSide = 0.010f;     // its sway to the side
 constexpr float kRunSpeed = 4.0f;      // metres a second at which the bob is whole

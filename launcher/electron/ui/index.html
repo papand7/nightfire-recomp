@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
+<title>007: NightFire Launcher</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="titlebar">
+  <div class="brand">
+    <svg class="mark" viewBox="0 0 64 24" aria-hidden="true">
+      <text x="0" y="20" class="mark-0">00</text>
+      <path class="mark-7" d="M38 4h24l-3 4H47l-9 14h-6l9-14h-6z"/>
+      <circle cx="14" cy="12.4" r="2.2" class="mark-bore"/>
+    </svg>
+    <span class="brand-name">NIGHTFIRE</span><span class="brand-sub">PC LAUNCHER</span>
+  </div>
+  <div class="drag"></div>
+  <div class="winbtns">
+    <button data-win="min" title="Minimise"><svg viewBox="0 0 10 10"><path d="M1 5h8"/></svg></button>
+    <button data-win="max" title="Maximise"><svg viewBox="0 0 10 10"><rect x="1.5" y="1.5" width="7" height="7"/></svg></button>
+    <button data-win="close" class="close" title="Close"><svg viewBox="0 0 10 10"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"/></svg></button>
+  </div>
+</header>
+
+<div id="shell">
+  <nav id="nav">
+    <button data-page="home" class="active"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 1v5M12 18v5M1 12h5M18 12h5"/></svg><span>Mission</span></button>
+    <button data-page="settings"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><span>Settings</span></button>
+    <button data-page="textures"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><path d="M13 17h8M17 13v8"/></svg><span>HD Textures</span></button>
+    <button data-page="music" id="nav-music" hidden><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg><span>Music</span></button>
+    <button data-page="log"><svg viewBox="0 0 24 24"><path d="M5 3h10l4 4v14H5z"/><path d="M8 11h8M8 15h8M8 7h4"/></svg><span>Log</span></button>
+    <div class="nav-foot"><div id="version"></div><div class="classified">// CLASSIFIED: MI6 EYES ONLY</div></div>
+  </nav>
+
+  <main>
+    <!-- MISSION: the game, the build, Play -->
+    <section id="page-home" class="page active">
+      <div class="hero">
+        <div class="barrel"></div>
+        <div class="hero-text">
+          <div class="hero-kicker">JAMES BOND</div>
+          <h1><span class="h-007">007</span><span class="h-colon">:</span> <span class="h-nf">NIGHTFIRE</span></h1>        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card" id="card-game">
+          <div class="card-head"><span class="num">01</span> Your game</div>
+          <div class="card-body">
+            <div id="game-line" class="status-line"></div>
+            <div id="game-path" class="path"></div>
+            <div class="row">
+              <button class="btn" id="btn-pick">Choose a disc image…</button>
+              <button class="btn ghost" id="btn-scan">Look again</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" id="card-build">
+          <div class="card-head"><span class="num">02</span> <span id="build-title">Install</span></div>
+          <div class="card-body">
+            <div id="build-info"></div>
+            <label class="check" id="license-row"><input type="checkbox" id="license"> <span>I accept the license terms for Microsoft's C++ libraries and Windows SDK <a href="#" id="license-link">Read them</a></span></label>
+            <div id="progress" hidden>
+              <div id="step"></div>
+              <div class="bar"><div id="bar-fill"></div></div>
+              <div id="detail" class="muted"></div>
+            </div>
+            <div id="build-msg" class="msg"></div>
+            <div class="row">
+              <button class="btn" id="btn-build">Build</button>
+              <button class="btn ghost" id="btn-stop" hidden>Stop</button>
+              <button class="btn ghost" id="btn-clean" hidden></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="play-row">
+        <button id="btn-play" class="play" disabled><span class="play-tri"></span><span id="play-label">PLAY</span></button>
+        <div class="play-side">
+          <div id="play-hint" class="muted"></div>
+          <div class="row">
+            <button class="btn ghost small" id="btn-folder">Game folder</button>
+            <button class="btn ghost small" id="btn-logs">Game logs</button>
+          </div>
+        </div>
+      </div>
+      <div id="release-banner" class="banner" hidden></div>
+    </section>
+
+    <!-- SETTINGS: settings.toml and graphics.toml -->
+    <section id="page-settings" class="page">
+      <div class="page-head">
+        <h2>Settings</h2>
+        <div class="tabs" id="settings-tabs"></div>
+      </div>
+      <div id="settings-warn" class="banner warn" hidden></div>
+      <div id="settings-body" class="settings-body"></div>
+      <div class="savebar" id="savebar" hidden>
+        <span id="save-text">Unsaved changes</span>
+        <button class="btn ghost" id="btn-revert">Undo</button>
+        <button class="btn" id="btn-save">Save</button>
+      </div>
+    </section>
+
+    <!-- HD TEXTURES: hd_pack -->
+    <section id="page-textures" class="page">
+      <div class="page-head"><h2>HD Textures</h2></div>
+      <p class="lead">An HD texture pack is made on this PC from your copy of the game: each texture is upscaled 4x by
+        Real-ESRGAN on your GPU, with normal and height maps for the PBR materials and relief if you choose them.</p>
+      <div class="grid">
+        <div class="card">
+          <div class="card-head"><span class="num">01</span> Collect the textures</div>
+          <div class="card-body">
+            <p class="muted">The game saves each texture it draws while this is on. Play the levels you want in HD, then
+              turn it off.</p>
+            <label class="switch-row"><span>Save the game's textures while playing</span><input type="checkbox" class="switch" id="dump"></label>
+            <div class="stats">
+              <div><b id="n-dumped">0</b><span>collected</span></div>
+              <div><b id="n-pack">0</b><span>in the HD pack</span></div>
+              <div><b id="n-maps">0</b><span>with PBR maps</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="num">02</span> Make the pack</div>
+          <div class="card-body">
+            <div class="form-row"><span>Size</span>
+              <div class="seg" id="seg-scale"><button data-v="4" class="on">4x</button><button data-v="2">2x</button></div></div>
+            <div class="form-row"><span>Upscaler</span>
+              <div class="seg" id="seg-model"><button data-v="x4plus" class="on">Photo (x4plus)</button><button data-v="anime">Drawn (anime)</button></div></div>
+            <label class="switch-row"><span>Normal and height maps (PBR, relief)</span><input type="checkbox" class="switch" id="pbr" checked></label>
+            <label class="switch-row"><span>Make every texture again</span><input type="checkbox" class="switch" id="force"></label>
+            <div id="pack-progress" hidden><div class="bar indet"><div></div></div></div>
+            <div id="pack-msg" class="msg"></div>
+            <div class="row">
+              <button class="btn" id="btn-pack">Make the pack</button>
+              <button class="btn ghost" id="btn-pack-stop" hidden>Stop</button>
+              <button class="btn ghost" id="btn-pack-folder">Open the folder</button>
+            </div>
+            <label class="switch-row"><span>Use the pack in the game</span><input type="checkbox" class="switch" id="use-pack"></label>
+            <label class="switch-row"><span>Relief on the stones and walls (PBR + Relief)</span><input type="checkbox" class="switch" id="use-relief"></label>
+          </div>
+        </div>
+      </div>
+      <pre id="pack-log" class="log small"></pre>
+      <p class="muted fine">The pack is made from your copy of the game: keep it to yourself, do not share it.</p>
+    </section>
+
+    <!-- MUSIC: Xbox custom soundtracks -->
+    <section id="page-music" class="page">
+      <div class="page-head"><h2>Your music</h2></div>
+      <p class="lead">The game plays Xbox custom soundtracks. Each folder in the one you choose becomes a soundtrack;
+        the songs are converted for the game (ffmpeg, about 90 MB, downloaded the first time).</p>
+      <div class="card"><div class="card-body">
+        <div id="music-dir" class="path"></div>
+        <div id="music-msg" class="msg"></div>
+        <div class="row"><button class="btn" id="btn-music">Choose a music folder…</button><button class="btn ghost" id="btn-music-again" hidden>Update my music</button></div>
+      </div></div>
+    </section>
+
+    <!-- LOG -->
+    <section id="page-log" class="page">
+      <div class="page-head"><h2>Log</h2><div class="row"><button class="btn ghost small" id="btn-launcher-log">launcher.log</button></div></div>
+      <pre id="log" class="log"></pre>
+    </section>
+  </main>
+</div>
+<div id="toast"></div>
+<script src="schema.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
