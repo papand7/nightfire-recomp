@@ -31,6 +31,15 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Key Bindings page in the game's menus
+- Settings > More Settings > Key Bindings (was a row opening the F1 window): two sets of rows on the shared page,
+  every on-foot action with its keys; A waits for a key or mouse button and binds it (the old key kept as the
+  second), Escape clears, Default Keys restores. SDK: app::BeginKeyCapture / TakeCapturedKey / KeyCaptureBusy (the
+  window procedure takes the next new press; the keyboard and mouse are kept from the controllers and the menu
+  pointer until it is let go). Sprint is now a bindable control (the left stick click, unused on foot: Shift).
+- Evidence: `.local/vk/keys_menu.sh` (rt_run copy): both sets shown, F7 sent to the window bound Jump ("F7 / Space",
+  saved), Default Keys restored it; sprint test still 1.6x.
+
 ### 2026-11-06 - Sprint on Shift
 - New (the original has no sprint): Shift held on the keyboard while moving forward, standing, walks 1.6 times as fast.
   0xA9CF0 (cdecl: the actor, the object, a speed) makes a character's walk from its controls (field 2 forward, 0 and

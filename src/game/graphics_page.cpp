@@ -9,6 +9,8 @@
 // graphics.toml. What only Vulkan draws reads "Needs Vulkan" under the Direct3D renderers. Changing a value the
 // quality preset sets makes it Custom; choosing a preset sets them all; the style is apart from the preset.
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <mutex>
@@ -20,6 +22,7 @@
 
 #include "app/app.h"
 #include "common/nightfire.h"
+#include "core/input.h"
 #include "core/log.h"
 #include "game/menu_page.h"
 #include "gpu/style.h"
@@ -38,7 +41,7 @@ using nf::MenuRow;
 // same lines, the others hidden, its title rewritten in place for the set shown (SetSharedTitle)
 constexpr uint32_t kGfxPage = 0x4000FC20, kStylePage = 0x4000FC30;
 constexpr uint32_t kEnhPage = 1, kToonPage = 2, kRetroPage = 3, kMorePage = 4, kNetPage = 5,
-                   kEffectsPage = 6;  // the shared page's rows
+                   kEffectsPage = 6, kKeysPage = 7, kKeys2Page = 8;  // the shared page's rows
 // the Graphics page's rows
 constexpr uint32_t kQuality = 0x1000FC21, kStyle = 0x1000FC22, kStyleOptions = 0x1000FC23, kFilter = 0x1000FC24,
                    kAo = 0x1000FC25, kBloom = 0x1000FC26, kAa = 0x1000FC27, kSharpen = 0x1000FC28,
@@ -117,11 +120,57 @@ const std::vector<MenuRow> kMoreRows = {
     {kKeyboard, nf::kMenuChoice, "Keyboard and Mouse", "Player 1 with the first controller, Player 1 alone, or off.", 5},
     {kMouseLook, nf::kMenuChoice, "Mouse Look", "The mouse turns and aims on foot.", 6},
     {kLanguage, nf::kMenuChoice, "Language", "The game's language, at the next start.", 7},
-    {kKeys, nf::kMenuChoice, "Keys and Wheel", "Key bindings and a steering wheel: A opens the settings window.", 8},
+    {kKeys, nf::kMenuChoice, "Key Bindings", "The keyboard and mouse keys for each action. A steering wheel: F1.", 8},
     {kMenuColors, nf::kMenuChoice, "Menu Colours", "The menu backgrounds as the game has them, or blue as on the PC version. Text and Bond stay.", 9},
     {kAds, nf::kMenuChoice, "Aim Down Sights", "L (right mouse) raises the gun and zooms in, not the red crosshair. Blur: the background too.", 10},
     {kMotion, nf::kMenuChoice, "Weapon Sway", "A very light head bob and weapon sway as you move and turn.", 11},
 };
+// Key Bindings (More Settings' row), two sets of rows: each an action on foot, its two keys shown; A waits for the
+// next key or mouse button (app::BeginKeyCapture), which becomes its first key and the old first its second; Escape
+// clears them. Saved at once, as the settings window's Controls tab does (app::Settings::keys)
+struct KeyRow {
+    uint32_t id;
+    int control;  // input::Control, -1 a button
+    const char* label;
+    const char* help;
+    int slot;
+};
+constexpr uint32_t kKeysMore = 0x1000FCAC, kKeysBack = 0x1000FCBB, kKeysDefaults = 0x1000FCBA;
+const KeyRow kKeyRows[] = {
+    {0x1000FCA1, input::kLSUp, "Move Forward", "Walk forward.", 0},
+    {0x1000FCA2, input::kLSDown, "Move Back", "Walk backward.", 1},
+    {0x1000FCA3, input::kLSLeft, "Strafe Left", "Step to the left.", 2},
+    {0x1000FCA4, input::kLSRight, "Strafe Right", "Step to the right.", 3},
+    {0x1000FCA5, input::kLThumb, "Sprint", "Held while moving forward: run faster (a controller's left stick click).", 4},
+    {0x1000FCA6, input::kA, "Crouch", "Held: crouch (a controller's A toggles it).", 5},
+    {0x1000FCA7, input::kY, "Jump", "Jump.", 6},
+    {0x1000FCA8, input::kRT, "Fire", "Fire the weapon.", 7},
+    {0x1000FCA9, input::kLT, "Aim", "Aim down the sights, or the game's manual aim.", 8},
+    {0x1000FCAA, input::kWhite, "Alt. Fire", "The weapon's other fire.", 9},
+    {0x1000FCAB, input::kX, "Action / Reload", "Use what is in front of you, or reload.", 10},
+    {kKeysMore, -1, "More Keys", "Weapons, gadgets, vision and pause.", 11},
+    {0x1000FCB1, input::kB, "Next Weapon", "The next weapon carried.", 0},
+    {0x1000FCB2, input::kBlack, "Next Gadget", "The next gadget carried.", 1},
+    {0x1000FCB3, input::kBack, "Vision Mode", "The gadget's vision mode.", 2},
+    {0x1000FCB4, input::kLeft, "Weapon Back", "The weapon before (the mouse wheel too).", 3},
+    {0x1000FCB5, input::kRight, "Weapon On", "The weapon after (the mouse wheel too).", 4},
+    {0x1000FCB6, input::kUp, "Gadget / Zoom In", "The gadget before, or zoom in through a scope.", 5},
+    {0x1000FCB7, input::kDown, "Gadget / Zoom Out", "The gadget after, or zoom out through a scope.", 6},
+    {0x1000FCB8, input::kStart, "Pause", "The pause screen.", 7},
+    {kKeysDefaults, -1, "Default Keys", "Every action's keys as they first were.", 9},
+    {kKeysBack, -1, "First Keys", "Movement, sprint, crouch, jump and fire.", 11},
+};
+std::vector<MenuRow> KeySetRows(bool second) {
+    std::vector<MenuRow> v;
+    bool past = false;
+    for (const KeyRow& r : kKeyRows) {
+        if (second == past) v.push_back({r.id, nf::kMenuChoice, r.label, r.help, r.slot});
+        if (r.id == kKeysMore) past = true;
+    }
+    return v;
+}
+const std::vector<MenuRow> kKeysRows = KeySetRows(false), kKeys2Rows = KeySetRows(true);
+
 // Netplay's rows (the main menu's Netplay item): host, the games found on this network, join the one chosen
 constexpr uint32_t kNetHost = 0x1000FC91, kNetServer = 0x1000FC92, kNetJoin = 0x1000FC93;
 const std::vector<MenuRow> kNetRows = {
@@ -560,9 +609,12 @@ const std::vector<MenuRow>& RowsOf(uint32_t page) {
            : page == kMorePage ? kMoreRows
            : page == kNetPage  ? kNetRows
            : page == kEffectsPage ? kEffectsRows
+           : page == kKeysPage ? kKeysRows
+           : page == kKeys2Page ? kKeys2Rows
                                : kRetroRows;
 }
-constexpr uint32_t kSharedSets[] = {kEnhPage, kToonPage, kRetroPage, kMorePage, kNetPage, kEffectsPage};
+constexpr uint32_t kSharedSets[] = {kEnhPage, kToonPage, kRetroPage, kMorePage, kNetPage, kEffectsPage, kKeysPage,
+                                    kKeys2Page};
 uint32_t g_style_rows = kEnhPage;  // the set the shared page was opened for
 uint32_t Wid(uint32_t id) {
     for (uint32_t set : kSharedSets)
@@ -580,9 +632,9 @@ const MenuRow* SharedRow(uint32_t line) {
 // "Style Options"; the rows' are blanks as long as the longest label), rewritten for the set shown before the page
 // opens
 constexpr char kStyleTitle[] = "Style Options ", kMoreTitle[] = "More Settings ", kNetTitle[] = "Netplay       ",
-               kEffectsTitle[] = "Effects       ";
+               kEffectsTitle[] = "Effects       ", kKeysTitle[] = "Key Bindings  ";
 static_assert(sizeof(kStyleTitle) == sizeof(kMoreTitle) && sizeof(kStyleTitle) == sizeof(kNetTitle) &&
-              sizeof(kStyleTitle) == sizeof(kEffectsTitle));
+              sizeof(kStyleTitle) == sizeof(kEffectsTitle) && sizeof(kStyleTitle) == sizeof(kKeysTitle));
 constexpr size_t kLabelBytes = 32;
 const char* SharedLabel(uint32_t line) {
     static std::string labels[kSharedRows];
@@ -594,6 +646,7 @@ void SetSharedTexts(uint32_t set) {
                 set == kMorePage      ? kMoreTitle
                 : set == kNetPage     ? kNetTitle
                 : set == kEffectsPage ? kEffectsTitle
+                : set == kKeysPage || set == kKeys2Page ? kKeysTitle
                                       : kStyleTitle,
                 sizeof(kStyleTitle));
     g_style_rows = set;
@@ -690,6 +743,93 @@ bool NetActivate(X86Context& ctx, uint32_t player, uint32_t on) {
     return true;  // A elsewhere: nothing
 }
 
+// ---- Key Bindings
+struct Capture {
+    bool on = false;
+    uint32_t player = 0;
+    const KeyRow* row = nullptr;
+} g_capture;
+
+// a key's name as the menu shows it: "W", "Left Ctrl", "Mouse Left"
+std::string KeyLabel(uint16_t vk) {
+    std::string n = app::KeyToName(vk), out;
+    bool start = true;
+    for (char c : n) {
+        if (c == '_') {
+            out += ' ', start = true;
+            continue;
+        }
+        out += start ? char(std::toupper(static_cast<unsigned char>(c))) : c;
+        start = false;
+    }
+    return out;
+}
+std::string KeysText(int control) {
+    std::array<uint16_t, 2> k = input::ControlKeys(control);
+    std::string a = k[0] ? KeyLabel(k[0]) : "", b = k[1] ? KeyLabel(k[1]) : "";
+    if (a.empty()) std::swap(a, b);
+    return a.empty() ? "-" : b.empty() ? a : a + " / " + b;
+}
+void ShowKeyRow(X86Context& ctx, uint32_t player, const KeyRow& r) {
+    if (r.control >= 0) {
+        // the guest strings are made once for each text (nf::MenuString): the texts kept as long as the game runs
+        static std::vector<std::string>* texts = new std::vector<std::string>;
+        std::string t = KeysText(r.control);
+        size_t i = std::find(texts->begin(), texts->end(), t) - texts->begin();
+        if (i == texts->size()) texts->push_back(t);
+        Choice(ctx, player, r.id, {{(*texts)[i].c_str(), 0}}, 0);
+    } else {
+        Choice(ctx, player, r.id, {{r.id == kKeysDefaults ? "Restore" : "Open", 0}}, 0);
+    }
+}
+void EnterKeys(X86Context& ctx, uint32_t player) {
+    for (const KeyRow& r : kKeyRows)
+        for (const MenuRow& m : RowsOf(g_style_rows))
+            if (m.id == r.id) ShowKeyRow(ctx, player, r);
+}
+void EndCapture() {
+    if (g_capture.on) app::EndKeyCapture();
+    g_capture = {};
+}
+// the other set of keys on the same page: its texts, rows and values, the focus on its first row
+void SwitchKeys(X86Context& ctx, uint32_t player, uint32_t page_widget, uint32_t set) {
+    SetSharedTexts(set);
+    ShowStyleRows(ctx, player);
+    EnterKeys(ctx, player);
+    nf::MenuFocus(ctx, player, page_widget, kShared0);
+    if (const MenuRow* r = SharedRow(0)) nf::MenuHelp(ctx, player, r->help);
+}
+bool KeysActivate(X86Context& ctx, uint32_t player, uint32_t page_widget, uint32_t on) {
+    if (g_capture.on) return true;  // A while a key is awaited (a controller's): nothing
+    const KeyRow* row = nullptr;
+    for (const KeyRow& r : kKeyRows)
+        if (Wid(r.id) == on)
+            for (const MenuRow& m : RowsOf(g_style_rows))
+                if (m.id == r.id) row = &r;
+    if (!row) return true;
+    if (row->id == kKeysMore || row->id == kKeysBack) {
+        SwitchKeys(ctx, player, page_widget, row->id == kKeysMore ? kKeys2Page : kKeysPage);
+        return true;
+    }
+    if (row->id == kKeysDefaults) {
+        {
+            std::lock_guard<std::recursive_mutex> lock(app::UiLock());
+            app::Settings& s = app::Get();
+            for (int c = 0; c < input::kControls && c < int(s.keys.size()); c++) s.keys[c] = app::DefaultKeys(c);
+            app::Save();
+        }
+        EnterKeys(ctx, player);
+        nf::MenuHelp(ctx, player, "Every action's keys are as they first were.");
+        LOGR("nightfire: Key Bindings: the default keys");
+        return true;
+    }
+    g_capture = {true, player, row};
+    app::BeginKeyCapture();
+    Choice(ctx, player, row->id, {{"Press a Key...", 0}}, 0);
+    nf::MenuHelp(ctx, player, "Press a key or mouse button for this action. Escape clears it.");
+    return true;
+}
+
 void OpenMorePage(X86Context& ctx, uint32_t player) {
     SetSharedTexts(kMorePage);
     MenuGoTo(ctx, player, kStylePage);
@@ -701,8 +841,33 @@ void OpenNetplayPage(X86Context& ctx, uint32_t player) {
     MenuGoTo(ctx, player, kStylePage);
 }
 
+// each frame (nf::LanFrame): a key taken for the row waiting for one
+void KeysPageFrame(X86Context& ctx) {
+    uint16_t vk = 0;
+    if (!g_capture.on || !app::TakeCapturedKey(vk)) return;
+    const KeyRow& r = *g_capture.row;
+    {
+        std::lock_guard<std::recursive_mutex> lock(app::UiLock());
+        app::Settings& s = app::Get();
+        if (r.control < int(s.keys.size())) {
+            std::array<uint16_t, 2>& k = s.keys[size_t(r.control)];
+            if (vk == 0x1B) k = {0, 0};  // Escape: none
+            else if (k[0] != vk) k = {vk, k[0] ? k[0] : k[1]};
+            if (k[1] == k[0]) k[1] = 0;
+            app::Save();
+        }
+    }
+    uint32_t eax = ctx.eax, player = g_capture.player;
+    g_capture = {};
+    ShowKeyRow(ctx, player, r);
+    nf::MenuHelp(ctx, player, r.help);
+    ctx.eax = eax;
+    LOGR("nightfire: Key Bindings: %s is %s", r.label, KeysText(r.control).c_str());
+}
+
 // each frame (nf::LanFrame): the games found shown as they come and go, outside the menu's update
 void NetplayPageFrame(X86Context& ctx) {
+    KeysPageFrame(ctx);
     if (!g_net_open) return;
     std::vector<nf::LanServer> now = nf::NetServers();
     bool same = now.size() == g_net_shown.size();
@@ -717,6 +882,7 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
     uint32_t id = R32(widget + 0x18);
     if (IsPage(id)) {
         if (msg == 0x4D && id == kStylePage && g_net_open) nf::NetSearch(false), g_net_open = false;
+        if (msg == 0x4D && id == kStylePage) EndCapture();
         if (msg == 0x4C) {
             if (id == kGfxPage) {
                 EnterGraphics(ctx, player);
@@ -725,6 +891,7 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
                 if (g_style_rows == kNetPage) EnterNet(ctx, player);
                 else if (g_style_rows == kMorePage) EnterMore(ctx, player);
                 else if (g_style_rows == kEffectsPage) EnterEffects(ctx, player);
+                else if (g_style_rows == kKeysPage || g_style_rows == kKeys2Page) EnterKeys(ctx, player);
                 else EnterStyle(ctx, player, g_style_rows);
             }
             uint32_t first = kGfxRows[0].id;  // the first row shown (back gives the row it kept after)
@@ -763,10 +930,14 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
                 return true;
             }
             if (id == kStylePage && g_style_rows == kNetPage) return NetActivate(ctx, player, on);
+            if (id == kStylePage && (g_style_rows == kKeysPage || g_style_rows == kKeys2Page))
+                return KeysActivate(ctx, player, widget, on);
             if (id == kStylePage && g_style_rows == kMorePage && on == Wid(kKeys)) {
-                // key bindings and the wheel: the settings window, over the page
-                std::lock_guard<std::recursive_mutex> lock(app::UiLock());
-                if (!app::OverlayOpen()) app::ToggleOverlay();
+                // Key Bindings: More Settings kept, then the keys' rows on the same page (back returns to Settings)
+                KeepMore(ctx, player);
+                SetSharedTexts(kKeysPage);
+                MenuGoTo(ctx, player, kStylePage);
+                LOGR("nightfire: Key Bindings opened");
                 return true;
             }
             if (id == kGfxPage) KeepGraphics(ctx, player);

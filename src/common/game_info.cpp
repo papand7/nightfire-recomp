@@ -103,6 +103,7 @@ std::array<uint16_t, 2> ShooterKeys(int c) {
         case kA: return {'C', kLeftCtrl};    // crouch (Enter selects in the menus: menu_mouse.cpp)
         case kX: return {'E', 'R'};          // action, reload
         case kY: return {kSpace, 0};         // jump
+        case kLThumb: return {kLeftShift, 0};  // sprint (src/game/controls.cpp; unused on foot by the game)
         case kB: return {'Q', kBackspace};   // next weapon; back in the menus
         case kWhite: return {kMouseMiddle, 'F'};  // alt. fire
         case kBlack: return {'G', 0};        // next gadget

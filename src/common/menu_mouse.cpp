@@ -41,7 +41,8 @@ namespace nf {
 namespace {
 bool KeyHeld(int vk) {
 #ifdef _WIN32
-    return GetForegroundWindow() == static_cast<HWND>(app::Window()) && (GetAsyncKeyState(vk) & 0x8000);
+    return GetForegroundWindow() == static_cast<HWND>(app::Window()) && (GetAsyncKeyState(vk) & 0x8000) &&
+           !app::KeyCaptureBusy();  // a key being bound in the menus
 #else
     (void)vk;
     return false;

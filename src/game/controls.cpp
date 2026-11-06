@@ -14,9 +14,10 @@
 // eye as it is. While the keyboard plays, A reaches the game as a single frame's press whenever the key held and the
 // posture differ (again a few frames later if the posture did not change: no room to stand).
 //
-// Sprint (the original has none): Shift held while the keyboard plays, moving forward and standing. 0xA9CF0 (cdecl:
-// the actor, the object, a speed) makes a character's walk from its controls (2 forward, 0 and 1 to the side), the
-// stick capped at full, eased, then times the speed: that speed is raised (nf::SprintFactor, src/game/mouse.cpp).
+// Sprint (the original has none): its keys (the left stick click's binding, Shift; unused on foot by the game) held
+// while the keyboard plays, moving forward and standing. 0xA9CF0 (cdecl: the actor, the object, a speed) makes a
+// character's walk from its controls (2 forward, 0 and 1 to the side), the stick capped at full, eased, then times
+// the speed: that speed is raised (nf::SprintFactor, src/game/mouse.cpp).
 #include <cmath>
 #include <cstdlib>
 
@@ -69,7 +70,8 @@ void Sprint() {
     if (player < 0 || (!test && !input::UsingKeyboard())) return;
     uint32_t obj = g_objects[player];
     float& fwd = kernel::G<float>(kControls + uint32_t(player) * kPlayerSize + kForward);
-    bool sprint = test ? test == 2 : KeyHeld(0x10);  // either Shift
+    bool sprint = test == 2;
+    for (uint16_t k : input::ControlKeys(input::kLThumb)) sprint |= !test && k && KeyHeld(k);
     g_sprint[player] = sprint && fwd > 0.3f && obj && !Crouched(obj);
     if (test && obj) {
         static float last[3];

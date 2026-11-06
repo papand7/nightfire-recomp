@@ -34,6 +34,15 @@ which takes it at its next frame.
 Not offered (no renderer feature yet): shadows, lighting, normal/PBR materials, parallax, tessellation, TAA,
 reflections, refresh rate, gamma.
 
+## Key Bindings
+
+Settings > More Settings > **Key Bindings** (shared page, two sets of 12 rows; More Keys / First Keys switch them in
+place). Each row an action on foot and its two keys; A (Enter, a click, a controller's A) shows "Press a Key..." and
+the next key or mouse button becomes its first key, the old first its second; Escape clears the row; Default Keys
+restores all. Saved at once to settings.toml's [keys], the same table as the F1 window's Controls tab. While a key is
+awaited, and until it is let go, the keyboard and mouse reach neither the game nor the menu pointer
+(app::BeginKeyCapture). Sprint is the left stick click's control (unused on foot), Shift by default.
+
 ## Reverse-engineered pieces used
 
 - Menu file: a record stream at [0x25FB08]; builder 0x93960; records F0 page (id, var, platform, body size), F9
