@@ -30,6 +30,7 @@ Noir. Same build; only the Graphics menu changed.*
 - **Ray tracing** on RTX-class GPUs (Vulkan ray queries):
   - **Full Lighting:** the level's baked light is replaced by the game's own lamps, each with traced shadows. Outdoors
     there is a sun with traced shadows, in a random place for each level, its colour taken from the level's own light.
+  - **Full + GI:** global illumination: light bounced once off walls, floors and lamps (on screen or not), in their colour.
   - Ray traced **reflections** and **ambient occlusion**, plus shadows from effect lights. The gun and hands are traced too.
 - **HD texture packs** made on your own PC from your own copy:
   - The game's textures are dumped as it plays, then `hd_pack.exe` **upscales them 4x with Real-ESRGAN** (any Vulkan

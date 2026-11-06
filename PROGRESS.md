@@ -31,6 +31,17 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Ray traced global illumination (Vulkan, Full + GI)
+- What: `rt_gi` / `rt_gi_strength` (graphics.toml, Graphics Style window), the Effects page's Ray Tracing row gains
+  "Full + GI". kRtRelightHlsl's new `gi` entry traces, at half size, 4 cosine weighted rays from each pixel's surface;
+  a hit gives its texture times the light on it (0.35 of its baked light, the sun with a traced shadow, the game's
+  lights unshadowed). The relight adds it (4x4 traced pixels weighed by distance; fixed 4x4 ray patterns, so no frame
+  to frame jitter) and keeps 0.25 of the baked light in place of 0.35. The screen-space Bounce is skipped while it draws.
+- Evidence: `.local/vk/gi_test.sh` (Quick Game, on/off pairs; RT_TEST=7 the bounced light alone): walls take on the
+  lamps' and neighbouring walls' light and colour, smooth, no visible noise; log "ray traced bounced light drawn (4 rays
+  at 960x540)". Still 60 fps (vsync) on this PC.
+- Not done: GPU cost not measured separately; one bounce only; sky light for rays that miss.
+
 ### 2026-11-06 - HDR output (Vulkan)
 - Settings::hdr (Graphics page's HDR row, the settings window, settings.toml hdr / hdr_peak_nits /
   hdr_paper_white_nits): an HDR10 swap chain (A2B10G10R10, ST.2084; VK_EXT_swapchain_colorspace) where the screen

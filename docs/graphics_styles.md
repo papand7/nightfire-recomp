@@ -101,9 +101,9 @@ any texture is, by the texture pack (hd_pack). More or longer-lived particles ne
 
 ## Ray tracing
 
-The game's Graphics page > Effects > **Ray Tracing** (Off, Shade, Shade + Shadows, Full Lighting), Graphics Style >
+The game's Graphics page > Effects > **Ray Tracing** (Off, Shade, Shade + Shadows, Full Lighting, Full + GI), Graphics Style >
 Ray tracing, or graphics.toml `ray_tracing`, `rt_ao` (0-2), `rt_radius` (0.25-6 m), `rt_rays` (1-16 a pixel),
-`rt_shadows`, `rt_lighting`, `rt_sun` (0-2). Vulkan on a
+`rt_shadows`, `rt_lighting`, `rt_sun` (0-2), `rt_gi`, `rt_gi_strength` (0-2). Vulkan on a
 GPU with ray queries (VK_KHR_ray_query: NVIDIA RTX, AMD RX 6000 and later, Intel Arc); elsewhere the row reads "Not on
 this GPU". Every style but Retro. Off by default.
 
@@ -131,6 +131,13 @@ this GPU". Every style but Retro. Off by default.
   place, radius, intensity, colour; the 64 nearest in front of the camera), each with a traced shadow, and outdoors
   (how much of the view is sky, eased) a sun and sky light with a traced shadow. `XBE_RT_TEST=5` the new light alone,
   `6` the lights as dots. `.local/vk/rl_test.sh` shoots off/on pairs.
+- **Full + GI** (`rt_gi`, with Full Lighting): global illumination, light bounced once. At half the scene's size each
+  pixel's surface sends 4 rays (cosine weighted, two 4x4 patterns as the occlusion's); what each meets gives its
+  texture times the light on it (a share of its baked light, the sun with a traced shadow, the game's lights). The
+  relight adds it, weighing the 4x4 traced pixels about a pixel by their distance (no noise left to see, steady: no
+  frame to frame jitter). Light from walls, floors and lamps off screen reaches what is on screen, in their colour.
+  The screen-space bounce (Lighting > Bounce) is left out while it draws. `XBE_RT_TEST=7` the bounced light alone;
+  `.local/vk/gi_test.sh` shoots off/on pairs.
 - Test views (read at start): `XBE_RT_TEST=1` the left half with it, `2` the occlusion alone, `3` a ray from the
   camera against the depth (green where they agree), `4` the reflections' hits (green shown on screen, blue off it,
   red missed; with `XBE_SSR_TEST=1` every surface reflects). `.local/vk/rt_test.sh` shoots on/off pairs in a Quick

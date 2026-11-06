@@ -83,7 +83,7 @@ const std::vector<MenuRow> kEffectsRows = {
     {kParticles, nf::kMenuChoice, "Particles", "Soft: effects fade into walls. Lights: flashes and fire light the room.", 3},
     {kMaterials, nf::kMenuChoice, "Materials", "Detail: grass, snow, rock up close. PBR: the HD pack's maps (next start).", 4},
     {kLighting, nf::kMenuChoice, "Lighting", "Fog: depth in the distance. Bounce: rooms take on their lights' and walls' colour.", 5},
-    {kRayTracing, nf::kMenuChoice, "Ray Tracing", "Shade: in place of AO. Shadows: from effect lights. Full: the level lit by its lamps and a sun. RTX-class GPU.", 6},
+    {kRayTracing, nf::kMenuChoice, "Ray Tracing", "Shade: in place of AO. Shadows: from effect lights. Full: the level lit by its lamps and a sun. + GI: light bounced off walls. RTX-class GPU.", 6},
     {kDof, nf::kMenuChoice, "Depth of Field", "Distance: far scenery soft. Focus: what you aim at stays sharp.", 7},
     {kBlood, nf::kMenuChoice, "Blood", "Blood where your shots hit, and at your view's edges when you are hit. Every style.", 8},
 };
@@ -361,7 +361,7 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
             st.bounce_light = keep.bounce_light, st.bounce_strength = keep.bounce_strength;
             st.ray_tracing = keep.ray_tracing, st.rt_ao = keep.rt_ao, st.rt_radius = keep.rt_radius;
             st.rt_rays = keep.rt_rays, st.rt_shadows = keep.rt_shadows, st.rt_lighting = keep.rt_lighting;
-            st.rt_sun = keep.rt_sun, st.blood = keep.blood;
+            st.rt_sun = keep.rt_sun, st.rt_gi = keep.rt_gi, st.rt_gi_strength = keep.rt_gi_strength, st.blood = keep.blood;
             st.dof = keep.dof, st.dof_strength = keep.dof_strength;
         }
         st.texture_pack = ReadOption(ctx, player, kPack, kOffOn) > 0;
@@ -438,8 +438,9 @@ void EnterEffects(X86Context& ctx, uint32_t player) {
     Choice(ctx, player, kLighting, {{"Original", 0}, {"Fog", 1}, {"Bounce", 2}, {"Fog + Bounce", 3}},
            (st.atmosphere ? 1u : 0u) | (st.bounce_light ? 2u : 0u));
     if (gpu::RayTracingSupported())
-        Choice(ctx, player, kRayTracing, {{"Off", 0}, {"Shade", 1}, {"Shade + Shadows", 2}, {"Full Lighting", 3}},
-               st.ray_tracing ? (st.rt_lighting ? 3 : st.rt_shadows ? 2 : 1) : 0);
+        Choice(ctx, player, kRayTracing, {{"Off", 0}, {"Shade", 1}, {"Shade + Shadows", 2}, {"Full Lighting", 3},
+                                 {"Full + GI", 4}},
+               st.ray_tracing ? (st.rt_lighting ? (st.rt_gi ? 4 : 3) : st.rt_shadows ? 2 : 1) : 0);
     else
         Choice(ctx, player, kRayTracing, {{"Not on this GPU", 0xFF}}, 0xFF);
     Choice(ctx, player, kDof, {{"Off", gpu::kDofOff}, {"Distance", gpu::kDofDistance}, {"Focus", gpu::kDofFocus}},
@@ -466,10 +467,11 @@ void KeepEffects(X86Context& ctx, uint32_t player) {
         st.surface_depth = mat & 2 ? std::max(st.surface_depth, 0.6f) : 0.0f;
         st.ground_detail = mat & 4;
     }
-    if (uint32_t rt = ChoiceValue(ctx, player, kRayTracing); rt <= 3) {
+    if (uint32_t rt = ChoiceValue(ctx, player, kRayTracing); rt <= 4) {
         st.ray_tracing = rt >= 1;
         st.rt_shadows = rt >= 2;
-        st.rt_lighting = rt == 3;
+        st.rt_lighting = rt >= 3;
+        st.rt_gi = rt == 4;
     }
     if (uint32_t dof = ChoiceValue(ctx, player, kDof); dof < uint32_t(gpu::kDofModes)) st.dof = int(dof);
     {
@@ -480,9 +482,9 @@ void KeepEffects(X86Context& ctx, uint32_t player) {
     }
     Request(st);
     LOGR("nightfire: Effects kept: AO %d, bloom %d, reflections %d, particles %d/%d, materials %d, ground detail %d, "
-         "fog %d, bounce %d, ray tracing %d/%d/%d, depth of field %d, blood %d",
+         "fog %d, bounce %d, ray tracing %d/%d/%d/%d, depth of field %d, blood %d",
          st.quality_ao, st.quality_bloom, st.reflections, st.soft_particles, st.effect_lights, st.materials,
-         st.ground_detail, st.atmosphere, st.bounce_light, st.ray_tracing, st.rt_shadows, st.rt_lighting, st.dof,
+         st.ground_detail, st.atmosphere, st.bounce_light, st.ray_tracing, st.rt_shadows, st.rt_lighting, st.rt_gi, st.dof,
          st.blood);
 }
 
