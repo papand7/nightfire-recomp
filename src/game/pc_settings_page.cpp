@@ -90,7 +90,7 @@ const std::vector<Row> kRows = {
     {kGraphics, kButtonRow, "Graphics", "Picture quality, the shader style and its options."},
     {kMore, kButtonRow, "More Settings", "Frame counter, HUD, keyboard and mouse, language and more."},
 };
-constexpr int16_t kFirstY = 78, kRowStep = 22;  // AV's rows are 28 apart from 86: twelve need it closer
+constexpr int16_t kFirstY = 88, kRowStep = 21;  // AV's rows are 28 apart from 86 (below the title band): twelve need it closer
 
 // a string's guest copy, made once for each text (by its contents: a host pointer can be another string's later)
 uint32_t Str(const char* s) {
@@ -274,7 +274,7 @@ namespace nf {
 bool PcPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint32_t msg, uint32_t arg) {
     uint32_t id = R32(widget + 0x18);
     if (id == kPage) {
-        if (msg == 0x4C) Enter(ctx, player);
+        if (msg == 0x4C) Enter(ctx, player), MenuFocus(ctx, player, widget, kRows[0].id);
         if (msg == 0x4B) {
             if (arg && R32(arg + 0x18) == kMore) {  // this page's values kept, then More Settings
                 Keep(ctx, player);
@@ -321,6 +321,24 @@ void MenuBack(X86Context& ctx, uint32_t player) {
     uint32_t eax = ctx.eax;
     kernel::CallGuest(ctx, kGoTo, {kMenuContext + (player & 0xFF) * kContextSize, 0x5F, 0, 0});
     ctx.eax = eax;
+}
+
+void MenuFocus(X86Context& ctx, uint32_t player, uint32_t page, uint32_t id) {
+    // the page's widgets (0x72820's walk: the list at +0x94, its link +0xA0 dwords in); the row's value widget, not
+    // its label (+0x7B 5); then the context's 0x22, as back (0x92C40's 0x5F) gives the focus it kept
+    uint32_t w = R32(page + 0x94), on = 0;
+    if (w) w -= R32(page + 0xA0) * 4;
+    for (int n = 0; w && n < 1000; w = R32(w), n++)
+        if (R32(w + 0x18) == id && (!on || *static_cast<uint8_t*>(kernel::HostPtr(w + 0x7B)) != 5)) on = w;
+    uint32_t was = R32(page + 0xAC);
+    if (!on || on == was) return;
+    uint32_t eax = ctx.eax;
+    kernel::CallGuest(ctx, kSetWidget, {kMenuContext + (player & 0xFF) * kContextSize, 0x22, 0, on});
+    ctx.eax = eax;
+    static int said = 0;
+    if (said++ < 4)
+        LOGR("nightfire: menu page %08X: focus %08X -> row %08X (%08X)", R32(page + 0x18), was ? R32(was + 0x18) : 0,
+             id, R32(page + 0xAC) ? R32(R32(page + 0xAC) + 0x18) : 0);
 }
 
 // the page from anywhere in the front end (the main menu's item)

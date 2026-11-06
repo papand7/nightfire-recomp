@@ -47,6 +47,58 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
   aimed, their direction's yaw is the view's (80.52 deg both) and their pitch is the actor's +0x838 times 90 deg
   (-0.864 -> -77.8 deg, sin = 0.977 = the direction's y). The test fires with `RT 30` (`RT 3` is too short to fire).
 
+### 2026-11-05 - Depth of field (Vulkan)
+- New Effects row Depth of Field: Off / Distance / Focus (graphics.toml `depth_of_field`, `dof_strength`;
+  docs/graphics_styles.md). VulkanBackend::DofPass (kDofHlsl) after SMAA: focus eased in a 1x1 image from the middle
+  of the view, a 32-tap gather; the depth kept at the mid-frame clear (RtKeepDepth, now also when depth of field is on)
+  keeps the gun and hands sharp. Aiming down the sights (controls.cpp -> gpu::SetAiming) blurs more.
+- Checked on screen (.local/vk/dof_test.sh, Quick Game): Focus keeps the rock under the crosshair sharp and blurs the
+  mountains; aiming through a doorway (NF_ADS_TEST=1) the room beyond sharp, the frame and walls blurred; gun and HUD
+  sharp in every shot; no frame rate change against off (60 and 34 fps both ways, the 34 from other load).
+- Effects row checked on screen from the main menu (.local/vk/dof_menu.sh: fits, A keeps it) and from the pause
+  menu (.local/vk/dof_pause.sh + rt_step.sh): Focus kept there applies at once in play.
+- Found on the way, fixed: from the pause menu a page opened with the focus the page before had (Graphics on Restore
+  Defaults: three DOWNs and A there restored defaults). nf::MenuFocus (pc_settings_page.cpp) now gives each of our
+  pages its first row on 0x4C, with the menu context's message 0x22 (what 0x92C40's back uses); back still returns to
+  the row it kept. Checked from the pause screen (Settings, Graphics, Effects open on their first row; B from Effects
+  back on Effects) and dof_menu.sh unchanged.
+- Not checked: Driving.xbe (a Z-buffer: Distance's metres do not hold).
+- Disk: C: filled up (0 bytes) mid-task; Le Office's snapshots (24 GB in AppData\Local\LeOffice\data\snapshots)
+  were cleared at the user's request.
+
+### 2026-11-05 - Ray tracing checked on screen, fixed, and on the Effects page
+- The Vulkan ray traced occlusion and light shadows (sdk vulkan.cpp RtCapture/RtBuild/RtPass) drew, but were only
+  reachable from graphics.toml and the settings window. Checked with `.local/vk/rt_test.sh` (Quick Game, Fort Knox,
+  on/off pairs; RTX 5060): XBE_RT_TEST=3 green over the whole scene (the traced triangles meet the depth).
+- Fixed: the gun and hands were darkened (drawn after the game's mid-frame depth clear: now neither traced nor
+  shaded); dark lines across flat ground far off (the slope from the depth's neighbours was wrong where the depth steps,
+  so rays met the ground they left: now a pixel's place and slope are its own triangle's, the structure's vertices and
+  triangles bound to the traced passes).
+- Effects > Ray Tracing (Off, Shade, Shade + Shadows; "Not on this GPU" without ray queries), kept across presets.
+  Checked in the main menu's Effects page: the row and its help line fit, A keeps it (graphics.toml ray_tracing,
+  rt_shadows). docs/graphics_styles.md "Ray tracing".
+- Not yet: the cost measured (XBE_PERF) in a busy level; an AMD or Intel GPU; still off by default.
+
+### 2026-11-05 - Paris washed out by the fog (Vulkan, Enhanced)
+- Paris at night came out bleached cream with white speckle (on/off pairs from graphics.toml read live: atmosphere
+  alone took the frame's mean from 50 to 92). Two faults in the fog (sdk vulkan.cpp, kAtmoHlsl): its colour was the
+  brightness-weighted mean of what lights the air, so with a dark sky only the lamps, windows and explosions counted;
+  and Driving.xbe's scene is Z-buffered ("fog over a Z-buffered scene", new log line), whose 1 / (1 - z) is no
+  distance in metres: every pixel read past 200 m (XBE_ATMO_TEST=2) and got the full fog.
+- Now the fog's colour is the sky's own as seen (every sky pixel alike; no sky in view, the picture's mean), and the
+  fog is drawn only over a W-buffer (default.xbe's levels); the shafts are unchanged.
+- Tested (`.local/paris_run/ab.sh`, a copy of the build so other runs are not disturbed): Paris's Mission Failed view
+  with the fog on and off now differs only by the animated menu figure; Enhanced and Original alike in the van. Not
+  yet checked: a default.xbe night level with the new fog colour; D3D12 (it has no atmosphere pass).
+- Parked (minor): in Enhanced, Paris's road can show a hazy grass-like overlay, with ghost copies of cars on walls,
+  like a reflection, fog or smoke. Its effect is not pinned down: frame-to-frame A/B in Paris is unreliable (the
+  scripted run moves and zooms the scope; pausing missed). Suspects: screen-space reflections, bounce light, ground
+  detail. XBE_SSR_TEST=1-4 makes every opaque surface reflect, so its mask view does not show the real one.
+
+### 2026-11-05 - Weapon sway slowed to the pace of the steps (was too fast)
+- src/game/sway.cpp kStep 1.6 -> 2.8 metres a full bob: at a run it was about five dips a second (a bob every 0.8 m),
+  now about 1.4 a bob (one dip a step). The eye's bob and the gun's step sway both follow this phase; amounts unchanged.
+
 ### 2026-11-05 - Ground detail checked on screen and fixed; on by default
 - It never showed: the shader took the vertex programs' clip w as metres (it is the game's scaled W), so its fade
   was 0 everywhere (XBE_DETAIL_SPLIT=2 drew the fade and depth as colours). The view depth is now the mask pass's

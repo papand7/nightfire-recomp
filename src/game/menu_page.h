@@ -37,6 +37,9 @@ void MenuHelp(X86Context& ctx, uint32_t player, const char* text);
 // to another page (the menu's stack: back returns), and back
 void MenuGoTo(X86Context& ctx, uint32_t player, uint32_t page);
 void MenuBack(X86Context& ctx, uint32_t player);
+// the focus on a row of the page entered (its widget, message 0x4C's): a level's menu would keep the row the page
+// before had
+void MenuFocus(X86Context& ctx, uint32_t player, uint32_t page, uint32_t id);
 
 // the Graphics page and its style pages (src/game/graphics_page.cpp)
 std::vector<std::vector<uint8_t>> GraphicsPages(const std::vector<uint8_t>& av, uint32_t (*record_size)(uint32_t));

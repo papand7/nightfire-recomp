@@ -10,9 +10,8 @@ it draws and moves as Eurocom's pages do. No ImGui.
 | Graphics Quality | Low / Medium / High / Ultra / Custom | anisotropic filtering, FXAA, AO, bloom together |
 | Shader Style | Original, Enhanced, Toon, Retro, mod presets, "(Edited)" | gpu::GraphicsStyle (Vulkan) |
 | Style Options | page | the chosen style's rows |
+| Effects | page | Ambient Occlusion, Bloom, Reflections, Particles, Materials, Lighting, Ray Tracing, Depth of Field (Vulkan; the shared page) |
 | Texture Filtering | As the Game, 2x-16x | Settings::aniso (both renderers) |
-| Ambient Occlusion | Off / Low / High | quality_ao (Vulkan) |
-| Bloom | Off / On | quality_bloom (Vulkan) |
 | Anti-Aliasing | Off, FXAA (+ MSAA 2x/4x/8x on Direct3D) | Settings::fxaa, msaa |
 | Sharpening | Off / Low / Medium / High | Settings::sharpen (both) |
 | Render Scale | 50%-200% | Settings::render_percent (both, at once) |
@@ -45,8 +44,10 @@ reflections, refresh rate, gamma.
   0x10 add (text, value), 0x1E select by value, 0x35 read; sliders 0x27/0x69/0x2E/0x40; 0x2B hide (1) or show (0);
   0x18 text. Page change 0x92C40 on the player's menu context 0x25F1D0 + player * 0x1D8: 0x44 to a page, 0x5F back.
 - **Page limit**: the front end's file takes three pages more than its own (Settings + two); a fourth crashed the
-  menu code on the first page change (a null write under 0x8F3F0). Enhanced, Toon and Retro options therefore share
-  one page: their rows sit on the same lines and the others are hidden with 0x2B.
+  menu code on the first page change (a null write under 0x8F3F0). Enhanced, Toon and Retro options, Effects, More
+  Settings and Netplay therefore share one page: their rows sit on the same lines and the others are hidden with 0x2B.
+- **Rows per page**: the game's font is about 19 units tall, so rows need 22 apart; from y 76 that is 12 rows above
+  the help line at about 350. Graphics had 16 at 16 apart and they overlapped; its effect rows went to Effects.
 
 ## The mouse in the menus
 

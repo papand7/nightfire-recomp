@@ -10,6 +10,7 @@
 #include "common/nightfire.h"
 #include "core/input.h"
 #include "core/log.h"
+#include "gpu/style.h"
 #include "kernel/kernel.h"
 #include "xdk/hle.h"
 
@@ -47,7 +48,10 @@ X86_FUNC(sub_000DE720) {
         }
     }
     __imp__sub_000DE720(ctx, base);
-    if (players == kControls) nf::AimDownSights(count), nf::LanFrame(ctx);
+    if (players == kControls) {
+        nf::AimDownSights(count), nf::LanFrame(ctx);
+        gpu::SetAiming(nf::AimingDownSights());  // depth of field's focus blurs more while aiming
+    }
     nf::MouseAsStick();
 }
 

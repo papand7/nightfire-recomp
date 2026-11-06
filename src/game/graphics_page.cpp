@@ -37,13 +37,15 @@ using nf::MenuRow;
 // page change): Enhanced, Toon and Retro options and Settings' More Settings share one page, their rows on the
 // same lines, the others hidden, its title rewritten in place for the set shown (SetSharedTitle)
 constexpr uint32_t kGfxPage = 0x4000FC20, kStylePage = 0x4000FC30;
-constexpr uint32_t kEnhPage = 1, kToonPage = 2, kRetroPage = 3, kMorePage = 4, kNetPage = 5;  // the shared page's rows
+constexpr uint32_t kEnhPage = 1, kToonPage = 2, kRetroPage = 3, kMorePage = 4, kNetPage = 5,
+                   kEffectsPage = 6;  // the shared page's rows
 // the Graphics page's rows
 constexpr uint32_t kQuality = 0x1000FC21, kStyle = 0x1000FC22, kStyleOptions = 0x1000FC23, kFilter = 0x1000FC24,
                    kAo = 0x1000FC25, kBloom = 0x1000FC26, kAa = 0x1000FC27, kSharpen = 0x1000FC28,
                    kScale = 0x1000FC29, kRenderer = 0x1000FC2A, kPack = 0x1000FC2B, kDefaults = 0x1000FC2C,
                    kReflect = 0x1000FC2D, kParticles = 0x1000FC2E, kMaterials = 0x1000FC2F,
-                   kLighting = 0x1000FC30;
+                   kLighting = 0x1000FC30, kEffects = 0x1000FC38, kRayTracing = 0x1000FC39,
+                   kDof = 0x1000FC3A;
 // the style pages' rows
 constexpr uint32_t kExposure = 0x1000FC31, kTonemap = 0x1000FC32, kContrast = 0x1000FC33, kSaturation = 0x1000FC34,
                    kVignette = 0x1000FC35, kGrain = 0x1000FC36, kSceneSharpen = 0x1000FC37;
@@ -60,19 +62,25 @@ const std::vector<MenuRow> kGfxRows = {
     {kQuality, nf::kMenuChoice, "Graphics Quality", "Low to Ultra set the rows below at once; changing one makes it Custom."},
     {kStyle, nf::kMenuChoice, "Shader Style", "The picture's look: the console's own, Enhanced, Toon, Retro or a mod's."},
     {kStyleOptions, nf::kMenuButton, "Style Options", "The chosen style's own settings."},
+    {kEffects, nf::kMenuButton, "Effects", "Ambient occlusion, bloom, reflections, particles, materials, lighting, ray tracing, focus."},
     {kFilter, nf::kMenuChoice, "Texture Filtering", "How sharp textures stay at an angle: as the game draws them, or anisotropic."},
-    {kAo, nf::kMenuChoice, "Ambient Occlusion", "Soft shade in corners and creases, from the scene's depth."},
-    {kBloom, nf::kMenuChoice, "Bloom", "A glow around lights and bright surfaces."},
-    {kReflect, nf::kMenuChoice, "Reflections", "Glass mirrors what is on screen (screen-space reflections)."},
-    {kParticles, nf::kMenuChoice, "Particles", "Soft: effects fade into walls. Lights: flashes and fire light the room."},
-    {kMaterials, nf::kMenuChoice, "Materials", "Detail: grass, snow, rock up close. PBR: the HD pack's maps (next start)."},
-    {kLighting, nf::kMenuChoice, "Lighting", "Fog: depth in the distance. Bounce: rooms take on their lights' and walls' colour."},
     {kAa, nf::kMenuChoice, "Anti-Aliasing", "SMAA smooths the scene's edges, the HUD stays sharp; FXAA the whole picture."},
     {kSharpen, nf::kMenuChoice, "Sharpening", "Contrast adaptive sharpening of the finished picture."},
     {kScale, nf::kMenuChoice, "Render Scale", "The 3D picture's size against the screen's: lower is faster, higher smoother."},
     {kRenderer, nf::kMenuChoice, "Renderer", "Vulkan draws the styles and effects; changes at the next start."},
     {kPack, nf::kMenuChoice, "Texture Packs", "Pictures in mods/textures drawn in place of the game's textures."},
     {kDefaults, nf::kMenuButton, "Restore Defaults", "Every row on this page and the style options as they first were."},
+};
+// Effects (Graphics' Effects button): what only Vulkan draws, apart from the style
+const std::vector<MenuRow> kEffectsRows = {
+    {kAo, nf::kMenuChoice, "Ambient Occlusion", "Soft shade in corners and creases, from the scene's depth.", 0},
+    {kBloom, nf::kMenuChoice, "Bloom", "A glow around lights and bright surfaces.", 1},
+    {kReflect, nf::kMenuChoice, "Reflections", "Glass mirrors what is on screen (screen-space reflections).", 2},
+    {kParticles, nf::kMenuChoice, "Particles", "Soft: effects fade into walls. Lights: flashes and fire light the room.", 3},
+    {kMaterials, nf::kMenuChoice, "Materials", "Detail: grass, snow, rock up close. PBR: the HD pack's maps (next start).", 4},
+    {kLighting, nf::kMenuChoice, "Lighting", "Fog: depth in the distance. Bounce: rooms take on their lights' and walls' colour.", 5},
+    {kRayTracing, nf::kMenuChoice, "Ray Tracing", "Traced shade in place of Ambient Occlusion; Shadows: from effect lights. RTX-class GPU.", 6},
+    {kDof, nf::kMenuChoice, "Depth of Field", "Distance: far scenery soft. Focus: what you aim at stays sharp.", 7},
 };
 const std::vector<MenuRow> kEnhRows = {
     {kExposure, nf::kMenuChoice, "Exposure", "How bright the scene is drawn.", 0},
@@ -120,7 +128,8 @@ const std::vector<MenuRow> kNetRows = {
     {kNetServer, nf::kMenuChoice, "Game", "The games found on this network: PC, map, players.", 1},
     {kNetJoin, nf::kMenuChoice, "Join Game", "Join the game chosen above.", 2},
 };
-constexpr int16_t kFirstY = 76, kStep = 18;  // sixteen rows above the help line
+constexpr int16_t kFirstY = 88, kStep = 21;  // below the panel's title band (AV's first row is at 86), as Settings'
+constexpr int16_t kStyleStep = 21;           // the shared page's twelve rows
 
 // a choice of labelled values: shown at the one nearest the current value
 struct Option {
@@ -241,25 +250,8 @@ void EnterGraphics(X86Context& ctx, uint32_t player) {
         uint32_t shown = 0;
         auto items = StyleItems(st, shown);
         Choice(ctx, player, kStyle, items, shown);
-        ShowOptions(ctx, player, kAo, kAoLevels, float(st.quality_ao));
-        ShowOptions(ctx, player, kBloom, kOffOn, st.quality_bloom ? 1.0f : 0.0f);
-        ShowOptions(ctx, player, kReflect, kReflectLevels, float(st.reflections));
-        Choice(ctx, player, kParticles, {{"Original", 0}, {"Soft", 1}, {"Soft + Lights", 2}},
-               st.effect_lights ? 2 : st.soft_particles ? 1 : 0);
-        // bit 0 the pack's maps, bit 1 relief, bit 2 ground detail
-        Choice(ctx, player, kMaterials,
-               {{"Original", 0}, {"Detail", 4}, {"Detail + PBR", 5}, {"Detail + Relief", 7}, {"PBR", 1}, {"PBR + Relief", 3}},
-               (st.materials ? 1u : 0u) | (st.materials && st.surface_depth > 0 ? 2u : 0u) | (st.ground_detail ? 4u : 0u));
-        Choice(ctx, player, kLighting, {{"Original", 0}, {"Fog", 1}, {"Bounce", 2}, {"Fog + Bounce", 3}},
-               (st.atmosphere ? 1u : 0u) | (st.bounce_light ? 2u : 0u));
     } else {
         Choice(ctx, player, kStyle, {{"Original (Needs Vulkan)", 0xFF}}, 0xFF);
-        Choice(ctx, player, kAo, {{"Needs Vulkan", 0xFF}}, 0xFF);
-        Choice(ctx, player, kBloom, {{"Needs Vulkan", 0xFF}}, 0xFF);
-        Choice(ctx, player, kReflect, {{"Needs Vulkan", 0xFF}}, 0xFF);
-        Choice(ctx, player, kParticles, {{"Needs Vulkan", 0xFF}}, 0xFF);
-        Choice(ctx, player, kMaterials, {{"Needs Vulkan", 0xFF}}, 0xFF);
-        Choice(ctx, player, kLighting, {{"Needs Vulkan", 0xFF}}, 0xFF);
     }
     ShowOptions(ctx, player, kFilter, kFilters, float(s.aniso));
     uint32_t aa = s.msaa && !Vulkan() ? 1 + std::min<uint32_t>(s.msaa, 3) : s.smaa && Vulkan() ? kAaSmaa : s.fxaa ? 1 : 0;
@@ -292,6 +284,7 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
             st.preset = presets[style].name;
             st.quality = keep.quality, st.quality_ao = keep.quality_ao, st.quality_bloom = keep.quality_bloom;
             st.texture_pack = keep.texture_pack, st.dump_textures = keep.dump_textures;
+            st.reflections = keep.reflections;
             st.reflection_strength = keep.reflection_strength, st.reflections_auto = keep.reflections_auto;
             st.soft_particles = keep.soft_particles, st.particle_fade = keep.particle_fade;
             st.effect_lights = keep.effect_lights, st.light_strength = keep.light_strength;
@@ -301,20 +294,9 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
             st.detail_distance = keep.detail_distance;
             st.atmosphere = keep.atmosphere, st.fog_strength = keep.fog_strength, st.shaft_strength = keep.shaft_strength;
             st.bounce_light = keep.bounce_light, st.bounce_strength = keep.bounce_strength;
-        }
-        if (uint32_t lv = ChoiceValue(ctx, player, kLighting); lv <= 3) st.atmosphere = lv & 1, st.bounce_light = lv & 2;
-        st.quality_ao = int(ReadOption(ctx, player, kAo, kAoLevels));
-        st.quality_bloom = ReadOption(ctx, player, kBloom, kOffOn) > 0;
-        st.reflections = int(ReadOption(ctx, player, kReflect, kReflectLevels));
-        if (uint32_t pv = ChoiceValue(ctx, player, kParticles); pv <= 2) {
-            st.soft_particles = pv >= 1;
-            st.effect_lights = pv == 2;
-        }
-        uint32_t mat = ChoiceValue(ctx, player, kMaterials);
-        if (mat <= 7) {
-            st.materials = mat & 1;
-            st.surface_depth = mat & 2 ? std::max(st.surface_depth, 0.6f) : 0.0f;
-            st.ground_detail = mat & 4;
+            st.ray_tracing = keep.ray_tracing, st.rt_ao = keep.rt_ao, st.rt_radius = keep.rt_radius;
+            st.rt_rays = keep.rt_rays, st.rt_shadows = keep.rt_shadows;
+            st.dof = keep.dof, st.dof_strength = keep.dof_strength;
         }
         st.texture_pack = ReadOption(ctx, player, kPack, kOffOn) > 0;
     }
@@ -366,6 +348,68 @@ void RestoreDefaults(X86Context& ctx, uint32_t player) {
     // the rows show it (the request is taken at the next frame: the page is filled from the values set here)
     LOGR("nightfire: Graphics restored to defaults");
     (void)ctx, (void)player;
+}
+
+// Effects
+void EnterEffects(X86Context& ctx, uint32_t player) {
+    if (!Vulkan()) {
+        for (uint32_t id : {kAo, kBloom, kReflect, kParticles, kMaterials, kLighting, kRayTracing, kDof})
+            Choice(ctx, player, id, {{"Needs Vulkan", 0xFF}}, 0xFF);
+        return;
+    }
+    gpu::GraphicsStyle st = Current();
+    ShowOptions(ctx, player, kAo, kAoLevels, float(st.quality_ao));
+    ShowOptions(ctx, player, kBloom, kOffOn, st.quality_bloom ? 1.0f : 0.0f);
+    ShowOptions(ctx, player, kReflect, kReflectLevels, float(st.reflections));
+    Choice(ctx, player, kParticles, {{"Original", 0}, {"Soft", 1}, {"Soft + Lights", 2}},
+           st.effect_lights ? 2 : st.soft_particles ? 1 : 0);
+    // bit 0 the pack's maps, bit 1 relief, bit 2 ground detail
+    Choice(ctx, player, kMaterials,
+           {{"Original", 0}, {"Detail", 4}, {"Detail + PBR", 5}, {"Detail + Relief", 7}, {"PBR", 1}, {"PBR + Relief", 3}},
+           (st.materials ? 1u : 0u) | (st.materials && st.surface_depth > 0 ? 2u : 0u) | (st.ground_detail ? 4u : 0u));
+    Choice(ctx, player, kLighting, {{"Original", 0}, {"Fog", 1}, {"Bounce", 2}, {"Fog + Bounce", 3}},
+           (st.atmosphere ? 1u : 0u) | (st.bounce_light ? 2u : 0u));
+    if (gpu::RayTracingSupported())
+        Choice(ctx, player, kRayTracing, {{"Off", 0}, {"Shade", 1}, {"Shade + Shadows", 2}},
+               st.ray_tracing ? (st.rt_shadows ? 2 : 1) : 0);
+    else
+        Choice(ctx, player, kRayTracing, {{"Not on this GPU", 0xFF}}, 0xFF);
+    Choice(ctx, player, kDof, {{"Off", gpu::kDofOff}, {"Distance", gpu::kDofDistance}, {"Focus", gpu::kDofFocus}},
+           uint32_t(st.dof));
+}
+void KeepEffects(X86Context& ctx, uint32_t player) {
+    if (!Vulkan()) return;
+    gpu::GraphicsStyle st = Current();
+    if (uint32_t lv = ChoiceValue(ctx, player, kLighting); lv <= 3) st.atmosphere = lv & 1, st.bounce_light = lv & 2;
+    st.quality_ao = int(ReadOption(ctx, player, kAo, kAoLevels));
+    st.quality_bloom = ReadOption(ctx, player, kBloom, kOffOn) > 0;
+    st.reflections = int(ReadOption(ctx, player, kReflect, kReflectLevels));
+    if (uint32_t pv = ChoiceValue(ctx, player, kParticles); pv <= 2) {
+        st.soft_particles = pv >= 1;
+        st.effect_lights = pv == 2;
+    }
+    uint32_t mat = ChoiceValue(ctx, player, kMaterials);
+    if (mat <= 7) {
+        st.materials = mat & 1;
+        st.surface_depth = mat & 2 ? std::max(st.surface_depth, 0.6f) : 0.0f;
+        st.ground_detail = mat & 4;
+    }
+    if (uint32_t rt = ChoiceValue(ctx, player, kRayTracing); rt <= 2) {
+        st.ray_tracing = rt >= 1;
+        st.rt_shadows = rt == 2;
+    }
+    if (uint32_t dof = ChoiceValue(ctx, player, kDof); dof < uint32_t(gpu::kDofModes)) st.dof = int(dof);
+    {
+        // AO and bloom are the quality preset's: a change here can make it Custom
+        std::lock_guard<std::recursive_mutex> lock(app::UiLock());
+        const app::Settings& s = app::Get();
+        st.quality = gpu::MatchQuality(st, s.aniso, s.fxaa, s.smaa);
+    }
+    Request(st);
+    LOGR("nightfire: Effects kept: AO %d, bloom %d, reflections %d, particles %d/%d, materials %d, ground detail %d, "
+         "fog %d, bounce %d, ray tracing %d/%d, depth of field %d",
+         st.quality_ao, st.quality_bloom, st.reflections, st.soft_particles, st.effect_lights, st.materials,
+         st.ground_detail, st.atmosphere, st.bounce_light, st.ray_tracing, st.rt_shadows, st.dof);
 }
 
 // the style pages
@@ -427,8 +471,7 @@ void EnterMore(X86Context& ctx, uint32_t player) {
     Choice(ctx, player, kLanguage, langs, s.language);
     Choice(ctx, player, kKeys, {{"Open", 0}}, 0);
     Choice(ctx, player, kMenuColors, {{"Original", 0}, {"PC Blue", 1}}, s.menu_colors ? 1 : 0);
-    Choice(ctx, player, kAds, {{"Off", 0}, {"On", 1}, {"On, Blur", 2}},
-           !nf::aim_down_sights ? 0 : nf::ads_focus_blur ? 2 : 1);
+    Choice(ctx, player, kAds, {{"Off", 0}, {"On", 1}}, nf::aim_down_sights ? 1 : 0);
     ShowOptions(ctx, player, kMotion, kOffOn, nf::view_motion ? 1.0f : 0.0f);
 }
 void KeepMore(X86Context& ctx, uint32_t player) {
@@ -445,7 +488,7 @@ void KeepMore(X86Context& ctx, uint32_t player) {
     s.mouse_look = ReadOption(ctx, player, kMouseLook, kOffOn) > 0;
     if (colors <= 1) s.menu_colors = colors;
     uint32_t ads = ChoiceValue(ctx, player, kAds);
-    if (ads <= 2) nf::aim_down_sights = ads > 0, nf::ads_focus_blur = ads == 2;
+    if (ads <= 1) nf::aim_down_sights = ads > 0;
     nf::view_motion = ReadOption(ctx, player, kMotion, kOffOn) > 0;
     for (uint32_t l : app::kGame.languages)
         if (l == lang) s.language = l;
@@ -506,9 +549,10 @@ const std::vector<MenuRow>& RowsOf(uint32_t page) {
            : page == kToonPage ? kToonRows
            : page == kMorePage ? kMoreRows
            : page == kNetPage  ? kNetRows
+           : page == kEffectsPage ? kEffectsRows
                                : kRetroRows;
 }
-constexpr uint32_t kSharedSets[] = {kEnhPage, kToonPage, kRetroPage, kMorePage, kNetPage};
+constexpr uint32_t kSharedSets[] = {kEnhPage, kToonPage, kRetroPage, kMorePage, kNetPage, kEffectsPage};
 uint32_t g_style_rows = kEnhPage;  // the set the shared page was opened for
 uint32_t Wid(uint32_t id) {
     for (uint32_t set : kSharedSets)
@@ -525,8 +569,10 @@ const MenuRow* SharedRow(uint32_t line) {
 // the shared page's texts: strings of its own (the title's trailing space keeps it apart from the Graphics row's
 // "Style Options"; the rows' are blanks as long as the longest label), rewritten for the set shown before the page
 // opens
-constexpr char kStyleTitle[] = "Style Options ", kMoreTitle[] = "More Settings ", kNetTitle[] = "Netplay       ";
-static_assert(sizeof(kStyleTitle) == sizeof(kMoreTitle) && sizeof(kStyleTitle) == sizeof(kNetTitle));
+constexpr char kStyleTitle[] = "Style Options ", kMoreTitle[] = "More Settings ", kNetTitle[] = "Netplay       ",
+               kEffectsTitle[] = "Effects       ";
+static_assert(sizeof(kStyleTitle) == sizeof(kMoreTitle) && sizeof(kStyleTitle) == sizeof(kNetTitle) &&
+              sizeof(kStyleTitle) == sizeof(kEffectsTitle));
 constexpr size_t kLabelBytes = 32;
 const char* SharedLabel(uint32_t line) {
     static std::string labels[kSharedRows];
@@ -535,7 +581,11 @@ const char* SharedLabel(uint32_t line) {
 }
 void SetSharedTexts(uint32_t set) {
     std::memcpy(kernel::HostPtr(nf::MenuString(kStyleTitle)),
-                set == kMorePage ? kMoreTitle : set == kNetPage ? kNetTitle : kStyleTitle, sizeof(kStyleTitle));
+                set == kMorePage      ? kMoreTitle
+                : set == kNetPage     ? kNetTitle
+                : set == kEffectsPage ? kEffectsTitle
+                                      : kStyleTitle,
+                sizeof(kStyleTitle));
     g_style_rows = set;
     for (uint32_t line = 0; line < kSharedRows; line++) {
         const MenuRow* r = SharedRow(line);
@@ -568,7 +618,7 @@ bool MenuRowHidden(uint32_t page, uint32_t id) {
 std::vector<std::vector<uint8_t>> GraphicsPages(const std::vector<uint8_t>& av, uint32_t (*record_size)(uint32_t)) {
     std::vector<std::vector<uint8_t>> pages = {BuildPage(av, record_size, kGfxPage, "Graphics", kGfxRows, kFirstY, kStep),
                                                BuildPage(av, record_size, kStylePage, kStyleTitle, StylePageRows(),
-                                                         kFirstY, kStep)};
+                                                         kFirstY, kStyleStep)};
     for (auto& p : pages)
         if (p.empty()) return {};
     return pages;
@@ -664,8 +714,13 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
                 ShowStyleRows(ctx, player);
                 if (g_style_rows == kNetPage) EnterNet(ctx, player);
                 else if (g_style_rows == kMorePage) EnterMore(ctx, player);
+                else if (g_style_rows == kEffectsPage) EnterEffects(ctx, player);
                 else EnterStyle(ctx, player, g_style_rows);
             }
+            uint32_t first = kGfxRows[0].id;  // the first row shown (back gives the row it kept after)
+            for (uint32_t line = kSharedRows; id != kGfxPage && line-- > 0;)
+                if (SharedRow(line)) first = kShared0 + line;
+            MenuFocus(ctx, player, widget, first);
         }
         if (msg == 0x4B) {
             uint32_t on = arg ? R32(arg + 0x18) : 0;
@@ -684,6 +739,13 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
                 MenuGoTo(ctx, player, kStylePage);
                 return true;
             }
+            if (id == kGfxPage && on == kEffects) {
+                // the page's values kept (a quality preset chosen sets AO and bloom), then Effects
+                KeepGraphics(ctx, player);
+                SetSharedTexts(kEffectsPage);
+                MenuGoTo(ctx, player, kStylePage);
+                return true;
+            }
             if (id == kGfxPage && on == kDefaults) {
                 RestoreDefaults(ctx, player);
                 MenuBack(ctx, player);
@@ -698,6 +760,7 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
             }
             if (id == kGfxPage) KeepGraphics(ctx, player);
             else if (g_style_rows == kMorePage) KeepMore(ctx, player);
+            else if (g_style_rows == kEffectsPage) KeepEffects(ctx, player);
             else KeepStyle(ctx, player, g_style_rows);
             MenuBack(ctx, player);
         }

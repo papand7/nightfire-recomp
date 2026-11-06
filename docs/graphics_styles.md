@@ -97,6 +97,40 @@ is near (the depth target copied once a frame at the first one; a W-buffer read 
 and sparks melt into walls and floors instead of cutting through them in hard lines. Their pictures are upgraded as
 any texture is, by the texture pack (hd_pack). More or longer-lived particles need the game's own code (not yet).
 
+## Ray tracing
+
+The game's Graphics page > Effects > **Ray Tracing** (Off, Shade, Shade + Shadows), Graphics Style > Ray tracing, or
+graphics.toml `ray_tracing`, `rt_ao` (0-2), `rt_radius` (0.25-6 m), `rt_rays` (1-16 a pixel), `rt_shadows`. Vulkan on a
+GPU with ray queries (VK_KHR_ray_query: NVIDIA RTX, AMD RX 6000 and later, Intel Arc); elsewhere the row reads "Not on
+this GPU". Every style but Retro. Off by default.
+
+- Each frame the 3D scene's opaque draws write their vertices where the game's own vertex programs place them (a
+  variant of the draw's vertex shader), and the scene pass builds them into an acceleration structure: what is off
+  screen or hidden is in it, unlike the depth the screen-space passes read. Left out: the 2D, blended and cut-out
+  draws, and what is drawn after the game clears depth mid-frame (the gun and hands).
+- **Shade**: ambient occlusion traced against it at half the scene's size, in place of the screen-space one. A pixel's
+  place and slope are its own triangle's, where a ray from the camera meets it (the depth's neighbours give a wrong
+  slope on flat ground far off). **Shadows**: effect lights (Particles > Soft + Lights) cast traced shadows.
+- Test views (read at start): `XBE_RT_TEST=1` the left half with it, `2` the occlusion alone, `3` a ray from the
+  camera against the depth (green where they agree). `.local/vk/rt_test.sh` shoots on/off pairs in a Quick Game.
+
+## Depth of field
+
+The game's Graphics page > Effects > **Depth of Field** (Off, Distance, Focus), Graphics Style > Depth of field, or
+graphics.toml `depth_of_field` (`"off"`, `"distance"`, `"focus"`) and `dof_strength` (0-2). Vulkan, every style but
+Retro. Off by default. Drawn last over the scene (after SMAA), before the HUD.
+
+- **Distance**: the scenery blurs from 20 m, fully from 120 m. **Focus**: the nearest of five points about the middle
+  of the view is in focus (eased over a few frames, by 1/distance), nearer and farther blurred by how far from it;
+  aiming down the sights (nf::AimingDownSights, handed over by gpu::SetAiming) narrows the sharp band and doubles the
+  blur.
+- The world's distance is the depth kept at the game's mid-frame clear (as ray tracing keeps it): the gun and hands,
+  drawn after it, stay sharp and are not gathered into the blur, and the focus is not taken from the gun.
+- A gather of 32 taps at full size; a nearer tap counts only as far as its own blur reaches, so what is in focus casts
+  no halo over the blurred distance behind it.
+- Test views (read at start): `XBE_DOF_TEST=1` the left half with it, `2` the blur (white the most, blue the gun, red
+  the focus point). `.local/vk/dof_test.sh` shoots off/distance/focus at three views (`NF_ADS_TEST=1` for aiming).
+
 ## SMAA
 
 Settings window > Graphics > **SMAA**, or the game's Graphics page > Anti-Aliasing > SMAA (Vulkan). SMAA 1x (Ultra
