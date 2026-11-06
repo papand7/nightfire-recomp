@@ -134,11 +134,6 @@ Vulkan 1.3; for ray tracing, one with ray queries (RTX-class).
 
 Or use [the launcher](#the-launcher-new-in-this-fork), which does all of this for you.
 
-**HD textures:** turn on *Dump the game's textures* (F1 > Graphics Style > Textures), play the levels you want
-upgraded, then run `tools\hd_pack.exe --pbr` beside the game and restart it. See
-[docs/graphics_styles.md](docs/graphics_styles.md#hd-texture-pack-hd_pack). Dumped and upscaled textures are the
-game's: keep them out of any public repository.
-
 ## License
 
 MIT, as the original: see [LICENSE](LICENSE). 007: NightFire is the property of its owners; this project contains
