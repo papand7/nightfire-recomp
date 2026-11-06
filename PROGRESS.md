@@ -31,6 +31,20 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Faster effects, the same picture (Vulkan)
+
+- The world's ray tracing bottom level is built PREFER_FAST_TRACE (was fast build): the main relight about 3.0 to
+  1.5 ms, the frame about 1 ms less overall in a same-run A/B.
+- Rays skipped where their light could not show: the effect lights' shadow ray where (c + 0.03) x the light is under
+  0.001 (a dark pixel), the volumetric pass's lamp and sun rays where a step adds under 4e-5; half the untraced
+  light kept, so the error stays under a quarter of an 8 bit step. Volumetric about 3.0 to 2.2 ms.
+- The effect lights' list: the glow's 16 x 9 tiles were summed by one thread each (thousands of pixels) and twice;
+  now 8 x 8 parts a tile first, then the tiles, and a rank pass before the pick (the same sums and order).
+  1.45 to 0.13 ms.
+- XBE_PERF's "scene passes" line has the relight's parts (rt-build, rt-gi, rt-lit, rt-vol) and the lights' (lt-).
+  Measuring is noisy while another program uses the GPU (SSX Tricky was running): compare within one run.
+
+
 ### 2026-11-06 - Foot IK: the characters' feet on the ground (src/game/foot_ik.cpp)
 
 - Static RE (.local/ik_notes.md): the pose solver 0xDD290 (obj, skel = [obj+0xB8]+0x58, char skin); world bone
