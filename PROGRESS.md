@@ -31,6 +31,21 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - HDR output (Vulkan)
+- Settings::hdr (Graphics page's HDR row, the settings window, settings.toml hdr / hdr_peak_nits /
+  hdr_paper_white_nits): an HDR10 swap chain (A2B10G10R10, ST.2084; VK_EXT_swapchain_colorspace) where the screen
+  offers one, else SDR as before with a log line. The screen's peak from DXGI (IDXGIOutput6::GetDesc1) and its SDR
+  white from Windows (DisplayConfig's SDR white level), read at each new chain; settings override them.
+- The game renders 8-bit throughout, so this is SDR expanded: the frame (FXAA, sharpening, gamma ramp) and the ImGui
+  overlay are drawn at the screen's size first, then HdrOut takes gamma 2.2 to SDR white and raises the 3D scene's
+  highlights from a knee (0.45 linear) toward the peak by luminance. A pixel is the scene's where the presented frame
+  still holds what the scene pass left (a copy at its end, Target::hdr_scene): HUD, menus and movies stay at SDR white.
+  HDR on runs the scene pass even with no effects on, for that copy.
+- Evidence: this PC's screen (418 nits peak, SDR white 80): HDR10 chain made, shots decoded from PQ match the SDR
+  look; a lamp reached 379 nits; XBE_HDR_TEST=1 shows the scene mask (the whole 3D view, the HUD and overlay left out).
+  SDR (hdr off) unchanged. The Graphics page's new row shows and saves.
+- Not done: Direct3D 12/11 (the row says Needs Vulkan); scRGB; HDR metadata.
+
 ### 2026-11-06 - Story co-op: two players, split screen (NF_COOP_TEST=3)
 - A story level makes its player in 0xAE870 from a start record (0x2774D0 + i*0xCC: place, +0xC facing, +0x1C
   loadout) through 0xACAB0 (cdecl: player, place*, facing*, loadout*; the object in [0x1F6654 + 4p], the actor in

@@ -44,6 +44,7 @@ Noir. Same build; only the Graphics menu changed.*
   bounced light, fog, ground detail up close, and depth of field (Distance or Focus).
 - **Blood** (optional, every style): a spray where your shots hit, and blood at the edges of your view when you are hit.
 - **Quality presets** (Low to Ultra), anisotropic filtering, SMAA / FXAA / MSAA, sharpening, and render scale from 50% to 200%.
+- **HDR output** (Vulkan, Windows' HDR on): HDR10 with the screen's own peak brightness; lamps, the sun and bright skies glow past SDR white while the HUD and menus stay at Windows' SDR brightness.
 
 **Gameplay and controls**
 - **Aim down sights:** right mouse raises the gun and zooms in instead of the red crosshair. Each weapon's sights are

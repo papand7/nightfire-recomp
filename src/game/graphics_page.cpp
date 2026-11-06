@@ -48,7 +48,7 @@ constexpr uint32_t kQuality = 0x1000FC21, kStyle = 0x1000FC22, kStyleOptions = 0
                    kScale = 0x1000FC29, kRenderer = 0x1000FC2A, kPack = 0x1000FC2B, kDefaults = 0x1000FC2C,
                    kReflect = 0x1000FC2D, kParticles = 0x1000FC2E, kMaterials = 0x1000FC2F,
                    kLighting = 0x1000FC30, kEffects = 0x1000FC38, kRayTracing = 0x1000FC39,
-                   kDof = 0x1000FC3A, kBlood = 0x1000FC3B;
+                   kDof = 0x1000FC3A, kBlood = 0x1000FC3B, kHdr = 0x1000FC3C;
 // the style pages' rows
 constexpr uint32_t kExposure = 0x1000FC31, kTonemap = 0x1000FC32, kContrast = 0x1000FC33, kSaturation = 0x1000FC34,
                    kVignette = 0x1000FC35, kGrain = 0x1000FC36, kSceneSharpen = 0x1000FC37;
@@ -72,6 +72,7 @@ const std::vector<MenuRow> kGfxRows = {
     {kScale, nf::kMenuChoice, "Render Scale", "The 3D picture's size against the screen's: lower is faster, higher smoother."},
     {kRenderer, nf::kMenuChoice, "Renderer", "Vulkan draws the styles and effects; changes at the next start."},
     {kPack, nf::kMenuChoice, "Texture Packs", "Pictures in mods/textures drawn in place of the game's textures."},
+    {kHdr, nf::kMenuChoice, "HDR", "Brighter highlights on an HDR screen (Windows' HDR on). HUD and menus stay at SDR white."},
     {kDefaults, nf::kMenuButton, "Restore Defaults", "Every row on this page and the style options as they first were."},
 };
 // Effects (Graphics' Effects button): what only Vulkan draws, apart from the style
@@ -312,6 +313,18 @@ void EnterGraphics(X86Context& ctx, uint32_t player) {
     Choice(ctx, player, kRenderer, {{"Direct3D 12", 0}, {"Direct3D 11", 1}, {"Vulkan", 2}}, s.renderer % 3);
     if (Vulkan()) ShowOptions(ctx, player, kPack, kOffOn, st.texture_pack ? 1.0f : 0.0f);
     else Choice(ctx, player, kPack, {{"Needs Vulkan", 0xFF}}, 0xFF);
+    // HDR: off, on at the screen's peak (1), or a peak in nits
+    if (Vulkan()) {
+        std::vector<std::pair<const char*, uint32_t>> hdr = {{"Off", 0}, {"On", 1}, {"On, 400 nits", 400}, {"On, 600 nits", 600},
+                                                             {"On, 1000 nits", 1000}, {"On, 1500 nits", 1500}, {"On, 2000 nits", 2000}};
+        uint32_t shown = !s.hdr ? 0 : s.hdr_peak ? s.hdr_peak : 1;
+        static std::string other;
+        if (std::none_of(hdr.begin(), hdr.end(), [&](auto& i) { return i.second == shown; }))
+            other = "On, " + std::to_string(shown) + " nits", hdr.push_back({other.c_str(), shown});
+        Choice(ctx, player, kHdr, hdr, shown);
+    } else {
+        Choice(ctx, player, kHdr, {{"Needs Vulkan", 0xFF}}, 0xFF);
+    }
     LOGR("nightfire: Graphics page entered (quality %s, style %s)", kQualityNames[g_entered_quality],
          st.preset.empty() ? "edited" : st.preset.c_str());
 }
@@ -325,6 +338,7 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
     uint32_t sharpen = uint32_t(ReadOption(ctx, player, kSharpen, kSharpenLevels));
     uint32_t scale = uint32_t(ReadOption(ctx, player, kScale, kScales));
     uint32_t renderer = ChoiceValue(ctx, player, kRenderer);
+    uint32_t hdr = ChoiceValue(ctx, player, kHdr);
     if (Vulkan()) {
         uint32_t style = ChoiceValue(ctx, player, kStyle);
         const auto& presets = gpu::StylePresets();
@@ -373,6 +387,7 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
         s.sharpen = sharpen;
         s.render_percent = scale;
         if (renderer <= 2) s.renderer = renderer;
+        if (hdr != 0xFF) s.hdr = hdr != 0, s.hdr_peak = hdr > 1 ? hdr : 0;
         app::Save();
     }
     Request(st);
