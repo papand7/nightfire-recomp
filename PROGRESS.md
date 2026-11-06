@@ -31,6 +31,12 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Sprint slower, weapon sway's steps capped
+- Sprint 1.3x the run (was 1.6x: too fast). The sway's steps followed the distance walked, so a sprint (7.8 units a
+  second measured at 1.3x; about 9.6 at 1.6x) bobbed 3-4 times a second, the gun's dip twice that; now at most 1.25
+  bobs a second, the stride lengthening past it (src/game/sway.cpp kMostSteps). Measured with NF_SWAY_TRACE and
+  NF_SPRINT_TEST=2 in The Exchange.
+
 ### 2026-11-06 - Snow and footprints, GTAO, Relief High, volumetric light, ground geometry (Vulkan)
 - Snow (Effects > Lighting "+ Snow"; `weather`, `snow_amount`, `footprints`): kSnowHlsl over the scene after the fog:
   the view ray walked through three layers of cells with a flake in some, moved by the fall and a gusting wind (world

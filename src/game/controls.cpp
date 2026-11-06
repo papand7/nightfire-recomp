@@ -46,7 +46,7 @@ uint16_t g_chosen = 0;  // its own style meanwhile
 constexpr uint32_t kCrouchSlot = 0x34, kActor = 0xBC, kPlayerIndex = 0x8DE, kPosture = 0xD2, kEyeDrop = 0x89C;
 uint32_t g_objects[4] = {};  // each player's character object, from 0xA8A60 last frame
 constexpr uint32_t kForward = 0x1C, kPos = 0x24;
-constexpr float kSprint = 1.6f;
+constexpr float kSprint = 1.3f;  // 1.6 felt too fast
 bool g_sprint[4] = {};  // the player sprints this frame
 
 bool KeyHeld(int vk) {

@@ -21,6 +21,7 @@ using kernel::R32;
 
 constexpr uint32_t kActor = 0xBC, kPos = 0x24, kYaw = 0x40, kPitch = 0x838, kPlayerIndex = 0x8DE, kEye = 0x138;
 constexpr float kStep = 2.8f;          // metres a full bob (two steps): the pace of a jog, not a sprint of tiny steps
+constexpr float kMostSteps = 1.25f;    // full bobs a second at most: faster, the stride lengthens (it went 3-5 a second)
 constexpr float kBobUp = 0.022f;       // the eye's dip at a step, metres
 constexpr float kBobSide = 0.010f;     // its sway to the side
 constexpr float kRunSpeed = 4.0f;      // metres a second at which the bob is whole
@@ -77,7 +78,7 @@ X86_FUNC(sub_00024530) {  // a player's camera placed from its object (cdecl: th
     float speed = walked * 60.0f, airborne = std::fabs(dy) > 0.03f ? 1.0f : 0.0f;
     float want = std::clamp(speed / kRunSpeed, 0.0f, 1.0f) * (1 - airborne);
     m.amount += (want - m.amount) * 0.12f;
-    m.phase += walked / kStep * 6.2831853f;
+    m.phase += std::min(walked / kStep, kMostSteps / 60.0f) * 6.2831853f;
     if (m.phase > 62.831853f) m.phase -= 62.831853f;
     // the gun's lag: the opposite way of the turn, easing back
     float dyaw = std::remainder(yaw - m.last_yaw, 6.2831853f), dpitch = pitch - m.last_pitch;
