@@ -22,6 +22,7 @@ bool aim_down_sights = true;
 bool view_motion = true;
 bool foot_ik = true;
 uint32_t fov_percent = 100;
+uint32_t draw_distance = 100;
 extern bool modern_buttons;  // src/common/buttons.cpp
 
 float Ultrawide() {
@@ -59,6 +60,7 @@ void Init() {
     if (const char* e = std::getenv("NF_HIDE_HUD"); e && *e) nf::hide_hud = *e == '1';
     if (const char* e = std::getenv("NF_ADS"); e && *e) nf::aim_down_sights = *e == '1';
     if (const char* e = std::getenv("NF_IK"); e && *e) nf::foot_ik = *e == '1';
+    if (const char* e = std::getenv("NF_DRAW"); e && *e) nf::draw_distance = uint32_t(std::atoi(e));
     if (const char* e = std::getenv("NF_MODERN_BUTTONS"); e && *e) nf::modern_buttons = *e == '1';
     if (const char* e = std::getenv("NF_ROUNDED_FONT"); e && *e) nf::rounded_font = *e == '1';
     // every achievement's condition parses (a typo would leave it never met)
@@ -225,6 +227,8 @@ const app::GameInfo app::kGame = {
                  "The text in Sour Gummy Black, a rounded font, instead of the game's own letters. At the next start."},
                 {"modern_buttons", &nf::modern_buttons, nullptr, "Modern button pictures",
                  "A controller's prompts as today's Xbox pad marks them: LB and RB for White and Black, Menu and View for Start and Back."},
+                {"draw_distance", nullptr, &nf::draw_distance, "Draw distance (%)",
+                 "100 to 300; 100 is the game's. Pushes each level's fog and far edge out (dense-fog levels stay)."},
                 {"fov_percent", nullptr, &nf::fov_percent, "Field of view (%)",
                  "50 to 150; 100 is the game's. On foot, driving and in the engine's cutscenes; the scope zooms in proportion."}},
     .load = LoadKeys,                     // Driving.xbe's keys apart (DrivingKeys)

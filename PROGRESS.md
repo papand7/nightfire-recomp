@@ -31,6 +31,19 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Draw distance; no blob shadows under ray traced lighting (src/game/distance.cpp)
+
+- Static RE (.local/lod_notes.md): on foot no model LOD and no distance cull; the view ends at the level's fog
+  (0xDDB00: per-level start and end as immediates, through the setters 0xE3E60 / 0xE3F00) and the camera's room's
+  portals cut at 200 units (0xDB5C0's fifth plane, d at 0x29EAAC). The D3D far plane is 3000.
+- Setting draw_distance (percent, 100 to 300; NF_DRAW): the fog's start and end scaled (not the sky pass's own fog,
+  not a level whose fog ends under 60: its fog is the scene), the far plane moved out by as much, the character
+  shadow's ranges (dist² at 0x161DB8 / 0x161DB4) too. Checked (.local/vk/draw_test.sh): The Exchange at 200%, the
+  far mountains and castle clearer, nothing missing at the edge in that view. Other outdoor levels not yet looked at.
+- The game's blob shadow under each character (0xE04E0, cdecl, 5 arguments) is skipped while ray traced lighting
+  is on: the characters are in its scene and cast their own shadows. Not yet seen side by side.
+
+
 ### 2026-11-06 - HDR10 from the float scene; bloom kept near its source
 
 - With HDR output and tone mapping on, ToneResolve also works out each pixel's HDR brightness over its SDR's (the

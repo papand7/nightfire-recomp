@@ -68,4 +68,5 @@ X86_FUNC(sub_000DD950) {  // the D3D projection
 X86_EXTERN_FUNC(__imp__sub_000DB5C0);
 X86_FUNC(sub_000DB5C0) {  // the culling planes
     Widened(R32(ctx.esp + 4), [&] { __imp__sub_000DB5C0(ctx, base); });
+    nf::FarPlane();
 }
