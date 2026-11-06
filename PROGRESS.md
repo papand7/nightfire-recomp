@@ -31,6 +31,16 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-06 - Effect lights: steady glows no longer flood the scene
+
+- The Exchange's lamp halos and searchlight beams (added glows drawn every frame) lit the castle and snow white as
+  effect lights, on top of the ray traced lamps. Each glow (by texture and shader) now has a steadiness: up in a
+  second while it is drawn frame after frame, down in about two seconds unseen. A steady one lights 30%, none with
+  ray traced lighting (its lamp is lit there already); flashes and explosions keep all of theirs (drawn through a
+  constant blend factor, the weight).
+- Checked (.local/vk/lamp_test.sh): every effect on now looks as with effect lights off, a night with lit lamps.
+
+
 ### 2026-11-06 - Faster effects, the same picture (Vulkan)
 
 - The world's ray tracing bottom level is built PREFER_FAST_TRACE (was fast build): the main relight about 3.0 to
