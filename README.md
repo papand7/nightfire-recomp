@@ -48,6 +48,10 @@ wheel support. Everything is set from the game's own menus.
 - **Any resolution, ultrawide** screens, field of view, vsync and a frame rate cap.
 - Crisp text and HUD at high resolutions, and today's Xbox button pictures.
 
+![Water in Phoenix Base and an explosion in The Exchange](docs/images/water_particles.jpg)
+
+*Water in Phoenix Base, and an explosion with sparks, debris and smoke in The Exchange.*
+
 **Controls**
 - **Mouse aiming** like a PC shooter, with the keyboard's keys shown in the game's prompts.
 - **Aim down sights**, sprint, hold-to-crouch, keys 1-9 for weapons, weapon sway and hit markers.
