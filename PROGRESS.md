@@ -31,6 +31,17 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Enhanced's exposure and contrast keep white; steady glows light nothing
+
+- The style pass's grade multiplied by the exposure before its curve and stretched contrast through 0.5: with
+  Enhanced's exposure 1.35, contrast 1.18 and filmic (the user's graphics.toml) everything over about 0.75 went
+  white, The Exchange's snow flat. Now the curve's output is over its white's (filmic, Reinhard; without a curve
+  c e / (1 + (e - 1) c)) and contrast is an S about the middle with black and white kept: the middle brightens, snow
+  keeps its detail. Checked with the user's settings (.local/vk/user_test.sh).
+- Steady glows (lamp halos) cast no effect light at all: their light came and went as they entered and left the
+  screen (the room darkening on a turn); the level's own lighting has those lamps. Flashes and explosions keep theirs.
+
+
 ### 2026-11-07 - Contact shadows, floor reflections, smooth turning with HDR
 
 - Contact shadows (GraphicsStyle::contact_shadows; Effects > Contact Shadows; not under ray traced lighting): from
