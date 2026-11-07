@@ -20,7 +20,7 @@
 #include "core/input.h"
 #include "core/log.h"
 
-#ifdef _WIN32
+#ifndef XBE_HEADLESS  // ImGui: not in the headless harness
 #include <imgui.h>
 #endif
 
@@ -46,7 +46,7 @@ int64_t NowMs() {
     return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
-#ifdef _WIN32
+#ifndef XBE_HEADLESS
 ImFont* g_body = nullptr;   // the rows (Bahnschrift, else Segoe UI), made at 40 px and scaled to the screen
 ImFont* g_title = nullptr;  // the title, 84 px
 ImFont* g_small = nullptr;  // help and hints, 28 px
@@ -99,12 +99,26 @@ void ModernMenuPad(input::Pad& p) {
     g_presses.pop_front();
 }
 
-// GameInfo::window: the fonts, before the renderer builds ImGui's atlas (the system's own: nothing shipped)
+// GameInfo::window: the fonts, before the renderer builds ImGui's atlas (the system's own: nothing shipped). Off
+// Windows the common sans faces where the distributions put them; none found, ImGui's own font draws the menus.
 void ModernMenuFonts(void*) {
-#ifdef _WIN32
+#ifndef XBE_HEADLESS
     ImGuiIO& io = ImGui::GetIO();
     if (io.Fonts->Fonts.empty()) io.Fonts->AddFontDefault();  // the settings window's stays the first
+#ifdef _WIN32
     const char* files[] = {"C:\\Windows\\Fonts\\bahnschrift.ttf", "C:\\Windows\\Fonts\\segoeui.ttf"};
+#else
+    const char* files[] = {
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",    // Debian, Ubuntu
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",                // Arch
+        "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf",  // Fedora
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/google-noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf"};
+#endif
     for (const char* f : files) {
         if (FILE* t = std::fopen(f, "rb")) {
             std::fclose(t);
@@ -135,7 +149,7 @@ std::string Keys(const std::string& t) {
 
 // GameInfo::ui: the page drawn, the mouse's clicks queued for the game's thread
 void ModernMenuUi(double) {
-#ifdef _WIN32
+#ifndef XBE_HEADLESS
     ModernPage page;
     {
         std::lock_guard lock(g_lock);

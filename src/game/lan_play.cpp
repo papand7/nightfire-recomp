@@ -40,6 +40,7 @@
 #include <thread>
 #include <vector>
 
+// Winsock on Windows; elsewhere sdk/runtime/compat's names on POSIX sockets
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -47,8 +48,11 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#ifndef _WIN32
+#include <unistd.h>  // gethostname
 #endif
 
 #include "common/nightfire.h"
@@ -196,7 +200,6 @@ constexpr uint32_t kPlayed = 0x262928, kLimit = 0x26292C;  // the match's clock:
 float g_clock[2] = {};                 // the host's played and limit (sent with the roster)
 bool g_clock_read = false;             // the host's: read in this match (the roster waits for it)
 
-#ifdef _WIN32
 SOCKET g_sock = INVALID_SOCKET;
 sockaddr_in g_host_addr{};
 struct Client {
@@ -484,11 +487,9 @@ void Loop() {
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
 }
-#endif
 
 // a session: hosting (the port) or joining (the host's address); ended by End (the menus: Netplay)
 bool Begin(bool host, uint32_t ip, uint16_t port) {
-#ifdef _WIN32
     static bool wsa = [] {
         WSADATA w;
         return WSAStartup(MAKEWORD(2, 2), &w) == 0;
@@ -502,8 +503,12 @@ bool Begin(bool host, uint32_t ip, uint16_t port) {
         g_roster_heard = -100000, g_late_start = false, g_joined_id = ~0u;
         g_events_in.clear(), g_events_out.clear(), g_events_seen.clear();
         char name[64] = {};
+#ifdef _WIN32
         DWORD n = sizeof name;
         if (!GetComputerNameA(name, &n)) std::strcpy(name, "NightFire");
+#else
+        if (gethostname(name, sizeof name - 1) != 0 || !name[0]) std::strcpy(name, "NightFire");
+#endif
         g_server_name = name;
     }
     g_host = host, g_me = host ? 0 : -1, g_port = port;
@@ -540,19 +545,12 @@ bool Begin(bool host, uint32_t ip, uint16_t port) {
         closesocket(sock);
     });
     return true;
-#else
-    (void)host, (void)ip, (void)port;
-    LOGR("nightfire: LAN: not in this build");
-    return false;
-#endif
 }
 
 void End() {
     if (!g_on) return;
-#ifdef _WIN32
     g_quit = true;
     if (g_thread.joinable()) g_thread.join();
-#endif
     g_on = false, g_host = false, g_me = -1;
     LOGR("nightfire: LAN: session ended");
 }
@@ -568,12 +566,10 @@ void Start() {
     if (const char* p = std::getenv("NF_LAN_PORT"); p && *p) port = uint16_t(std::atoi(p));
     bool host = std::strcmp(e, "host") == 0;
     uint32_t ip = 0;
-#ifdef _WIN32
     if (!host && inet_pton(AF_INET, e, &ip) != 1) {
         LOGR("nightfire: LAN: '%s' is not an address", e);
         return;
     }
-#endif
     Begin(host, ip, port);
 }
 
@@ -587,7 +583,6 @@ std::vector<Server> g_servers;
 bool g_searching = false;
 
 void Search() {
-#ifdef _WIN32
     static SOCKET s = INVALID_SOCKET;
     static int64_t last = -10000;
     if (!g_searching) {
@@ -598,7 +593,7 @@ void Search() {
         WSADATA w;
         WSAStartup(MAKEWORD(2, 2), &w);
         s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-        BOOL yes = TRUE;
+        int yes = 1;  // Windows' BOOL
         setsockopt(s, SOL_SOCKET, SO_BROADCAST, (const char*)&yes, sizeof yes);
         sockaddr_in me{};
         me.sin_family = AF_INET;
@@ -645,7 +640,6 @@ void Search() {
     }
     g_servers.erase(std::remove_if(g_servers.begin(), g_servers.end(), [&](const Server& o) { return now - o.heard > 3500; }),
                     g_servers.end());
-#endif
 }
 
 // a remote player's place drawn now: between the samples around kDelay ago, by the host's clock
@@ -717,13 +711,15 @@ std::string PlayerName() {
             }
             std::fclose(f);
         }
-#ifdef _WIN32
         if (n.empty()) {
+#ifdef _WIN32
             char user[64] = {};
             DWORD size = sizeof user;
             if (GetUserNameA(user, &size)) n = user;
-        }
+#else
+            if (const char* user = std::getenv("USER"); user && *user) n = user;
 #endif
+        }
         if (n.empty()) n = "Bond";
         return n.substr(0, 15);
     }();

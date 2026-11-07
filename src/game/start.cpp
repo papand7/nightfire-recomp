@@ -21,6 +21,8 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#else
+#include <cstdlib>
 #endif
 
 namespace {
@@ -36,10 +38,16 @@ void Put(uint32_t data, uint32_t off, const char* s) {
 X86_EXTERN_FUNC(__imp__sub_000DFB50);
 X86_FUNC(sub_000DFB50) {
     static bool first = true;
-#ifdef _WIN32
+#if defined(_WIN32)
     static const bool relaunched = std::wcsstr(GetCommandLineW(), L"--relaunched") != nullptr;  // app/main.cpp
-#else
+#elif defined(XBE_HEADLESS)
     static const bool relaunched = true;  // the headless harness: as the console (smoke.sh drives Paris)
+#else
+    // app/main_sdl.cpp: --relaunched on the command line, or a relaunch's exec (kernel::Relaunch), sets it
+    static const bool relaunched = [] {
+        const char* e = std::getenv("XBE_RELAUNCHED");
+        return e && *e == '1';
+    }();
 #endif
     const bool cold = first && !relaunched;
     first = false;

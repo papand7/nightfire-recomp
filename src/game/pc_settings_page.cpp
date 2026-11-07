@@ -160,6 +160,8 @@ std::vector<Size> Sizes() {
     }
     std::sort(sizes.begin(), sizes.end(),
               [](const Size& a, const Size& b) { return a.w != b.w ? a.w > b.w : a.h > b.h; });
+#elif !defined(XBE_HEADLESS)
+    for (const app::Mode& m : app::DisplayModes()) sizes.push_back({m.width, m.height});  // SDL's, widest first
 #endif
     if (sizes.size() > 24) sizes.resize(24);  // the choice's list (the largest)
     return sizes;

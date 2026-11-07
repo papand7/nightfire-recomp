@@ -89,6 +89,15 @@ is written but not compiled yet. The Windows build stays green after each step.
   `CreateVulkanSurface`, `VulkanGetInstanceProcAddr`, `WindowPixels` and `DisplayModes`. A Linux relaunch passes
   `XBE_RELAUNCHED` and `XBE_INSTANCE` through the environment. Linux has no handover. `settings.cpp` guards its Win32
   parts.
+- src portability:
+  - `settings.toml`: the key tables and the ImGui modern menus now build on any non-headless build. The guard is
+    `XBE_HEADLESS` (defined by `harness/build.sh`) instead of `_WIN32`.
+  - Fonts: the menus look for DejaVu, Noto or Liberation Sans in the usual Linux font folders and fall back to ImGui's
+    own font.
+  - `start.cpp` reads `XBE_RELAUNCHED` on Linux.
+  - The PC Settings resolution list comes from `app::DisplayModes()` on Linux.
+  - LAN play's UDP sockets are now built everywhere through the Winsock shim, which moved from `sdk/harness/compat` to
+    `sdk/runtime/compat`. The player and computer names come from `gethostname` and `$USER`.
 
 ### 2026-11-07 - Water: Phoenix Base's pit found, modern water shader, on by default
 

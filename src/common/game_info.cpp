@@ -6,7 +6,7 @@
 #include <iterator>
 #include <string>
 
-#ifdef _WIN32
+#ifndef XBE_HEADLESS  // the headless harness has no settings file (nor toml++)
 #include <toml++/toml.hpp>
 #endif
 
@@ -166,7 +166,7 @@ std::array<uint16_t, 2> DrivingKeys(int c) {
 }
 std::array<uint16_t, 2> Keys(int c) { return nf::kDriving ? DrivingKeys(c) : ShooterKeys(c); }
 
-#ifdef _WIN32  // the settings file (the headless harness has none)
+#ifndef XBE_HEADLESS  // the settings file (the headless harness has none)
 // One settings file for both exes, each with its own keys: the runtime reads and writes [keys] as this exe's (only
 // what differs from its defaults); Driving.xbe's are kept as [driving_keys] instead, and each exe writes the other's
 // table back as it read it (EoN's way)
