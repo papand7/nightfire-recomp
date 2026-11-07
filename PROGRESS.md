@@ -5,7 +5,7 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 ## Status
 - Latest validation (2026-11-07): both Windows executables build; Exchange geometry, two-copy co-op, localhost host
   discovery, particle captures and wheel menu checks completed. Water is on by default: Phoenix Base's pit water
-  is known by its texture keys (2026-11-07). SDK work is committed on `vulkan` at 06bf5b7; main updates still await the required Linux smoke
+  is known by its texture keys (2026-11-07). SDK work is committed on `vulkan` at 291d356 (NVIDIA DLSS added 2026-11-08, tested on an RTX 5060); main updates still await the required Linux smoke
   tests (unavailable here) or an explicit user exception. No wheel hardware was connected for binding/force tests.
 - Released: v1.0.1 (2026-10-30; v1.0.0's launcher built default.xbe alone), public, MIT; NightFireLauncher.exe from
   GitHub Actions (v1.0.1 run 41045371616, sha256 7f18f58a...).
@@ -34,6 +34,32 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Data: `eurocom/filesys.d00`-`d10` and `eurocom/25_fps` (on foot), `driving/*.viv`, `.mus`, `.spe` (driving)
 
 ## Log
+
+### 2026-11-08 - NVIDIA DLSS (Super Resolution and DLAA); XeSS choice removed
+
+DLSS is an upscaler beside FSR 2 on the Vulkan renderer (SDK `gpu/upscale_dlss.cpp`). Licence: NVIDIA's DLSS repo is
+under the NVIDIA RTX SDKs License: object-code redistribution of nvngx_dlss.dll inside an application is allowed
+(notice and terms in THIRD_PARTY.txt); no reverse engineering, not stand-alone, not under an open source licence (the
+SDK is fetched at build time, never committed; our MIT code only calls it); NVIDIA GPUs only; NVIDIA wants a
+notification before a commercial release and NVIDIA marks need its approval (we use none). CMake (`XBE_DLSS`, ON)
+downloads v310.9.16's headers, `nvsdk_ngx_d.lib` (msvcrt) and `rel/nvngx_dlss.dll` file by file at the tag's commit
+with SHA-256 checks (the archive is ~1 GB of every platform), links the lib and copies the dll beside both exes; the
+launcher's install already copies every build dll into play\, release.bat adds it to the zip. At start the renderer
+asks NGX for DLSS's Vulkan extensions (instance and device; bufferDeviceAddress on), starts NGX (project id, custom
+engine; ~0.5 s, NVIDIA GPUs alone) and offers DLSS only if SuperSampling is available. It takes FSR 2's inputs: the
+jittered scene at render size, depth, camera motion (MVLowRes, scale = render size), the reactive mask as DLSS's bias
+mask, frame time; output at display size before the HUD. Qualities: DLAA (Native), Quality 1.5x, Balanced 1.7x,
+Performance 2x, new Ultra Performance 3x (FSR too). DLSS has no sharpening (the row is FSR's). The DLSS choice on a PC
+without it upscales with FSR 2; the in-game row says "DLSS (Not Available)". XeSS is gone (Off / FSR / DLSS; an old
+'xess' reads as Off, also in the launcher). Lessons: NGX init returns InvalidParameter when logging has no sink at all
+(level off, no callback, other sinks disabled): always pass the callback. DLSS clears its output with
+vkCmdClearColorImage: the output needs TRANSFER_DST.
+
+Evidence (RTX 5060, 1920x1080, The Exchange, remaster settings, GPU frame ms from XBE_PERF): off 22.9; FSR native
+23.9 / DLAA 24.2; Quality FSR 15.2 / DLSS 17.0; Performance FSR 12.3 / DLSS 13.9; DLSS Ultra Performance 11.1. DLSS
+costs ~1.6 ms more than FSR at the same render size and draws finer foliage and edges (zoomed crops
+.local/rt_run/shots/dp_crops.png). XBE_VK_DEBUG=1 over DLAA, Quality, Performance and back to FSR: no validation
+messages. Next: DLSS on Harry's PC (non-RTX: shown as not available, FSR used).
 
 ### 2026-11-08 - Linux port phase 1
 

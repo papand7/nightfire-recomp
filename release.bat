@@ -12,3 +12,5 @@ rem an empty assets folder beside the exe, where the game (files or .iso) goes
 rd /s /q "%OUT%\release" 2>nul
 mkdir "%OUT%\release\assets"
 7z a "%GAME_EXE%.zip" ".\%OUT%\%GAME_EXE%.exe" ".\%OUT%\%GAME_EXE%Driving.exe" ".\%OUT%\release\assets" .\README.md "%SDK%\THIRD_PARTY.txt"
+rem NVIDIA DLSS's runtime, when the build fetched it (its licence in THIRD_PARTY.txt)
+if exist "%OUT%\nvngx_dlss.dll" 7z a "%GAME_EXE%.zip" ".\%OUT%\nvngx_dlss.dll"

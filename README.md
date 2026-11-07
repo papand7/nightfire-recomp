@@ -40,8 +40,8 @@ wheel support. Everything is set from the game's own menus.
 - **Snow:** falling snow, blizzards and footprints that fill in again; snow that sparkles.
 - **More detailed ground and walls:** real lumps and hollows in grass, snow, rock and concrete.
 - **HDR lighting:** bright snow and lamps glow instead of turning flat white; HDR on HDR screens.
-- **Smooth edges:** TAA, SMAA, FXAA and MSAA, plus **FSR 2 upscaling** for more frames per second. DLSS and XeSS are
-  planned.
+- **Smooth edges:** TAA, SMAA, FXAA and MSAA, plus **FSR 2** and **NVIDIA DLSS** (RTX graphics cards) for more
+  frames per second, and **DLAA** for the smoothest edges at full sharpness.
 - **Effects:** ambient occlusion, contact shadows, bloom, ice and wet-floor reflections, light from muzzle flashes
   and fire, fog, depth of field, optional motion blur and blood.
 - **Movies** upscaled sharp, in 4:3 or stretched.
