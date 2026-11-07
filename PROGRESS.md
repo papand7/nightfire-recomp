@@ -31,6 +31,17 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Daylight whiteout; README indoor pictures from Phoenix Fire
+
+- Remastered settings bleached daylight levels white (Chain Reaction 0700000C, Phoenix Fire 07000011). Switching
+  settings live one at a time (`.local/vk/white_test.sh <level> <tag>`) showed the ray-traced volumetric light was the
+  haze: on a day whose own fog is already pale (fog 0.82) it added as much again. The volumetric strength is now cut by
+  up to 75% as the fog's brightness goes from 0.45 to 0.8 (nights unchanged).
+- Auto exposure: a bright scene is now taken down 1.8 times as firmly as a dark one is lifted, with a floor of 0.5
+  (was 0.7). Dark scenes (The Exchange) are unchanged.
+- Checked: Chain Reaction's haze gone; Phoenix Fire lit but not washed out; The Exchange the same as before.
+- README: the indoor comparison is now Phoenix Fire instead of the garage.
+
 ### 2026-11-07 - README pictures
 
 - New README screenshots (1600x900 jpg, HUD hidden, fps counter covered): The Exchange and the indoor garage level

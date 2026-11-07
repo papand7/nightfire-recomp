@@ -17,11 +17,11 @@ Noir. Same build; only the Graphics menu changed.*
 <tr><th>Original (no visual changes)</th><th>Remastered (Enhanced style, ray traced lighting, HDR tone mapping)</th></tr>
 <tr><td><img src="docs/images/exchange_original.jpg" alt="The Exchange, Original"></td>
 <td><img src="docs/images/exchange_remastered.jpg" alt="The Exchange, Remastered"></td></tr>
-<tr><td><img src="docs/images/garage_original.jpg" alt="Indoor garage, Original"></td>
-<td><img src="docs/images/garage_remastered.jpg" alt="Indoor garage, Remastered"></td></tr>
+<tr><td><img src="docs/images/phoenix_original.jpg" alt="Phoenix Fire, Original"></td>
+<td><img src="docs/images/phoenix_remastered.jpg" alt="Phoenix Fire, Remastered"></td></tr>
 </table>
 
-*Outdoors (The Exchange, at night in falling snow) and indoors (a garage level), from where each mission starts.*
+*Outdoors (The Exchange, at night in falling snow) and indoors (Phoenix Fire, the Phoenix building in Tokyo), from where each mission starts.*
 
 ![Split-screen story co-op in The Exchange](docs/images/coop_split.jpg)
 
