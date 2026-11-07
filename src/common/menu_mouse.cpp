@@ -185,7 +185,9 @@ void Pointer(input::Pad& p, uint32_t held, int64_t now, bool moved) {
     std::vector<Row> rows;
     if (MenuGeometry(page, widgets, focused)) rows = Rows(widgets);
     if (page != page_was) {
-        target = 0, click = false, steps = 0, page_was = page, given_up = 0;
+        // a new page: the pointer leads again only once it moves (one left over a row pulled the new page's focus
+        // to it, against the keyboard and the d-pad)
+        target = 0, click = false, steps = 0, page_was = page, given_up = 0, hovering = false;
         // each page's rows once in the log: what the pointer finds there
         static std::vector<uint32_t> told;
         if (page && std::find(told.begin(), told.end(), page) == told.end() && told.size() < 64) {
@@ -203,8 +205,13 @@ void Pointer(input::Pad& p, uint32_t held, int64_t now, bool moved) {
     float u, v;
     bool in = app::FramePoint(u, v);
     float gx = u * 640, gy = v * 480;
-    if (in && (std::fabs(gx - last_x) > 1.5f || std::fabs(gy - last_y) > 1.5f)) hovering = true;
-    if (in) last_x = gx, last_y = gy;
+    // the pointer leads once it really moves: a few pixels from where it rested when it last stopped leading (not a
+    // hand resting on the mouse)
+    if (in && !hovering) {
+        if (last_x < 0) last_x = gx, last_y = gy;
+        if (std::fabs(gx - last_x) > 4.0f || std::fabs(gy - last_y) > 4.0f) hovering = true;
+    }
+    if (!in || hovering) last_x = -1;
     const Row* hit = nullptr;
     if (in)  // the smallest row under the pointer (a panel behind rows is a row too)
         for (const Row& r : rows)

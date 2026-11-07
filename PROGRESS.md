@@ -31,6 +31,18 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Network play's wait shown; the menu pointer no longer steals the focus
+
+- Netplay (SDK): while the lobby waits (the title not yet started, the window black) a box says so ("waiting for
+  player 2 to join", or joining) with OK to stop waiting and play alone (Escape in the window too); the window's title
+  says it too; the box closes itself once everyone is in. The user saw Network: Host as a freeze. Checked: the box
+  shows, closing it starts the title alone.
+- Menu mouse: a pointer resting over a row led the focus on every new page (the user: "menus move by themselves",
+  keyboard navigation hard). Now on a new page, and after a d-pad or key move, the pointer leads again only once it
+  moves 4 game pixels from where it rested.
+- Select Difficulty after the Co-op page checked: back, up to Operative, A opens the mission list.
+
+
 ### 2026-11-07 - Network co-op: story co-op over the SDK's lockstep netplay
 
 - The existing netplay (sdk core/netplay.h: every copy runs the whole game, only the controllers travel, a state
