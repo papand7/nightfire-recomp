@@ -63,7 +63,7 @@ constexpr uint32_t kQuality = 0x1000FC21, kStyle = 0x1000FC22, kStyleOptions = 0
                    kLighting = 0x1000FC30, kEffects = 0x1000FC38, kRayTracing = 0x1000FC39,
                    kDof = 0x1000FC3A, kBlood = 0x1000FC3B, kHdr = 0x1000FC3C, kToneHdr = 0x1000FC3D,
                    kMotion2 = 0x1000FC3E, kSmoothTurn = 0x1000FC3F, kContact = 0x1000FC40, kFloorRefl = 0x1000FC5F;
-// the upscaler's rows (gpu/upscale.h: FSR 2; DLSS and XeSS shown, not installed)
+// the upscaler's rows (gpu/upscale.h: FSR 2; DLSS where it runs, else shown as not available)
 constexpr uint32_t kUpscaler = 0x1000FC2A, kUpQuality = 0x1000FC47, kUpscaleSharp = 0x1000FC48;
 // the style pages' rows
 constexpr uint32_t kExposure = 0x1000FC31, kTonemap = 0x1000FC32, kContrast = 0x1000FC33, kSaturation = 0x1000FC34,
@@ -89,9 +89,9 @@ const std::vector<MenuRow> kGfxRows = {
     {kScale, nf::kMenuChoice, "Render Scale", "The 3D picture's size against the screen's: lower is faster, higher smoother."},
     {kPack, nf::kMenuChoice, "Texture Packs", "Pictures in mods/textures drawn in place of the game's textures."},
     {kHdr, nf::kMenuChoice, "HDR", "Brighter highlights on an HDR screen (Windows' HDR on). HUD and menus stay at SDR white."},
-    {kUpscaler, nf::kMenuChoice, "Upscaler", "FSR 2: the 3D scene drawn smaller and rebuilt over frames, the HUD sharp. DLSS and XeSS need their vendors' SDKs."},
-    {kUpQuality, nf::kMenuChoice, "Upscale Quality", "Native AA: full size, the smoothest edges. Quality 1.5x, Balanced 1.7x, Performance 2x: faster."},
-    {kUpscaleSharp, nf::kMenuChoice, "Upscale Sharpness", "The upscaler's own sharpening of the rebuilt scene."},
+    {kUpscaler, nf::kMenuChoice, "Upscaler", "FSR 2 or NVIDIA DLSS (RTX graphics cards): the 3D scene drawn smaller and rebuilt over frames, the HUD sharp."},
+    {kUpQuality, nf::kMenuChoice, "Upscale Quality", "Native AA (DLAA with DLSS): full size, the smoothest edges. Quality 1.5x, Balanced 1.7x, Performance 2x, Ultra Performance 3x: faster."},
+    {kUpscaleSharp, nf::kMenuChoice, "Upscale Sharpness", "FSR 2's own sharpening of the rebuilt scene (DLSS has none)."},
     {kDefaults, nf::kMenuButton, "Restore Defaults", "Every row on this page and the style options as they first were."},
 };
 // Effects (Graphics' Effects button): what only Vulkan draws, apart from the style
@@ -380,8 +380,7 @@ const Options kUpscaleSharps = {{"Off", 0}, {"Low", 0.2f}, {"Medium", 0.4f}, {"H
 std::vector<std::pair<const char*, uint32_t>> UpscalerItems() {
     return {{"Off", gpu::kUpscalerOff},
             {"FSR 2", gpu::kUpscalerFsr},
-            {gpu::UpscalerAvailable(gpu::kUpscalerDlss) ? "DLSS" : "DLSS (Not Installed)", gpu::kUpscalerDlss},
-            {gpu::UpscalerAvailable(gpu::kUpscalerXess) ? "XeSS" : "XeSS (Not Installed)", gpu::kUpscalerXess}};
+            {gpu::UpscalerAvailable(gpu::kUpscalerDlss) ? "DLSS" : "DLSS (Not Available)", gpu::kUpscalerDlss}};
 }
 const char* kQualityNames[] = {"Low", "Medium", "High", "Ultra", "Custom"};
 
@@ -467,7 +466,9 @@ void EnterGraphics(X86Context& ctx, uint32_t player) {
     }
     if (Vulkan()) {
         Choice(ctx, player, kUpscaler, UpscalerItems(), uint32_t(st.upscaler));
-        Choice(ctx, player, kUpQuality, {{"Native AA", 0}, {"Quality", 1}, {"Balanced", 2}, {"Performance", 3}},
+        Choice(ctx, player, kUpQuality,
+               {{st.upscaler == gpu::kUpscalerDlss ? "DLAA" : "Native AA", 0}, {"Quality", 1}, {"Balanced", 2},
+                {"Performance", 3}, {"Ultra Performance", 4}},
                uint32_t(st.upscale_quality));
         ShowOptions(ctx, player, kUpscaleSharp, kUpscaleSharps, st.upscale_sharpness);
     } else {
@@ -522,12 +523,13 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
             st.upscale_sharpness = keep.upscale_sharpness;
         }
         st.texture_pack = ReadOption(ctx, player, kPack, kOffOn) > 0;
-        // an upscaler this build or PC lacks (DLSS, XeSS) is not taken: the one before stays
+        // an upscaler this build or PC lacks (DLSS without an RTX GPU or its runtime) is not taken: the one before stays
         if (uint32_t up = ChoiceValue(ctx, player, kUpscaler); up < uint32_t(gpu::kUpscalers)) {
             if (gpu::UpscalerAvailable(int(up))) st.upscaler = int(up);
             else LOGR("nightfire: upscaler %u is not installed; left as it was", up);
         }
-        if (uint32_t q = ChoiceValue(ctx, player, kUpQuality); q <= 3) st.upscale_quality = int(q);
+        if (uint32_t q = ChoiceValue(ctx, player, kUpQuality); q < uint32_t(gpu::kUpscaleQualities))
+            st.upscale_quality = int(q);
         st.upscale_sharpness = ReadOption(ctx, player, kUpscaleSharp, kUpscaleSharps);
     }
     bool fxaa = aa == 1, smaa = Vulkan() ? aa == kAaSmaa : app::Get().smaa;
