@@ -21,32 +21,15 @@
 #include <string>
 #include <vector>
 
+#include "app/app.h"
 #include "common/nightfire.h"
 #include "core/input.h"
 #include "core/log.h"
 
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-
-#include "app/app.h"
-#endif
-
 namespace nf {
 namespace {
 bool KeyHeld(int vk) {
-#ifdef _WIN32
-    return GetForegroundWindow() == static_cast<HWND>(app::Window()) && (GetAsyncKeyState(vk) & 0x8000) &&
-           !app::KeyCaptureBusy();  // a key being bound in the menus
-#else
-    (void)vk;
-    return false;
-#endif
+    return input::KeyHeld(vk) && !app::KeyCaptureBusy();  // not while a key is being bound in the menus
 }
 
 // a press of control c (a d-pad bit or an analog button)

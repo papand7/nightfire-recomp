@@ -35,6 +35,17 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-08 - Linux port phase 1
+
+Groundwork for a Linux build (SDL3 window, sound and keyboard/mouse). There's no Linux machine here, so the Linux code
+is written but not compiled yet. The Windows build stays green after each step.
+
+- Input (SDK 2ae6e45): `input::KeyDown(vk)`, `GameFocused()` and `KeyHeld(vk)` replace the `GetAsyncKeyState` calls in
+  `src/common/menu_mouse.cpp`, `src/game/controls.cpp` and `src/game/weapon_keys.cpp`. Windows still reads
+  `GetAsyncKeyState`. Linux reads SDL's keyboard and mouse state through a VK to scancode table, because settings and
+  key bindings stay stored as VK codes (`core/vk_codes.h`). On Linux the window thread passes controller plug/unplug
+  events to input (`input::HandleSdlEvent`), and the steering wheel is stubbed out. Harness: stubs, `XBE_HEADLESS`.
+
 ### 2026-11-07 - Water: Phoenix Base's pit found, modern water shader, on by default
 
 - Found the water: Phoenix Base (multiplayer, Split Screen -> Arena -> 4th map, one bot) has it at the bottom of the

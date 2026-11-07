@@ -10,18 +10,9 @@
 #include <string>
 #include <vector>
 
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#endif
-
 #include "app/app.h"
 #include "common/nightfire.h"
+#include "core/input.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
 #include "xdk/hle.h"
@@ -32,14 +23,7 @@ using kernel::R32;
 constexpr uint32_t kWeapons = 0x18CFA0, kWeaponSize = 0x10C, kLastWeapon = 0x47, kCanDraw = 0xB9EB0;
 constexpr uint32_t kActor = 0xBC, kWeaponState = 0xB8, kCarried = 0x15E, kVariant = 0x160, kRequest = 0x53;
 
-bool KeyHeld(int vk) {
-#ifdef _WIN32
-    return GetForegroundWindow() == static_cast<HWND>(app::Window()) && (GetAsyncKeyState(vk) & 0x8000);
-#else
-    (void)vk;
-    return false;
-#endif
-}
+bool KeyHeld(int vk) { return input::KeyHeld(vk); }  // the game window in front
 
 // NF_SLOT_TEST=1 (diagnostic): the keys 1 to 9 pressed in turn, one every 150 frames
 int TestSlot() {

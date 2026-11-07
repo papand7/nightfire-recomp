@@ -21,16 +21,6 @@
 #include <cmath>
 #include <cstdlib>
 
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#endif
-
 #include "app/app.h"
 #include "common/nightfire.h"
 #include "core/input.h"
@@ -49,14 +39,7 @@ constexpr uint32_t kForward = 0x1C, kPos = 0x24;
 constexpr float kSprint = 1.3f;  // 1.6 felt too fast
 bool g_sprint[4] = {};  // the player sprints this frame
 
-bool KeyHeld(int vk) {
-#ifdef _WIN32
-    return GetForegroundWindow() == static_cast<HWND>(app::Window()) && (GetAsyncKeyState(vk) & 0x8000);
-#else
-    (void)vk;
-    return false;
-#endif
-}
+bool KeyHeld(int vk) { return input::KeyHeld(vk); }  // the game window in front
 
 bool Crouched(uint32_t obj);
 
