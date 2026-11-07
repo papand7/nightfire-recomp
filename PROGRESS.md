@@ -37,6 +37,10 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
   fast-forwarded to vulkan c777e00, the fork's main to vulkan-renderer. Release notes docs/releases/v1.2.0.md,
   tag v1.2.0 on the fork. The tag push started no run (the fork's first): the Launcher workflow started by hand on
   the tag (run 42348255039). The fork is private: the release and its launcher only its owner's until it is public.
+- That run failed: the job's token cannot clone the private SDK (papand7/XboxXBERecomp) as the submodule. The
+  launcher built here instead (.local/vk/build_launcher.bat, up to date: no launcher source changed), released with
+  gh: https://github.com/papand7/nightfire-recomp/releases/tag/v1.2.0 (NightFireLauncher.exe, sha256 1091584b...).
+  CI releases need the SDK public or a token secret with access to it.
 
 
 ### 2026-11-07 - Motion blur stronger
