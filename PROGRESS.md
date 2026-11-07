@@ -31,6 +31,14 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Merged to main; v1.2.0
+
+- On the user's word (no Linux smoke test on this PC; The Exchange and Paris checked on Windows): the SDK's main
+  fast-forwarded to vulkan c777e00, the fork's main to vulkan-renderer. Release notes docs/releases/v1.2.0.md,
+  tag v1.2.0 on the fork. The tag push started no run (the fork's first): the Launcher workflow started by hand on
+  the tag (run 42348255039). The fork is private: the release and its launcher only its owner's until it is public.
+
+
 ### 2026-11-07 - Motion blur stronger
 
 - Motion blur: 40% of the frame's motion (was 25%), capped at 1.4% of the height (was 0.8%), 10 samples. The Amount
