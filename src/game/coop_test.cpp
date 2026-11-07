@@ -36,6 +36,7 @@ int CoopTest() {
     return n ? n : nf::coop ? 3 : 0;
 }
 int g_split = 0;  // the screen split now (nf::CoopSplit)
+uint32_t g_game_side = 0xFFFFFFFF;  // the game's side by side flag [0x1F660C] before co-op set it
 void Views(int split) {
     g_split = split;
     gpu::SetViewCount(split ? 2 : 1);
@@ -72,6 +73,7 @@ X86_FUNC(sub_0006CF50) {  // the players' pads read, each frame (menus too): the
         next = forced;
     }
     if (next == 0x7000048 && g_split) Views(0);  // back to the front end: one view
+    if (next == 0x7000048 && g_game_side != 0xFFFFFFFF) kernel::W32(0x1F660C, g_game_side), g_game_side = 0xFFFFFFFF;
     // back to the front end: one human and one character again (the mission's choice raises them for the next)
     if (next == 0x7000048 && kernel::R32(kHumans) == 2 && CoopTest()) kernel::W32(kHumans, 1), kernel::W32(kMode, 1);
     nf::CoopFrame(ctx);
@@ -95,7 +97,11 @@ constexpr uint32_t kHalfW = 0x43A00000, kFullW = 0x44200000, kHalfH = 0x43700000
 void SplitScreen(X86Context& ctx) {
     if (!kernel::R32(kCameras + 4))
         kernel::CallGuest(ctx, 0x25BF0, {1, kernel::R32(kCameraWorld), 0, 0, 0, 0x280, 0x1E0});
-    bool side = kernel::R32(0x1F660C) == 1;
+    // side by side as the setting asks: the game's own flag (0x25190 halves the views' aspect by it), kept for the
+    // level and put back at the front end
+    if (g_game_side == 0xFFFFFFFF) g_game_side = kernel::R32(0x1F660C);
+    kernel::W32(0x1F660C, nf::coop_side ? 1 : 0);
+    bool side = nf::coop_side;
     uint32_t w = side ? kHalfW : kFullW, h = side ? kFullH : kHalfH;
     kernel::CallGuest(ctx, 0x25B80, {0, 0, 0, w, h});
     kernel::CallGuest(ctx, 0x25B80, {1, side ? kHalfW : 0, side ? 0 : kHalfH, w, h});

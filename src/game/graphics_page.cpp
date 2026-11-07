@@ -41,7 +41,7 @@ using nf::MenuRow;
 // same lines, the others hidden, its title rewritten in place for the set shown (SetSharedTitle)
 constexpr uint32_t kGfxPage = 0x4000FC20, kStylePage = 0x4000FC30;
 constexpr uint32_t kEnhPage = 1, kToonPage = 2, kRetroPage = 3, kMorePage = 4, kNetPage = 5,
-                   kEffectsPage = 6, kKeysPage = 7, kKeys2Page = 8;  // the shared page's rows
+                   kEffectsPage = 6, kKeysPage = 7, kKeys2Page = 8, kCoopPage = 9;  // the shared page's rows
 // the Graphics page's rows
 constexpr uint32_t kQuality = 0x1000FC21, kStyle = 0x1000FC22, kStyleOptions = 0x1000FC23, kFilter = 0x1000FC24,
                    kAo = 0x1000FC25, kBloom = 0x1000FC26, kAa = 0x1000FC27, kSharpen = 0x1000FC28,
@@ -130,7 +130,7 @@ const std::vector<MenuRow> kMoreRows = {
     {kMenuColors, nf::kMenuChoice, "Menu Colours", "The menu backgrounds as the game has them, or blue as on the PC version. Text and Bond stay.", 9},
     {kAds, nf::kMenuChoice, "Aim Down Sights", "L (right mouse) raises the gun and zooms in, not the red crosshair. Blur: the background too.", 10},
     {kMotion, nf::kMenuChoice, "Weapon Sway", "A very light head bob and weapon sway as you move and turn.", 11},
-    {kCoop, nf::kMenuChoice, "Story Co-op", "A second player on controller 2 in the story missions, split screen; friendly fire: your shots hurt each other. From the next mission.", 12},
+    {kCoop, nf::kMenuChoice, "Co-op", "A second player in the story missions: split screen, network, friendly fire.", 12},
 };
 // Key Bindings (More Settings' row), two sets of rows: each an action on foot, its two keys shown; A waits for the
 // next key or mouse button (app::BeginKeyCapture), which becomes its first key and the old first its second; Escape
@@ -178,6 +178,17 @@ std::vector<MenuRow> KeySetRows(bool second) {
 }
 const std::vector<MenuRow> kKeysRows = KeySetRows(false), kKeys2Rows = KeySetRows(true);
 
+// Co-op's rows (single player's Co-op, More Settings' Co-op): how a second player joins the story missions
+constexpr uint32_t kCoopMode = 0x1000FCC1, kCoopSplit = 0x1000FCC2, kCoopFF = 0x1000FCC3, kCoopNear = 0x1000FCC4,
+                   kCoopRespawn = 0x1000FCC5, kCoopDone = 0x1000FCC6;
+const std::vector<MenuRow> kCoopRows = {
+    {kCoopMode, nf::kMenuChoice, "Co-op", "Off, Split Screen (player 2 on controller 2), or Network. From the next mission.", 0},
+    {kCoopSplit, nf::kMenuChoice, "Screen Split", "The two views one above the other, or side by side.", 1},
+    {kCoopFF, nf::kMenuChoice, "Friendly Fire", "Your shots hurt each other.", 2},
+    {kCoopNear, nf::kMenuChoice, "Keep Together", "Player 2 is brought back beside player 1 when far away or lost.", 3},
+    {kCoopRespawn, nf::kMenuChoice, "Player 2 Respawn", "Player 2 comes back beside player 1 after dying; player 1's death ends the mission.", 4},
+    {kCoopDone, nf::kMenuButton, "Done", "Keep these and go back.", 5},
+};
 // Netplay's rows (the main menu's Netplay item): host, the games found on this network, join the one chosen
 constexpr uint32_t kNetHost = 0x1000FC91, kNetServer = 0x1000FC92, kNetJoin = 0x1000FC93;
 const std::vector<MenuRow> kNetRows = {
@@ -585,9 +596,30 @@ void EnterMore(X86Context& ctx, uint32_t player) {
     Choice(ctx, player, kMenuColors, {{"Original", 0}, {"PC Blue", 1}}, s.menu_colors ? 1 : 0);
     Choice(ctx, player, kAds, {{"Off", 0}, {"On", 1}}, nf::aim_down_sights ? 1 : 0);
     ShowOptions(ctx, player, kMotion, kOffOn, nf::view_motion ? 1.0f : 0.0f);
-    Choice(ctx, player, kCoop, {{"Off", 0}, {"Split Screen", 1}, {"Split Screen + Friendly Fire", 2}},
-           !nf::coop ? 0 : nf::coop_friendly_fire ? 2 : 1);
+    Choice(ctx, player, kCoop, {{"Open", 0}}, 0);
 }
+// Co-op
+void EnterCoop(X86Context& ctx, uint32_t player) {
+    Choice(ctx, player, kCoopMode, {{"Off", 0}, {"Split Screen", 1}, {"Network (not ready)", 2}}, nf::coop ? 1 : 0);
+    Choice(ctx, player, kCoopSplit, {{"One Above the Other", 0}, {"Side by Side", 1}}, nf::coop_side ? 1 : 0);
+    ShowOptions(ctx, player, kCoopFF, kOffOn, nf::coop_friendly_fire ? 1.0f : 0.0f);
+    ShowOptions(ctx, player, kCoopNear, kOffOn, nf::coop_leash ? 1.0f : 0.0f);
+    ShowOptions(ctx, player, kCoopRespawn, kOffOn, nf::coop_respawn ? 1.0f : 0.0f);
+    Choice(ctx, player, kCoopDone, {{"Keep", 0}}, 0);
+}
+void KeepCoop(X86Context& ctx, uint32_t player) {
+    uint32_t mode = ChoiceValue(ctx, player, kCoopMode), split = ChoiceValue(ctx, player, kCoopSplit);
+    if (mode <= 2) nf::coop = mode == 1;  // Network: not ready, kept off
+    if (split <= 1) nf::coop_side = split == 1;
+    nf::coop_friendly_fire = ReadOption(ctx, player, kCoopFF, kOffOn) > 0;
+    nf::coop_leash = ReadOption(ctx, player, kCoopNear, kOffOn) > 0;
+    nf::coop_respawn = ReadOption(ctx, player, kCoopRespawn, kOffOn) > 0;
+    std::lock_guard<std::recursive_mutex> lock(app::UiLock());
+    app::Save();
+    LOGR("nightfire: Co-op kept: %s, %s, friendly fire %d, keep together %d, respawn %d", nf::coop ? "split screen" : "off",
+         nf::coop_side ? "side by side" : "one above the other", nf::coop_friendly_fire, nf::coop_leash, nf::coop_respawn);
+}
+
 void KeepMore(X86Context& ctx, uint32_t player) {
     uint32_t kb = ChoiceValue(ctx, player, kKeyboard), lang = ChoiceValue(ctx, player, kLanguage);
     uint32_t colors = ChoiceValue(ctx, player, kMenuColors);
@@ -604,7 +636,6 @@ void KeepMore(X86Context& ctx, uint32_t player) {
     uint32_t ads = ChoiceValue(ctx, player, kAds);
     if (ads <= 1) nf::aim_down_sights = ads > 0;
     nf::view_motion = ReadOption(ctx, player, kMotion, kOffOn) > 0;
-    if (uint32_t co = ChoiceValue(ctx, player, kCoop); co <= 2) nf::coop = co >= 1, nf::coop_friendly_fire = co == 2;
     for (uint32_t l : app::kGame.languages)
         if (l == lang) s.language = l;
     app::Save();
@@ -667,10 +698,11 @@ const std::vector<MenuRow>& RowsOf(uint32_t page) {
            : page == kEffectsPage ? kEffectsRows
            : page == kKeysPage ? kKeysRows
            : page == kKeys2Page ? kKeys2Rows
+           : page == kCoopPage ? kCoopRows
                                : kRetroRows;
 }
 constexpr uint32_t kSharedSets[] = {kEnhPage, kToonPage, kRetroPage, kMorePage, kNetPage, kEffectsPage, kKeysPage,
-                                    kKeys2Page};
+                                    kKeys2Page, kCoopPage};
 uint32_t g_style_rows = kEnhPage;  // the set the shared page was opened for
 uint32_t Wid(uint32_t id) {
     for (uint32_t set : kSharedSets)
@@ -688,9 +720,10 @@ const MenuRow* SharedRow(uint32_t line) {
 // "Style Options"; the rows' are blanks as long as the longest label), rewritten for the set shown before the page
 // opens
 constexpr char kStyleTitle[] = "Style Options ", kMoreTitle[] = "More Settings ", kNetTitle[] = "Netplay       ",
-               kEffectsTitle[] = "Effects       ", kKeysTitle[] = "Key Bindings  ";
+               kEffectsTitle[] = "Effects       ", kKeysTitle[] = "Key Bindings  ", kCoopTitle[] = "Co-op         ";
 static_assert(sizeof(kStyleTitle) == sizeof(kMoreTitle) && sizeof(kStyleTitle) == sizeof(kNetTitle) &&
-              sizeof(kStyleTitle) == sizeof(kEffectsTitle) && sizeof(kStyleTitle) == sizeof(kKeysTitle));
+              sizeof(kStyleTitle) == sizeof(kEffectsTitle) && sizeof(kStyleTitle) == sizeof(kKeysTitle) &&
+              sizeof(kStyleTitle) == sizeof(kCoopTitle));
 constexpr size_t kLabelBytes = 32;
 const char* SharedLabel(uint32_t line) {
     static std::string labels[kSharedRows];
@@ -703,6 +736,7 @@ void SetSharedTexts(uint32_t set) {
                 : set == kNetPage     ? kNetTitle
                 : set == kEffectsPage ? kEffectsTitle
                 : set == kKeysPage || set == kKeys2Page ? kKeysTitle
+                : set == kCoopPage    ? kCoopTitle
                                       : kStyleTitle,
                 sizeof(kStyleTitle));
     g_style_rows = set;
@@ -892,6 +926,12 @@ void OpenMorePage(X86Context& ctx, uint32_t player) {
     LOGR("nightfire: More Settings opened");
 }
 
+void OpenCoopPage(X86Context& ctx, uint32_t player) {
+    SetSharedTexts(kCoopPage);
+    MenuGoTo(ctx, player, kStylePage);
+    LOGR("nightfire: Co-op opened");
+}
+
 void OpenNetplayPage(X86Context& ctx, uint32_t player) {
     SetSharedTexts(kNetPage);
     MenuGoTo(ctx, player, kStylePage);
@@ -948,6 +988,7 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
                 else if (g_style_rows == kMorePage) EnterMore(ctx, player);
                 else if (g_style_rows == kEffectsPage) EnterEffects(ctx, player);
                 else if (g_style_rows == kKeysPage || g_style_rows == kKeys2Page) EnterKeys(ctx, player);
+                else if (g_style_rows == kCoopPage) EnterCoop(ctx, player);
                 else EnterStyle(ctx, player, g_style_rows);
             }
             uint32_t first = kGfxRows[0].id;  // the first row shown (back gives the row it kept after)
@@ -988,6 +1029,17 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
             if (id == kStylePage && g_style_rows == kNetPage) return NetActivate(ctx, player, on);
             if (id == kStylePage && (g_style_rows == kKeysPage || g_style_rows == kKeys2Page))
                 return KeysActivate(ctx, player, widget, on);
+            if (id == kStylePage && g_style_rows == kMorePage && on == Wid(kCoop)) {
+                KeepMore(ctx, player);
+                OpenCoopPage(ctx, player);
+                return true;
+            }
+            if (id == kStylePage && g_style_rows == kCoopPage && on != Wid(kCoopDone)) {
+                if (on == Wid(kCoopMode) && ChoiceValue(ctx, player, kCoopMode) == 2) {
+                    MenuHelp(ctx, player, "Network co-op is not ready yet: the story missions are played on one PC for now.");
+                    return true;
+                }
+            }
             if (id == kStylePage && g_style_rows == kMorePage && on == Wid(kKeys)) {
                 // Key Bindings: More Settings kept, then the keys' rows on the same page (back returns to Settings)
                 KeepMore(ctx, player);
@@ -999,6 +1051,7 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
             if (id == kGfxPage) KeepGraphics(ctx, player);
             else if (g_style_rows == kMorePage) KeepMore(ctx, player);
             else if (g_style_rows == kEffectsPage) KeepEffects(ctx, player);
+            else if (g_style_rows == kCoopPage) KeepCoop(ctx, player);
             else KeepStyle(ctx, player, g_style_rows);
             MenuBack(ctx, player);
         }

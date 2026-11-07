@@ -31,6 +31,17 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - A Co-op page; player 2's respawn seen
+
+- Co-op page (the shared page's set 9, nf::OpenCoopPage; More Settings > Co-op > Open for now): Co-op Off / Split
+  Screen / Network (not ready: kept off, says so), Screen Split one above the other / side by side (coop_side: the
+  game's [0x1F660C] set for the level, put back at the front end), Friendly Fire, Keep Together (coop_leash),
+  Player 2 Respawn (coop_respawn), Keep. Checked on screen.
+- Player 2's respawn seen: killed (NF_COOP_KILL2) at 161 s, back beside player 1 with 100 health at 166 s.
+- Next: the entry in single player's flow (RE under way, .local/sp_menu_notes.md), the multiplayer animations
+  loaded into story levels (RE under way, .local/anim_load_notes.md).
+
+
 ### 2026-11-07 - Story co-op: a walk set from the guards' animations; death check fixed
 
 - NF_COOP_ANIMS=1 logs the animations NPC bodies play with their speed. The Exchange: walks 0x60002A2 / 0x600029E

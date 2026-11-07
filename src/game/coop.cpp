@@ -221,7 +221,7 @@ void CoopFrame(X86Context& ctx) {
              Plausible(second) ? R32(second + kZone) : 0, level_frames);
     if (!Plausible(lead) || !Plausible(second) || R32(kCutscene) || (Off() & 16)) return;
     if (Dead(second)) {
-        if (++g_dead_frames > 180 && !Dead(lead)) Respawn(ctx, second, lead), g_dead_frames = 0;
+        if (nf::coop_respawn && ++g_dead_frames > 180 && !Dead(lead)) Respawn(ctx, second, lead), g_dead_frames = 0;
         return;
     }
     g_dead_frames = 0;
@@ -229,7 +229,7 @@ void CoopFrame(X86Context& ctx) {
     float dx = F(second + kPlace) - F(lead + kPlace), dy = F(second + kPlace + 4) - F(lead + kPlace + 4),
           dz = F(second + kPlace + 8) - F(lead + kPlace + 8);
     bool far = dx * dx + dy * dy + dz * dz > 20.0f * 20.0f || !R32(second + kZone);
-    g_far_frames = far ? g_far_frames + 1 : 0;
+    g_far_frames = far && nf::coop_leash ? g_far_frames + 1 : 0;
     if (g_far_frames > 180) {
         float pos[3];
         Beside(lead, pos, 1.2f);
@@ -380,7 +380,7 @@ X86_FUNC(sub_000ABBD0) {  // a player released (obj, matrix* or 0, snap): player
 X86_EXTERN_FUNC(__imp__sub_000AC390);
 X86_FUNC(sub_000AC390) {  // the death test (obj, class)
     uint32_t obj = R32(ctx.esp + 4);
-    const bool second = On() && !(Off() & 8) && obj && obj == Player(1);
+    const bool second = On() && !(Off() & 8) && nf::coop_respawn && obj && obj == Player(1);
     const uint8_t failed = second ? kernel::G<uint8_t>(kFailed) : 0;
     const uint32_t flags = second ? R32(kEventFlags) : 0;
     __imp__sub_000AC390(ctx, base);
@@ -389,7 +389,7 @@ X86_FUNC(sub_000AC390) {  // the death test (obj, class)
 
 X86_EXTERN_FUNC(__imp__sub_000AC690);
 X86_FUNC(sub_000AC690) {  // a dead player's frame (obj in eax): the story's "mission failed" wait
-    if (On() && !(Off() & 8) && ctx.eax && ctx.eax == Player(1)) {
+    if (On() && !(Off() & 8) && nf::coop_respawn && ctx.eax && ctx.eax == Player(1)) {
         ctx.esp += 4;  // player 2: none (its respawn is CoopFrame's)
         return;
     }

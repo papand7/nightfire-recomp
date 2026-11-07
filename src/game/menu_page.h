@@ -47,6 +47,7 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
 void OpenGraphicsPage(X86Context& ctx, uint32_t player);
 void OpenMorePage(X86Context& ctx, uint32_t player);
 void OpenNetplayPage(X86Context& ctx, uint32_t player);  // the main menu's Netplay (LAN play)
+void OpenCoopPage(X86Context& ctx, uint32_t player);     // Co-op (single player's, More Settings')
 void NetplayPageFrame(X86Context& ctx);                  // each frame: the games found  // Settings' More Settings (the style page's last row set)
 bool MenuRowHidden(uint32_t page, uint32_t id);  // a row the page has hidden (the style page's other styles')
 

@@ -23,6 +23,9 @@ bool view_motion = true;
 bool foot_ik = true;
 bool coop = false;
 bool coop_friendly_fire = false;
+bool coop_side = false;
+bool coop_leash = true;
+bool coop_respawn = true;
 uint32_t fov_percent = 100;
 uint32_t draw_distance = 100;
 extern bool modern_buttons;  // src/common/buttons.cpp
@@ -225,6 +228,9 @@ const app::GameInfo app::kGame = {
                  "A second player in the story missions on the same screen, on controller 2. From the next mission."},
                 {"coop_friendly_fire", &nf::coop_friendly_fire, nullptr, "Co-op friendly fire",
                  "In story co-op the players' shots hurt each other."},
+                {"coop_side", &nf::coop_side, nullptr, "Co-op side by side", "The two views side by side, not one above the other."},
+                {"coop_leash", &nf::coop_leash, nullptr, "Co-op keep together", "Player 2 brought back beside player 1 when far away."},
+                {"coop_respawn", &nf::coop_respawn, nullptr, "Co-op respawn", "Player 2 comes back beside player 1 after dying."},
                 {"foot_ik", &nf::foot_ik, nullptr, "Feet on the ground",
                  "Characters' legs bend so each foot stands on the ground under it, on slopes and steps (the original's float or sink)."},
                 {"aim_down_sights", &nf::aim_down_sights, nullptr, "Aim down sights",
