@@ -31,6 +31,16 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Pale sunlit walls and Phoenix Fire's bright walls fixed (the relight's lamps)
+
+- Found with new test views: XBE_RT_TEST=11 passes the relight's input through, and it is clean. rt_sun=0 still gave
+  white walls, so the cause was neither the sun nor the fog: it was the game's placed lamps, divided by the baked
+  light. (The earlier "ratio about 2" reading was wrong: test 5 still goes through exposure and tone mapping.)
+- Outdoors on a bright day (baked brightness 0.5 to 0.9) the lamps now fade to 15%: daylight drowns them. The relight
+  ratio is capped at 2.5 instead of 4, so a dark wall beside a lamp no longer reaches four times its baked light.
+- Checked (`.local/vk/readme_shots.sh`): Chain Reaction's concrete keeps its texture; Phoenix Fire's walls are dark wood
+  brown, not glowing pink; the Exchange looks the same as before.
+
 ### 2026-11-07 - Look fixes (grade, exposure), 4:3 movies, water detector; pale sunlit walls still open
 
 - Double Cross's orange (fixed): the grade's curves work per channel, so a strong colour got stronger and moved
