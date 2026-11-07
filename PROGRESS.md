@@ -31,6 +31,28 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Modern menus (blue, for the mouse)
+
+- New option modern_menus (settings.toml; launcher Display > Menus: Classic / Modern; F1 Game). The game's menu pages
+  are drawn again with ImGui over its background movie: a navy panel, the page title, rounded rows with the focused
+  one lit electric blue, a choice's or slider's value between arrows, the page's own button line as the footer, and a
+  Back pill. Font: Bahnschrift from Windows (Segoe UI if missing); nothing is shipped.
+- src/game/modern_menu_frame.cpp (game thread, the pad reader's hook) reads the page up each frame from its live
+  widgets: labels +0xF4, buttons +0x188, a choice's item +0x304 (+8), a slider's value from message 0x40. A list
+  (a widget with no label, plus five stacked lines for the entries around the current one) becomes one row per
+  entry. NF_MM_DUMP=1 logs each page's widgets.
+- Input: a mouse move hovers (the game's focus moves there via MenuFocus); a click presses A, or Left / Right on a
+  value; a click on a list entry presses Up / Down to it first, then A; right-click or Back presses B. Clicks come
+  from input::MouseButtons, so test scripts' CLICKL works too. The keyboard and controllers drive the game as
+  before. A mouse resting over a row does not take the focus. The classic menu mouse is off meanwhile, and the
+  game's own widget sprites are not drawn (0xD9410 skipped). Pages with no rows (Join Game's four panels) stay classic.
+- Blue: with modern menus on, the menu movies are always recoloured. The main menu's column behind Bond turns too
+  (it stayed orange). The title screen's 512x512 picture and the 007 logos (ARGB, swizzled) turn blue in place;
+  Bond's face, hand and collar keep their colour (bright, and green over half the red). Movies in 4:3 now skip the
+  menus' background movie.
+- Checked (`.local/vk/mm_test.sh`, `title_test.sh`): main menu, Settings (sliders, choices), Edit Codename (list), Edit
+  BOND, hover and clicks; the title screen dumped (NF_TITLE_DUMP) and checked.
+
 ### 2026-11-07 - Pale sunlit walls and Phoenix Fire's bright walls fixed (the relight's lamps)
 
 - Found with new test views: XBE_RT_TEST=11 passes the relight's input through, and it is clean. rt_sun=0 still gave

@@ -37,4 +37,5 @@ int GunStyle() {
     if (kernel::R32(0x1E455C + 4) != 1 || MenuUp()) return -1;
     return int(kernel::R32(0x1E455C + 0xC) & 7);
 }
+void ModernMenuFrame(X86Context&) {}  // the modern menus are default.xbe's alone
 }  // namespace nf

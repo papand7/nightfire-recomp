@@ -499,6 +499,7 @@ X86_FUNC(sub_0007F680) {
         uint32_t index = kernel::CallGuest(ctx, kSetWidget, {widget, 0x40, 0, 0}) & 0xFF;
         if (index <= kDiffEntries) W32(ctx.esp + 0xC, DiffCopy());
     }
+    if (widget) nf::ModernListSeen(widget, R32(ctx.esp + 0xC));  // the modern menus list its entries
     __imp__sub_0007F680(ctx, base);
 }
 

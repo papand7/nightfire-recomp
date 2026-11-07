@@ -334,7 +334,8 @@ void MenuMouse(int port, input::Pad& p) {
             if (c < input::kA) p.buttons = uint16_t(p.buttons & ~(1u << c));
             else p.analog[c - input::kA] = 0;
         }
-        Pointer(p, held, now, notches != 0 || pending != 0);
+        if (ModernMenuActive()) ModernMenuPad(p);  // modern menus: their own clicks (modern_menu.cpp)
+        else Pointer(p, held, now, notches != 0 || pending != 0);
     } else {
         Pointer(p, 0, -1, false);  // out of the menus: nothing kept
     }

@@ -202,7 +202,8 @@ constexpr void (*SaveKeys)(void*) = nullptr;
 // GameInfo::texture_bound: the fonts (src/common/fonts.cpp), the button pictures (src/common/buttons.cpp)
 bool TextureBound(uint32_t header, uint32_t palette) {
     nf::FontPicture(header);
-    if (nf::MenuMovie(header)) return true;
+    nf::TitleLog(header);
+    if (nf::MenuMovie(header) || nf::TitlePicture(header)) return true;
     return nf::ButtonPictures(header, palette);
 }
 
@@ -237,6 +238,8 @@ const app::GameInfo app::kGame = {
                  "L (the right mouse button) raises the gun and zooms in a little, instead of the game's manual aim and its red crosshair. Scopes stay as they are."},
                 {"rounded_font", &nf::rounded_font, nullptr, "Rounded font",
                  "The text in Sour Gummy Black, a rounded font, instead of the game's own letters. At the next start."},
+                {"modern_menus", &nf::modern_menus, nullptr, "Modern menus",
+                 "The menus drawn anew in the blues of the PS2 cover over the game's own background, for the mouse: hover, click, the wheel."},
                 {"modern_buttons", &nf::modern_buttons, nullptr, "Modern button pictures",
                  "A controller's prompts as today's Xbox pad marks them: LB and RB for White and Black, Menu and View for Start and Back."},
                 {"draw_distance", nullptr, &nf::draw_distance, "Draw distance (%)",
@@ -247,9 +250,9 @@ const app::GameInfo app::kGame = {
     .save = SaveKeys,
     .init = Init,                         // after the settings load, before the window and boot
     .loaded = nullptr,                    // image in memory, before its entry point runs
-    .window = nullptr,                    // the game window is up
+    .window = nf::ModernMenuFonts,        // the game window is up: the modern menus' fonts
     .message = nullptr,                   // window messages first; true takes one
-    .ui = nullptr,                        // ImGui drawing each frame
+    .ui = nf::ModernMenuUi,               // ImGui drawing each frame: the modern menus
     .pad = nf::MenuMouse,                 // changes a polled pad: the mouse in the menus
     .rumble = nullptr,                    // changes a rumble before it is set
     .achievements = nf::AchievementSet(), // conditions on default.xbe's Results page (src/common/achievement_set.cpp)

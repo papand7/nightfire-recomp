@@ -20,7 +20,8 @@ X86_FUNC(sub_000DAC20) {  // the frame's 2D pass
 
 X86_EXTERN_FUNC(__imp__sub_000D9410);
 X86_FUNC(sub_000D9410) {
-    if (nf::hide_hud && !nf::MenuUp()) {
+    // modern menus: the game's own widgets not drawn (theirs over the background movie)
+    if ((nf::hide_hud && !nf::MenuUp()) || (nf::MenuUp() && nf::ModernMenuActive())) {
         ctx.esp += 4;  // cdecl: the return address only
         return;
     }

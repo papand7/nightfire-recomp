@@ -41,6 +41,7 @@ window.SCHEMA = [
                     { f: 's', key: 'sharp_2d', label: 'Sharp text and HUD', def: true },
                     { f: 's', key: 'hit_feedback', label: 'Hit feedback', def: 2, options: pick([0, 'Off'], [1, 'Marker'], [2, 'Marker and sound']) },
                     { f: 's', key: 'menu_colors', label: 'Menu colours', def: 0, options: pick([0, 'Original'], [1, 'PC Blue']) },
+                    { f: 's', key: 'modern_menus', label: 'Menus', def: false, options: pick([false, "Classic (the game's own)"], [true, 'Modern (blue, made for the mouse)']) },
                 ],
             },
         ],

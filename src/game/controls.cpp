@@ -158,7 +158,7 @@ X86_FUNC(sub_000DE720) {
     }
     __imp__sub_000DE720(ctx, base);
     if (players == kControls) {
-        nf::AimDownSights(count), nf::LanFrame(ctx);
+        nf::AimDownSights(count), nf::LanFrame(ctx), nf::ModernMenuFrame(ctx);
         gpu::SetAiming(nf::AimingDownSights());  // depth of field's focus blurs more while aiming
     }
     if (players == kControls) HoldToCrouch(), Sprint();

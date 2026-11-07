@@ -15,6 +15,44 @@ namespace nf {
 extern const bool kDriving;  // Driving.xbe's exe (src/driving/hooks.cpp), default.xbe's false (src/game/hooks.cpp)
 extern bool skip_intro;
 extern bool rounded_font;  // the fonts drawn from Sour Gummy Black, not the game's letters (src/common/fonts.cpp)
+// modern menus (src/common/modern_menu.cpp draws them, src/game/modern_menu_frame.cpp reads the game's page): the
+// game's menu pages drawn anew over its background movie
+extern bool modern_menus;
+enum ModernKind { kModernButton, kModernChoice, kModernSlider, kModernList };
+struct ModernRow {
+    uint32_t id = 0;
+    int kind = kModernButton;
+    std::string label, value;
+    uint32_t slider_value = 0, slider_max = 0;
+    bool list = false;  // one of a list's shown entries: list_step from the list's current one
+    int list_step = 0;
+    bool focused = false, disabled = false;
+};
+struct ModernPage {
+    bool up = false;
+    uint32_t page = 0;  // the page's id
+    std::string title, help, prompt;  // prompt: the page's button line ("~A Select  ~B Back")
+    std::vector<ModernRow> rows;
+    int focus = -1;
+};
+struct ModernAction {
+    uint32_t id;    // the row to focus, 0 none
+    int control;    // then this pressed (input::kA, kB, kLeft, kRight), -1 none
+    uint32_t page;  // the page it was meant for
+    bool list = false;  // a list's entry: the list moved list_step first (down presses, up when negative)
+    int list_step = 0;
+};
+void ModernMenuPublish(const ModernPage& page);  // the game's thread, each frame in the menus
+bool ModernMenuAction(ModernAction& a);          // the game's thread: the UI's next click
+void ModernMenuPress(int control);               // a press for the polled pad
+bool ModernMenuActive();                         // modern menus on and a page up
+void ModernMenuPad(input::Pad& p);               // the presses played (MenuMouse)
+bool TitlePicture(uint32_t header);              // modern menus: the title screen and logos blue
+void TitleLog(uint32_t header);                  // NF_TITLE_LOG: the menus' big pictures (menu_colors.cpp)
+void ModernMenuFonts(void* hwnd);                // GameInfo::window
+void ModernMenuUi(double fps);                   // GameInfo::ui
+void ModernMenuFrame(X86Context& ctx);           // default.xbe's game thread (Driving.xbe: none)
+void ModernListSeen(uint32_t widget, uint32_t table);  // a table list drawn (0x7F680): its entries readable
 extern bool skip_paris;  // a new game's START goes to the menus, not into Paris (src/game/start.cpp)
 extern bool hide_hud;  // no HUD, for screenshots (src/game/hud.cpp, src/driving/hud.cpp)
 extern bool foot_ik;         // the characters' feet on the ground on slopes and steps (src/game/foot_ik.cpp)

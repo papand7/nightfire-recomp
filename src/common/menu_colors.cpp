@@ -9,11 +9,16 @@
 // its bytes as it was left) is passed over.
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <cstdio>
+#include <cstdlib>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
 
 #include "app/app.h"
+#include "core/log.h"
+#include "gpu/texture.h"
 #include "common/nightfire.h"
 #include "kernel/kernel.h"
 #include "kernel/memory.h"
@@ -54,7 +59,7 @@ namespace nf {
 
 // GameInfo::texture_bound: true when the movie's texels were changed
 bool MenuMovie(uint32_t header) {
-    if (!app::Get().menu_colors || !MenuUp()) return false;
+    if ((!app::Get().menu_colors && !modern_menus) || !MenuUp()) return false;  // the modern menus are blue always
     uint32_t format = kernel::R32(header + 12), size = kernel::R32(header + 16);
     if ((format >> 8 & 0xFF) != kYuy2 || !size || (size & 0xFFF) + 1 != kWidth || (size >> 12 & 0xFFF) + 1 != kHeight)
         return false;
@@ -74,6 +79,8 @@ bool MenuMovie(uint32_t header) {
             if (bond && y < kBondBottom) {
                 float in = Smooth(float(kBondX - kBondEdge), float(kBondX), float(x)) *
                            (1 - Smooth(float(kBondRight), float(kBondRight + kBondEdge), float(x)));
+                // the wooden column behind his head (right of his face, above his hand) turned all the same
+                in *= 1 - Smooth(484, 494, float(x)) * (1 - Smooth(562, 572, float(x))) * (1 - Smooth(218, 232, float(y)));
                 if (in > 0) {  // Bond's side: the background's strong orange only
                     float u = p[1] - 128.0f, v = p[3] - 128.0f;
                     amount = 1 - in * (1 - Smooth(50, 62, std::sqrt(u * u + v * v)));
@@ -83,6 +90,89 @@ bool MenuMovie(uint32_t header) {
         }
     }
     g_done[data] = Sum(bytes, pitch * kHeight);
+    return true;
+}
+// NF_TITLE_LOG=1: the big pictures bound while a menu is up, logged once each (to find the title screen's)
+void TitleLog(uint32_t header) {
+    static const bool on = std::getenv("NF_TITLE_LOG") != nullptr;
+    if (!on || !MenuUp()) return;
+    gpu::TextureDesc d;
+    if (!gpu::Describe(header, d) || d.width < 256 || d.height < 128) return;
+    static std::unordered_map<uint32_t, int> seen;
+    if (seen[d.data]++) return;
+    uint32_t page = 0, focused = 0;
+    std::vector<MenuWidget> widgets;
+    MenuGeometry(page, widgets, focused);
+    LOGR("nightfire: menu picture %08X: format %02X %ux%u%s levels %u (page %08X)", d.data, d.format, d.width,
+         d.height, d.linear ? " linear" : "", d.levels, page);
+}
+// modern menus: the title screen's picture (page 0x40000009: 512 x 512, Bond on its left) and the logos over it and
+// the main menu (512 or 256 x 128), A8R8G8B8 swizzled, turned blue in place as the movies are; on the title Bond's
+// skin is kept as on the main menu (his rectangle in texels, only the strong orange there turns)
+bool TitlePicture(uint32_t header) {
+    if (!modern_menus || !MenuUp()) return false;
+    uint32_t page = 0, focused = 0;
+    std::vector<MenuWidget> widgets;
+    if (!MenuGeometry(page, widgets, focused) || (page != 0x40000009 && page != kMainMenu)) return false;
+    gpu::TextureDesc d;
+    if (!gpu::Describe(header, d) || d.format != 0x06 || d.linear || d.width < 256 || d.width > 512 ||
+        (d.height != 128 && d.height != 512))
+        return false;
+    const uint32_t n = d.width * d.height;
+    if (!mem::IsCommitted(d.data) || !mem::IsCommitted(d.data + n * 4 - 1)) return false;
+    auto* px = static_cast<uint8_t*>(kernel::HostPtr(d.data));
+    auto done = g_done.find(d.data);
+    if (done != g_done.end() && done->second == Sum(px, n * 4)) return false;
+    const bool bond = d.width == 512 && d.height == 512;
+    for (uint32_t i = 0; i < n; i++) {
+        uint8_t* p = px + i * 4;  // B G R A
+        float b = p[0], g = p[1], r = p[2];
+        float y = 0.299f * r + 0.587f * g + 0.114f * b;
+        uint8_t uv[3] = {uint8_t(std::clamp(128 + (b - y) * 0.564f, 0.0f, 255.0f)), 0,
+                         uint8_t(std::clamp(128 + (r - y) * 0.713f, 0.0f, 255.0f))};
+        float amount = 1;
+        if (bond) {  // the texel's place: a square's swizzle interleaves x (even bits) and y (odd bits)
+            uint32_t x = 0, yy = 0;
+            for (int k = 0; k < 9; k++) x |= ((i >> (2 * k)) & 1) << k, yy |= ((i >> (2 * k + 1)) & 1) << k;
+            // his face and hand (x 95 to 300, down to the logo) and his collar under it, right of the 007
+            float fx = float(x), fy = float(yy);
+            float in = std::max(Smooth(88, 100, fx) * (1 - Smooth(296, 308, fx)) * Smooth(14, 24, fy) * (1 - Smooth(222, 232, fy)),
+                                Smooth(186, 196, fx) * (1 - Smooth(242, 252, fx)) * Smooth(222, 232, fy) * (1 - Smooth(330, 342, fy)));
+            // his skin and shirt: bright and orange (green half the red); the red behind him dark or deeper red
+            if (in > 0) amount = 1 - in * Smooth(45, 75, y) * Smooth(0.28f, 0.38f, g / std::max(r, 1.0f));
+        }
+        if (amount <= 0) continue;
+        uint8_t was[3] = {uv[0], uv[1], uv[2]};
+        Turn(uv, amount);
+        if (uv[0] == was[0] && uv[2] == was[2]) continue;
+        float cb = uv[0] - 128.0f, cr = uv[2] - 128.0f;
+        p[2] = uint8_t(std::clamp(y + 1.403f * cr, 0.0f, 255.0f));
+        p[1] = uint8_t(std::clamp(y - 0.344f * cb - 0.714f * cr, 0.0f, 255.0f));
+        p[0] = uint8_t(std::clamp(y + 1.773f * cb, 0.0f, 255.0f));
+    }
+    if (bond && std::getenv("NF_TITLE_DUMP")) {  // the picture as turned, unswizzled, a TGA
+        static bool dumped = false;
+        if (!dumped) {
+            dumped = true;
+            std::vector<uint8_t> out(size_t(n) * 4);
+            for (uint32_t i = 0; i < n; i++) {
+                uint32_t x = 0, yy = 0;
+                for (int k = 0; k < 9; k++) x |= ((i >> (2 * k)) & 1) << k, yy |= ((i >> (2 * k + 1)) & 1) << k;
+                std::memcpy(&out[(size_t(yy) * 512 + x) * 4], px + i * 4, 4);
+            }
+            LOGR("nightfire: title picture dumped to %s", std::getenv("NF_TITLE_DUMP"));
+            if (FILE* f = std::fopen(std::getenv("NF_TITLE_DUMP"), "wb")) {
+                uint8_t head[18] = {0, 0, 2};
+                head[12] = 0, head[13] = 2, head[14] = 0, head[15] = 2, head[16] = 32, head[17] = 0x28;
+                std::fwrite(head, 1, 18, f);
+                std::fwrite(out.data(), 1, out.size(), f);
+                std::fclose(f);
+            }
+        }
+    }
+    g_done[d.data] = Sum(px, n * 4);
+    static int said = 0;
+    if (said++ < 4) LOGR("nightfire: modern menus: picture %08X (%ux%u) turned blue", d.data, d.width, d.height);
     return true;
 }
 }  // namespace nf

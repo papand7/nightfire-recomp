@@ -86,6 +86,8 @@ animations and a gun in hand.*
   Difficulty): friendly fire on or off, keep together, player 2 respawns, and the usual saves and unlocks.
 
 **Menus**
+- **Modern menus** (optional, in the launcher): every menu page redrawn in the blues of the PS2 cover over the
+  game's own background movie, made for the mouse (hover, click, wheel); the title screen turns blue too.
 - **Graphics**, **Effects**, **Style Options**, **More Settings**, **Netplay** and **Key Bindings** pages, drawn in
   the game's own menu style, under Settings in the main menu and the pause screen.
 - **Start in Menus:** START at the title opens the menus instead of the Paris mission.
