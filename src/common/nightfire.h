@@ -17,10 +17,12 @@ extern bool skip_intro;
 extern bool rounded_font;  // the fonts drawn from Sour Gummy Black, not the game's letters (src/common/fonts.cpp)
 extern bool skip_paris;  // a new game's START goes to the menus, not into Paris (src/game/start.cpp)
 extern bool hide_hud;  // no HUD, for screenshots (src/game/hud.cpp, src/driving/hud.cpp)
-extern bool foot_ik;
+extern bool foot_ik;         // the characters' feet on the ground on slopes and steps (src/game/foot_ik.cpp)
 extern bool coop;            // story co-op: a second player on controller 2, split screen (src/game/coop_test.cpp)
 extern bool coop_friendly_fire;  // story co-op: the players' shots hurt each other (src/game/hit_feedback.cpp)
-int CoopSplit();             // 0 one view, 1 two one above the other, 2 side by side (in a level now)         // the characters' feet on the ground on slopes and steps (src/game/foot_ik.cpp)
+int CoopSplit();             // 0 one view, 1 two one above the other, 2 side by side (in a level now)
+void CoopHud(uint32_t actor, bool after);  // a player's HUD in its own view (src/game/coop.cpp; around 0xB6190)
+void CoopFrame(X86Context& ctx);           // co-op's frame: the guns' views, player 2's respawn and leash
 extern bool view_motion;     // subtle weapon sway and head bob (src/game/sway.cpp)
 void GunSway(int player, uint32_t gun, float keep);
 void WeaponKeys(X86Context& ctx, uint32_t obj);  // 1-9 pick a weapon (src/game/weapon_keys.cpp)

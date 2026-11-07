@@ -31,6 +31,23 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Story co-op: HUD per view, guns per view, cutscenes, player 2's death and leash (src/game/coop.cpp)
+
+- From .local/coop_notes.md: the radar ring (story HUD element 1, laid out for one full screen) scaled into each
+  player's view after 0xB6190 (other full screen elements left alone: scaling them brought hidden overlays into view);
+  each first person gun's camera mask ([actor+0x778]+0xD4) 1 << p; cutscenes freeze and release player 2 with player
+  1 (0xABD70, 0xABBD0), the cutscene camera 4 given the single screen aspect (0x25190 hook); player 2's death keeps
+  the story's failure flags, skips its dead frames (0xAC690) and respawns it beside player 1 after 3 s (0x9F0B0's
+  steps, 0xAC7E0); player 2 moved beside player 1 after 3 s over 20 units away or outside the zones.
+- The split views' aspect is the game's own (0x25190 doubles it while two players' cameras exist): the extra
+  doubling from earlier today removed.
+- Body animation: setting the multiplayer flag around 0xA91E0/0xA9350/0xA94C0/0xA9590 broke the picture (a screen
+  filled with a sprite); .local/coop_notes2.md: the walk tables' animations exist only in the multiplayer levels'
+  files. Left out (NF_COOP_BODY=1 to try). Next: tables from animations a story level does load (NPC walks).
+- NF_COOP_OFF bits leave parts out for tests (1 HUD, 2 guns, 4 body, 8 cutscenes/death, 16 leash).
+- Checked (.local/vk/coop2_test.sh): The Exchange, the radar in both views, one gun each, the world drawn.
+
+
 ### 2026-11-07 - Story co-op: friendly fire toggle
 
 - nf::coop_friendly_fire (settings: coop_friendly_fire; More Settings > Story Co-op: Off / Split Screen / Split

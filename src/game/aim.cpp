@@ -262,7 +262,9 @@ X86_FUNC(sub_000BD740) {  // the first person gun placed (cdecl: the object)
 X86_EXTERN_FUNC(__imp__sub_000B6190);
 X86_FUNC(sub_000B6190) {  // a player's HUD (cdecl: the actor, ...): no crosshair while aiming
     uint32_t actor = R32(ctx.esp + 4);
+    nf::CoopHud(actor, false);  // story co-op: the full screen places back for the update
     __imp__sub_000B6190(ctx, base);
+    nf::CoopHud(actor, true);   // then the places in the player's own view
     if (!actor || !R32(actor + kHud)) return;
     int i = kernel::G<int8_t>(actor + kPlayerIndex);
     if (i < 0 || i >= 4 || !g_players[i].aiming || g_players[i].optic) return;

@@ -15,6 +15,7 @@
 #include <cstring>
 
 #include "common/nightfire.h"
+#include "core/log.h"
 #include "kernel/kernel.h"
 #include "xdk/hle.h"
 
@@ -34,13 +35,11 @@ void SetF(uint32_t va, float f) { std::memcpy(&kernel::G<uint32_t>(va), &f, 4); 
 
 float Scaled(float fov) { return std::min(fov * nf::FovScale(), 2.9f); }  // short of 180 degrees
 
-// the camera at [esp+4] widened and its angle scaled while call runs; story co-op's split views at their own shape
-// (the game halves or doubles the aspect for a split only with the multiplayer flag: 0x25190)
+// the camera at [esp+4] widened and its angle scaled while call runs (a split view's own shape is the game's: 0x25190
+// doubles or halves the aspect while two players' cameras exist)
 template <class Fn>
 void Widened(uint32_t cam, Fn call) {
     float k = R32(kWidescreen) ? nf::Ultrawide() : 1.0f, s = nf::FovScale();
-    if (int split = nf::CoopSplit(); split && cam && (cam == R32(kCameras) || cam == R32(kCameras + 4)))
-        k *= split == 1 ? 2.0f : 0.5f;
     if (!cam || (std::abs(k - 1.0f) <= 1e-3f && s == 1.0f)) return call();
     float aspect = GetF(cam + kAspect), fov = GetF(cam + kFov);
     SetF(cam + kAspect, aspect * k);
@@ -57,6 +56,12 @@ X86_FUNC(sub_00025190) {
     float fov = GetF(ctx.esp + 8);
     __imp__sub_00025190(ctx, base);
     uint32_t cam = i < 9 ? R32(kCameras + 4 * i) : 0;
+    // story co-op: the cutscene camera (4, full screen) given a split view's aspect while two players' cameras exist
+    if (int split = nf::CoopSplit(); split && i >= 4 && cam) {
+        float f = split == 1 ? 2.0f : 0.5f;
+        SetF(cam + kAspect, GetF(cam + kAspect) / f);
+        SetF(cam + kScaleX, GetF(cam + kScaleX) * f);
+    }
     if (!cam || GetF(cam + kFov) != fov || nf::FovScale() == 1.0f) return;  // not set (no camera, no size)
     float r = std::tan(fov / 2) / std::tan(Scaled(fov) / 2);
     SetF(cam + kScaleX, GetF(cam + kScaleX) * r);
