@@ -64,6 +64,12 @@ constexpr uint32_t kList = 0x10000100;  // Edit Codename's list widget
 constexpr uint32_t kTable = 0x17CEC8, kEntry = 24, kEntries = 7;
 constexpr uint32_t kLabelHandle = 0x0000FC01, kHelpHandle = 0x0100FC02;  // no text bank goes that far
 constexpr uint32_t kPauseLabel = 0x0200FC03;  // the pause screen's choice (src/game/pc_settings_item.cpp)
+// Select Difficulty's list (page 0x40000023, list 0x100000BF, handler 0x86410): the table 0x17C760 (Operative,
+// Agent, 00 Agent: picture, label, help, the difficulty, enabled, help when disabled), its range 0 to 2 (message
+// 0x27 at 0x51), A storing the entry's difficulty in [0x1F65A8] and opening the mission list (0x7F320). A fourth
+// entry, Co-op, opens the Co-op page (.local/sp_menu_notes.md)
+constexpr uint32_t kDiffTable = 0x17C760, kDiffEntries = 3, kDiffCopied = 1000;  // 0x7F680 reads up to entry 999
+constexpr uint32_t kCoopLabel = 0x0000FC04, kCoopHelp = 0x0100FC05;
 constexpr uint32_t kAvPicture = 0x3000125;
 
 // in memory past the title's, which the recompiled code reads as it is (AllocSystem's it may not: see ListCopy)
@@ -257,6 +263,18 @@ uint32_t ListCopy() {
     std::memcpy(kernel::HostPtr(copy), kernel::HostPtr(kTable), kCopied * kEntry);
     uint32_t e = copy + kEntries * kEntry;
     const uint32_t ours[6] = {kAvPicture, kLabelHandle, kHelpHandle, kEntries, 1, 0};
+    for (int i = 0; i < 6; i++) W32(e + uint32_t(i) * 4, ours[i]);
+    return copy;
+}
+
+// the difficulty table with Co-op after it (the live table's entries copied each time: they are enabled as the
+// game goes), the memory past it as the game's (the scenarios table)
+uint32_t DiffCopy() {
+    static uint32_t copy = 0;
+    if (!copy) copy = mem::AllocHostContiguous(kDiffCopied * kEntry, 16);
+    std::memcpy(kernel::HostPtr(copy), kernel::HostPtr(kDiffTable), kDiffCopied * kEntry);
+    uint32_t e = copy + kDiffEntries * kEntry;
+    const uint32_t ours[6] = {R32(kDiffTable + kEntry + 0), kCoopLabel, kCoopHelp, 0, 1, 0};  // Agent's picture
     for (int i = 0; i < 6; i++) W32(e + uint32_t(i) * 4, ours[i]);
     return copy;
 }
@@ -477,6 +495,9 @@ X86_FUNC(sub_0007F680) {
     if (widget && R32(ctx.esp + 0xC) == kTable) {
         uint32_t index = kernel::CallGuest(ctx, kSetWidget, {widget, 0x40, 0, 0}) & 0xFF;
         if (index < kCopied) W32(ctx.esp + 0xC, ListCopy());
+    } else if (widget && R32(ctx.esp + 0xC) == kDiffTable) {
+        uint32_t index = kernel::CallGuest(ctx, kSetWidget, {widget, 0x40, 0, 0}) & 0xFF;
+        if (index <= kDiffEntries) W32(ctx.esp + 0xC, DiffCopy());
     }
     __imp__sub_0007F680(ctx, base);
 }
@@ -513,10 +534,45 @@ X86_FUNC(sub_0008C7F0) {
     }
 }
 
+// Select Difficulty's list (cdecl: player, widget, id, message): Co-op its fourth entry
+X86_EXTERN_FUNC(__imp__sub_00086410);
+X86_FUNC(sub_00086410) {
+    uint32_t player = R32(ctx.esp + 4), widget = R32(ctx.esp + 8), msg = R32(ctx.esp + 0x10);
+    uint32_t index = widget ? kernel::CallGuest(ctx, kSetWidget, {widget, 0x40, 0, 0}) & 0xFF : ~0u;
+    if ((msg == 0x49 || msg == 0x54) && index <= kDiffEntries) {
+        uint32_t eax = ctx.eax;
+        kernel::CallGuest(ctx, 0x7F680, {player, widget, DiffCopy(), 0x100000E6, 0x100000BE, 0x100001EE, 0x10000104,
+                                         msg == 0x49 ? 1u : 0u});
+        ctx.eax = eax;
+        ctx.eax = 1;
+        ctx.esp += 4;
+        return;
+    }
+    if (msg == 0x4B && widget && index == kDiffEntries) {  // A on Co-op: its page (back returns here)
+        nf::OpenCoopPage(ctx, player);
+        ctx.eax = 1;
+        ctx.esp += 4;
+        return;
+    }
+    __imp__sub_00086410(ctx, base);
+    if (msg == 0x51 && widget) {  // the list made: its range the game's 0 to 2 and Co-op, 3
+        uint32_t eax = ctx.eax;
+        kernel::CallGuest(ctx, kSetWidget, {widget, 0x27, 0, kDiffEntries});
+        ctx.eax = eax;
+        static bool said = false;
+        if (!said) said = true, LOGR("nightfire: Co-op added to Select Difficulty's list");
+    }
+}
+
 // GetText (cdecl: the handle, ...): our entry's label and help
 X86_EXTERN_FUNC(__imp__sub_0006D460);
 X86_FUNC(sub_0006D460) {
     uint32_t h = R32(ctx.esp + 4);
+    if (h == kCoopLabel || h == kCoopHelp) {
+        ctx.eax = Str(h == kCoopLabel ? "Co-op" : "Play the missions with a second player: split screen or network.");
+        ctx.esp += 4;
+        return;
+    }
     if (h == kLabelHandle || h == kHelpHandle || h == kPauseLabel) {
         ctx.eax = Str(h == kLabelHandle ? "Settings" : h == kPauseLabel ? "SETTINGS" : "Picture, controls and more for this PC.");
         ctx.esp += 4;

@@ -31,6 +31,15 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Co-op in single player's Select Difficulty
+
+- .local/sp_menu_notes.md: Select Difficulty is page 0x40000023, list 0x100000BF, handler 0x86410, table 0x17C760
+  (3 entries; A stores the difficulty at [0x1F65A8] and opens the mission list 0x4000001C). The hook gives the list a
+  copy with a fourth entry, Co-op (Agent's picture; label and help through the GetText hook, handles 0xFC04/0x0100FC05),
+  its range 0 to 3, draws its rows from the copy, and A on Co-op opens the Co-op page (back returns to the list; no
+  difficulty stored). Checked on screen (.local/vk/spcoop_test.sh).
+
+
 ### 2026-11-07 - A Co-op page; player 2's respawn seen
 
 - Co-op page (the shared page's set 9, nf::OpenCoopPage; More Settings > Co-op > Open for now): Co-op Off / Split
