@@ -21,6 +21,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <string>
+#include <cstdio>
 #include <unordered_map>
 
 #include "common/nightfire.h"
@@ -50,7 +52,7 @@ int Off() {
     return v;
 }
 uint32_t Player(int p) { return R32(kPlayers + 4 * uint32_t(p)); }
-bool Dead(uint32_t obj) { uint32_t s = R32(obj + kState); return s == 2 || s == 3; }
+bool Dead(uint32_t obj) { uint16_t s = kernel::G<uint16_t>(obj + kState); return s == 2 || s == 3; }  // +0xD2 the move
 uint32_t Scratch() {
     static uint32_t s = mem::AllocSystem(0x40);
     return s;
@@ -129,6 +131,37 @@ uint32_t g_dead_frames = 0, g_far_frames = 0;
 }  // namespace
 
 namespace nf {
+// NF_COOP_ANIMS=1 (a test): the animations NPC bodies play (their layer chain [inst+0x7C], +0x44 the next, +0x70 the
+// animation, +0x58 its data), each with the most speed seen (units a second), logged every 10 s
+void CoopNpc(uint32_t obj) {
+    static const bool on = [] {
+        const char* e = std::getenv("NF_COOP_ANIMS");
+        return e && *e == '1';
+    }();
+    if (!on || !Plausible(obj)) return;
+    static std::unordered_map<uint32_t, float[3]> last;  // the NPC's place
+    static std::unordered_map<uint32_t, std::pair<float, uint32_t>> seen;  // animation: speeds summed, frames
+    static uint32_t frames = 0;
+    float* l = last[obj];
+    float dx = F(obj + kPlace) - l[0], dz = F(obj + kPlace + 8) - l[2];
+    float speed = std::sqrt(dx * dx + dz * dz) * 60.0f;
+    for (int i = 0; i < 3; i++) l[i] = F(obj + kPlace + 4 * i);
+    if (speed > 20) speed = 0;  // a jump in place (first sight)
+    uint32_t inst = R32(obj + 0xB8);
+    if (Plausible(inst))
+        for (uint32_t layer = R32(inst + 0x7C), n = 0; Plausible(layer) && n < 16; layer = R32(layer + 0x44), n++)
+            if (R32(layer + 0x58)) {
+                auto& s = seen[R32(layer + 0x70)];
+                s.first += speed, s.second++;
+            }
+    if (++frames % 6000 == 0) {
+        std::string line;
+        char one[48];
+        for (auto& [id, s] : seen) std::snprintf(one, sizeof(one), " %08X:%.1f/%u", id, s.first / std::max(s.second, 1u), s.second), line += one;
+        LOGR("nightfire: co-op anims seen (id:mean speed/frames):%s", line.c_str());
+    }
+}
+
 // aim.cpp's 0xB6190 hook: before the HUD's update the full screen places back, after it the places in the view
 void CoopHud(uint32_t actor, bool after) {
     if (!On() || !Plausible(actor) || (Off() & 1)) return;
@@ -166,6 +199,26 @@ void CoopFrame(X86Context& ctx) {
         if (uint32_t obj = Player(p); Plausible(obj))
             if (uint32_t actor = R32(obj + kActor); Plausible(actor))
                 if (uint32_t gun = R32(actor + kGun); Plausible(gun)) kernel::G<uint16_t>(gun + 0xD4) = uint16_t(1u << p);
+    CoopWeaponCheck(ctx);
+    // NF_COOP_KILL2=<seconds> (a test): player 2's health taken to 0 that long into the level, once
+    static const int kill_at = [] {
+        const char* e = std::getenv("NF_COOP_KILL2");
+        return e && *e ? std::atoi(e) * 60 : 0;
+    }();
+    static uint32_t level_frames = 0, level_seen = 0;
+    if (R32(0x1F658C) != level_seen) level_seen = R32(0x1F658C), level_frames = 0;
+    if (kill_at && ++level_frames == uint32_t(kill_at) && Plausible(second) && Plausible(R32(second + kActor)))
+        SetF(R32(second + kActor) + 0x824, 0), LOGR("nightfire: co-op test: player 2's health set to 0");
+    static uint32_t calls = 0;
+    if (++calls % 600 == 0)
+        LOGR("nightfire: co-op status: cutscene %08X states %u %u, apart %.1f, zone %08X, level frames %u",
+             R32(kCutscene), Plausible(lead) ? kernel::G<uint16_t>(lead + kState) : 0,
+             Plausible(second) ? kernel::G<uint16_t>(second + kState) : 0,
+             Plausible(lead) && Plausible(second)
+                 ? std::sqrt(std::pow(F(second + kPlace) - F(lead + kPlace), 2.0f) +
+                             std::pow(F(second + kPlace + 8) - F(lead + kPlace + 8), 2.0f))
+                 : 0.0f,
+             Plausible(second) ? R32(second + kZone) : 0, level_frames);
     if (!Plausible(lead) || !Plausible(second) || R32(kCutscene) || (Off() & 16)) return;
     if (Dead(second)) {
         if (++g_dead_frames > 180 && !Dead(lead)) Respawn(ctx, second, lead), g_dead_frames = 0;
@@ -188,29 +241,112 @@ void CoopFrame(X86Context& ctx) {
 }
 }  // namespace nf
 
-// ---- the body's walk and moves: chosen with the multiplayer flag set, as a match does. Off unless NF_COOP_BODY=1:
-// in a story level it took the multiplayer's sets, which are not loaded there (the screen filled with a broken sprite)
-bool BodyHack() {
-    static const bool on = [] {
-        const char* e = std::getenv("NF_COOP_BODY");
-        return e && *e == '1';
-    }();
-    return on;
+// ---- the body's walk: the multiplayer walk sets are not in a story level's files (.local/coop_notes2.md), so the
+// players' set is made of the guards' animations the level does load: a standing pose, a walk, a run (the guards'
+// at about 3.5 and 10 units a second in The Exchange, NF_COOP_ANIMS), each the first of its candidates loaded
+// (0x6B500: the animation's data, 0 when the level has none). 0xA91E0 / 0xA9350 (the stand's and crouch's set,
+// cdecl: the object) are replaced for co-op players: the old nodes freed (0x17820), one made of this table (0x17B90:
+// obj, table, 0.37, 0.5; list {idle, walk, run, 0} then the strafes {right, right, left, left, 0}) into actor+0x820.
+// Strafing plays the walk: the driver 0x18BB0 (obj, node, |forward|, forward, .., side, ..) strafes in multiplayer
+// alone, so its speed is the larger of the two
+namespace {
+uint32_t g_table = 0, g_table_level = ~0u;
+uint32_t WalkTable(X86Context& ctx) {
+    const uint32_t level = R32(0x1F658C);
+    if (g_table && g_table_level == level) return g_table;
+    g_table_level = level;
+    if (!g_table) g_table = mem::AllocSystem(0x40);
+    auto pick = [&](std::initializer_list<uint32_t> ids) -> uint32_t {
+        for (uint32_t id : ids)
+            if (kernel::CallGuest(ctx, 0x6B500, {id})) return id;
+        return 0;
+    };
+    uint32_t idle = pick({0x6000259, 0x600025B, 0x6000A00});  // 0x600025C is a guard pointing an arm
+    uint32_t walk = pick({0x60002A2, 0x600029E, 0x60002A3, 0x60002A4});
+    uint32_t run = pick({0x6000262, 0x6000288, 0x600025E});
+    if (!idle) idle = 0x6000A00;
+    if (!walk) walk = run ? run : idle;
+    if (!run) run = walk;
+    const uint32_t t[9] = {idle, walk, run, 0, walk, walk, walk, walk, 0};
+    for (uint32_t i = 0; i < 9; i++) W32(g_table + 4 * i, t[i]);
+    LOGR("nightfire: co-op: the players' walk set: idle %08X, walk %08X, run %08X (level %08X)", idle, walk, run, level);
+    return g_table;
 }
-#define WITH_MULTI(addr)                                                            \
-    X86_EXTERN_FUNC(__imp__sub_##addr);                                             \
-    X86_FUNC(sub_##addr) {                                                          \
-        uint32_t obj = R32(ctx.esp + 4);                                            \
-        bool mine = On() && BodyHack() && obj && (obj == Player(0) || obj == Player(1));          \
-        uint32_t was = R32(kMulti);                                                 \
-        if (mine) W32(kMulti, 1);                                                   \
-        __imp__sub_##addr(ctx, base);                                               \
-        if (mine) W32(kMulti, was);                                                 \
+bool BodyOn() { return On() && !(Off() & 4); }
+
+void WalkSet(X86Context& ctx, uint32_t obj) {
+    uint32_t actor = R32(obj + kActor);
+    if (!Plausible(actor)) return;
+    uint32_t table = WalkTable(ctx);
+    kernel::CallGuest(ctx, 0x17820, {obj});
+    uint32_t node = kernel::CallGuest(ctx, 0x17B90, {obj, table, 0x3EBD70A4, 0x3F000000});
+    W32(actor + 0x820, node);
+    ctx.eax = node;
+}
+}  // namespace
+
+X86_EXTERN_FUNC(__imp__sub_000A91E0);
+X86_FUNC(sub_000A91E0) {  // a player's standing walk set (obj)
+    uint32_t obj = R32(ctx.esp + 4);
+    if (BodyOn() && obj && (obj == Player(0) || obj == Player(1))) {
+        WalkSet(ctx, obj);
+        ctx.esp += 4;
+        return;
     }
-WITH_MULTI(000A91E0)
-WITH_MULTI(000A9350)
-WITH_MULTI(000A94C0)
-WITH_MULTI(000A9590)
+    __imp__sub_000A91E0(ctx, base);
+}
+X86_EXTERN_FUNC(__imp__sub_000A9350);
+X86_FUNC(sub_000A9350) {  // a player's crouching walk set (obj): the same (no crouch walk loaded in story levels)
+    uint32_t obj = R32(ctx.esp + 4);
+    if (BodyOn() && obj && (obj == Player(0) || obj == Player(1))) {
+        WalkSet(ctx, obj);
+        ctx.esp += 4;
+        return;
+    }
+    __imp__sub_000A9350(ctx, base);
+}
+X86_EXTERN_FUNC(__imp__sub_00018BB0);
+X86_FUNC(sub_00018BB0) {  // the walk driver (obj, node, |forward|, forward, .., side, ..)
+    uint32_t obj = R32(ctx.esp + 4);
+    float& fwd = kernel::G<float>(ctx.esp + 12);
+    const float was = fwd, side = std::abs(kernel::G<float>(ctx.esp + 24));
+    const bool mine = BodyOn() && obj && (obj == Player(0) || obj == Player(1));
+    if (mine) fwd = std::max(std::abs(was), side);
+    __imp__sub_00018BB0(ctx, base);
+    if (mine) fwd = was;
+}
+
+// ---- the third person weapon: drawn by the body's draw from the weapon's attach point (0x16C20); logged once a
+// level whether the body has that point and the level the weapon's model (NF_COOP_ANIMS=1 shows more)
+namespace {
+void WeaponCheck(X86Context& ctx, uint32_t obj, int p) {
+    static uint32_t said_level[2] = {~0u, ~0u};
+    const uint32_t level = R32(0x1F658C);
+    if (said_level[p] == level) return;
+    uint32_t inst = R32(obj + 0xB8);
+    if (!Plausible(inst)) return;
+    said_level[p] = level;
+    int w = kernel::G<int8_t>(inst + 0x52);
+    uint32_t md = R32(inst + 0x74);
+    if (w < 0 || w >= 0x73 || !Plausible(md)) return;
+    uint32_t W = 0x10C * uint32_t(w), attach = kernel::G<uint8_t>(0x18CFF0 + W), mesh = R32(0x18D020 + W);
+    uint32_t n = kernel::G<uint8_t>(md + 0x2B), list = R32(md + 0x1C);
+    bool found = false;
+    for (uint32_t i = 0; Plausible(list) && i < n; i++) found |= R32(list + 0x24 * i) == (attach == 0xFF ? 0 : attach);
+    uint32_t loaded = mesh ? kernel::CallGuest(ctx, 0x6B610, {mesh}) : 0;
+    LOGR("nightfire: co-op: player %d's weapon %d: attach point %u %s (of %u), model %08X %s, body flags %02X", p + 1, w,
+         attach, found ? "on the body" : "missing", n, mesh, loaded ? "loaded" : "not loaded",
+         kernel::G<uint8_t>(inst + 0xA8));
+}
+}  // namespace
+
+namespace nf {
+void CoopWeaponCheck(X86Context& ctx) {
+    if (!On()) return;
+    for (int p = 0; p < 2; p++)
+        if (uint32_t obj = Player(p); Plausible(obj)) WeaponCheck(ctx, obj, p);
+}
+}  // namespace nf
 
 // ---- cutscenes: player 2 frozen and released with player 1
 X86_EXTERN_FUNC(__imp__sub_000ABD70);

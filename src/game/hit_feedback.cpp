@@ -77,6 +77,8 @@ X86_FUNC(sub_0003D900) {
         uint32_t p = R32(hit + 0x4C), o = p ? R32(p + 0xBC) : 0;
         int shooter = PlayerOf(o ? R32(o + 0x24) : 0), victim = PlayerOf(who ? R32(who) : 0);
         if (shooter >= 0 && victim >= 0 && shooter != victim) {
+            static int said = 0;
+            if (said++ < 3) LOGR("hit feedback: co-op: player %d's shot at player %d stopped (no friendly fire)", shooter + 1, victim + 1);
             ctx.esp += 4;
             return;
         }
@@ -87,7 +89,15 @@ X86_FUNC(sub_0003D900) {
     if (!hit || !data || !(before > 0)) return;
     float after = F32(data + 0x90);
     if (!(after < before)) return;  // no health taken (an ally, a scripted character, the shot absorbed)
-    if (int victim = PlayerOf(R32(who)); victim >= 0) Bleed(victim, before - after);
+    if (int victim = PlayerOf(R32(who)); victim >= 0) {
+        Bleed(victim, before - after);
+        if (nf::CoopSplit()) {
+            uint32_t pj = R32(hit + 0x4C), ow = pj ? R32(pj + 0xBC) : 0;
+            static int said = 0;
+            if (said++ < 6) LOGR("hit feedback: co-op: player %d hit (by player %d), health %.1f -> %.1f", victim + 1,
+                                 PlayerOf(ow ? R32(ow + 0x24) : 0) + 1, before, after);
+        }
+    }
     uint32_t proj = R32(hit + 0x4C), owner = proj ? R32(proj + 0xBC) : 0;
     int player = PlayerOf(owner ? R32(owner + 0x24) : 0);
     if (player < 0 || PlayerOf(R32(who)) == player) return;  // not a player's shot, or their own

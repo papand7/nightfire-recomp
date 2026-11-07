@@ -31,6 +31,23 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Story co-op: a walk set from the guards' animations; death check fixed
+
+- NF_COOP_ANIMS=1 logs the animations NPC bodies play with their speed. The Exchange: walks 0x60002A2 / 0x600029E
+  (~3.5 units/s), runs 0x6000262 / 0x6000288 (~10), stands 0x6000259 / 0x600025B; 0x600025C is a guard pointing an
+  arm (tried as an armed idle: wrong). 0xA91E0 / 0xA9350 replaced for the co-op players by a set of those (each the
+  first the level loads, 0x6B500); 0x18BB0 given max(|forward|, |side|) so strafing walks. The bodies now walk and
+  run, but unarmed: the arms hang (the user: use the multiplayer poses). Those are only in the multiplayer levels'
+  files (coop_notes2.md): loading them into a story level needs the level format decoded.
+- Player 2's death: its state is the word +0xD0 (+0xD2 the move): Dead() read a dword and never matched, so no
+  respawn ran. Fixed (not yet seen respawning). NF_COOP_KILL2=<s> sets player 2's health to 0, a status line every
+  600 frames (states, distance apart, zone).
+- Friendly fire: player 2's shots at player 1 logged no hit (0x3D900 not reached, or the shots missed: the
+  crosshair was over player 1's head). Not settled.
+- 0x12220 (the upper body aimed, as a match's spawn) tried: that run dropped to 7-8 fps (a vision gadget was also on).
+  Removed until seen alone.
+
+
 ### 2026-11-07 - Story co-op: HUD per view, guns per view, cutscenes, player 2's death and leash (src/game/coop.cpp)
 
 - From .local/coop_notes.md: the radar ring (story HUD element 1, laid out for one full screen) scaled into each
