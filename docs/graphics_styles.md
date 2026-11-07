@@ -191,8 +191,8 @@ shows what is past white there.
 ## Motion blur
 
 Effects > Motion Blur (`motion_blur`, `motion_blur_strength` 0 to 2 in graphics.toml; Vulkan, every style but Retro).
-Each pixel's place in the world (from the depth) is put through the last frame's camera: a quarter of the way it moved
-on screen, at most 0.8% of the picture's height, is blurred along (8 samples). The gun, hands and HUD stay sharp and are
+Each pixel's place in the world (from the depth) is put through the last frame's camera: 40% of the way it moved
+on screen, at most 1.4% of the picture's height, is blurred along (10 samples). The gun, hands and HUD stay sharp and are
 not smeared into the world; a jump too large to be motion (a cut) is left sharp.
 
 ## Depth of field

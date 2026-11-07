@@ -31,6 +31,12 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Motion blur stronger
+
+- Motion blur: 40% of the frame's motion (was 25%), capped at 1.4% of the height (was 0.8%), 10 samples. The Amount
+  slider (0 to 2) still scales both. Checked (.local/vk/mb_test.sh): clear blur on a turn, sharp still, gun sharp.
+
+
 ### 2026-11-07 - Enhanced's exposure and contrast keep white; steady glows light nothing
 
 - The style pass's grade multiplied by the exposure before its curve and stretched contrast through 0.5: with
