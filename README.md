@@ -14,10 +14,19 @@ packs, LAN multiplayer and more PC controls, all chosen in the game's own menus.
 Noir. Same build; only the Graphics menu changed.*
 
 <table>
-<tr><th>Original (no visual changes)</th><th>Remastered (Enhanced style, ray traced lighting and effects)</th></tr>
-<tr><td><img src="docs/images/exchange_original.jpg" alt="Original"></td>
-<td><img src="docs/images/exchange_remastered.jpg" alt="Remastered"></td></tr>
+<tr><th>Original (no visual changes)</th><th>Remastered (Enhanced style, ray traced lighting, HDR tone mapping)</th></tr>
+<tr><td><img src="docs/images/exchange_original.jpg" alt="The Exchange, Original"></td>
+<td><img src="docs/images/exchange_remastered.jpg" alt="The Exchange, Remastered"></td></tr>
+<tr><td><img src="docs/images/garage_original.jpg" alt="Indoor garage, Original"></td>
+<td><img src="docs/images/garage_remastered.jpg" alt="Indoor garage, Remastered"></td></tr>
 </table>
+
+*Outdoors (The Exchange, at night in falling snow) and indoors (a garage level), from where each mission starts.*
+
+![Split-screen story co-op in The Exchange](docs/images/coop_split.jpg)
+
+*Story co-op in split screen: player 2 (on the second controller) in player 1's view, with the multiplayer's
+animations and a gun in hand.*
 
 > [!NOTE]
 > Like the original project, this fork contains **no game files**, and no textures made from them. You build and play
@@ -69,6 +78,8 @@ Noir. Same build; only the Graphics menu changed.*
 - **LAN play** over the network (Netplay in the main menu): host or join games found on your network, with a lobby,
   names and teams. The host's AI bots play in network games, players can join mid-match, and a bot takes a leaver's place.
 - "Keyboard alone": in split screen the keyboard and mouse play as a player of their own.
+- **Story co-op:** play the missions with a second player, split screen or over the network (Co-op in Select
+  Difficulty): friendly fire on or off, keep together, player 2 respawns, and the usual saves and unlocks.
 
 **Menus**
 - **Graphics**, **Effects**, **Style Options**, **More Settings**, **Netplay** and **Key Bindings** pages, drawn in

@@ -31,6 +31,13 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - README pictures
+
+- New README screenshots (1600x900 jpg, HUD hidden, fps counter covered): The Exchange and the indoor garage level
+  (07000027), each Original and Remastered (the Enhanced look with ray tracing, GI, volumetric and ACES with auto
+  exposure), and split-screen story co-op in The Exchange. Story co-op added to the README's feature list.
+- Taken with `.local/vk/readme_shots.sh <level> <tag>` and `readme_coop.sh` (settings in `.local/vk/remaster.toml`).
+
 ### 2026-11-07 - Bug sweep
 
 - Single player (The Exchange, every effect): no error, failed shader or trap in the log. Split screen co-op: no errors,
