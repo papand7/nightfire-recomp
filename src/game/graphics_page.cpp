@@ -130,7 +130,7 @@ const std::vector<MenuRow> kMoreRows = {
     {kMenuColors, nf::kMenuChoice, "Menu Colours", "The menu backgrounds as the game has them, or blue as on the PC version. Text and Bond stay.", 9},
     {kAds, nf::kMenuChoice, "Aim Down Sights", "L (right mouse) raises the gun and zooms in, not the red crosshair. Blur: the background too.", 10},
     {kMotion, nf::kMenuChoice, "Weapon Sway", "A very light head bob and weapon sway as you move and turn.", 11},
-    {kCoop, nf::kMenuChoice, "Story Co-op", "A second player on controller 2 in the story missions, split screen. From the next mission.", 12},
+    {kCoop, nf::kMenuChoice, "Story Co-op", "A second player on controller 2 in the story missions, split screen; friendly fire: your shots hurt each other. From the next mission.", 12},
 };
 // Key Bindings (More Settings' row), two sets of rows: each an action on foot, its two keys shown; A waits for the
 // next key or mouse button (app::BeginKeyCapture), which becomes its first key and the old first its second; Escape
@@ -585,7 +585,8 @@ void EnterMore(X86Context& ctx, uint32_t player) {
     Choice(ctx, player, kMenuColors, {{"Original", 0}, {"PC Blue", 1}}, s.menu_colors ? 1 : 0);
     Choice(ctx, player, kAds, {{"Off", 0}, {"On", 1}}, nf::aim_down_sights ? 1 : 0);
     ShowOptions(ctx, player, kMotion, kOffOn, nf::view_motion ? 1.0f : 0.0f);
-    Choice(ctx, player, kCoop, {{"Off", 0}, {"Split Screen", 1}}, nf::coop ? 1 : 0);
+    Choice(ctx, player, kCoop, {{"Off", 0}, {"Split Screen", 1}, {"Split Screen + Friendly Fire", 2}},
+           !nf::coop ? 0 : nf::coop_friendly_fire ? 2 : 1);
 }
 void KeepMore(X86Context& ctx, uint32_t player) {
     uint32_t kb = ChoiceValue(ctx, player, kKeyboard), lang = ChoiceValue(ctx, player, kLanguage);
@@ -603,7 +604,7 @@ void KeepMore(X86Context& ctx, uint32_t player) {
     uint32_t ads = ChoiceValue(ctx, player, kAds);
     if (ads <= 1) nf::aim_down_sights = ads > 0;
     nf::view_motion = ReadOption(ctx, player, kMotion, kOffOn) > 0;
-    if (uint32_t co = ChoiceValue(ctx, player, kCoop); co <= 1) nf::coop = co == 1;
+    if (uint32_t co = ChoiceValue(ctx, player, kCoop); co <= 2) nf::coop = co >= 1, nf::coop_friendly_fire = co == 2;
     for (uint32_t l : app::kGame.languages)
         if (l == lang) s.language = l;
     app::Save();

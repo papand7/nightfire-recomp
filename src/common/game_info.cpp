@@ -22,6 +22,7 @@ bool aim_down_sights = true;
 bool view_motion = true;
 bool foot_ik = true;
 bool coop = false;
+bool coop_friendly_fire = false;
 uint32_t fov_percent = 100;
 uint32_t draw_distance = 100;
 extern bool modern_buttons;  // src/common/buttons.cpp
@@ -222,6 +223,8 @@ const app::GameInfo app::kGame = {
                  "A very light bob as you walk and the gun lagging a little behind the view's turn (the original has none)."},
                 {"coop", &nf::coop, nullptr, "Story co-op (split screen)",
                  "A second player in the story missions on the same screen, on controller 2. From the next mission."},
+                {"coop_friendly_fire", &nf::coop_friendly_fire, nullptr, "Co-op friendly fire",
+                 "In story co-op the players' shots hurt each other."},
                 {"foot_ik", &nf::foot_ik, nullptr, "Feet on the ground",
                  "Characters' legs bend so each foot stands on the ground under it, on slopes and steps (the original's float or sink)."},
                 {"aim_down_sights", &nf::aim_down_sights, nullptr, "Aim down sights",

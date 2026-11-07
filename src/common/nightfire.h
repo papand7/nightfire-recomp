@@ -19,6 +19,7 @@ extern bool skip_paris;  // a new game's START goes to the menus, not into Paris
 extern bool hide_hud;  // no HUD, for screenshots (src/game/hud.cpp, src/driving/hud.cpp)
 extern bool foot_ik;
 extern bool coop;            // story co-op: a second player on controller 2, split screen (src/game/coop_test.cpp)
+extern bool coop_friendly_fire;  // story co-op: the players' shots hurt each other (src/game/hit_feedback.cpp)
 int CoopSplit();             // 0 one view, 1 two one above the other, 2 side by side (in a level now)         // the characters' feet on the ground on slopes and steps (src/game/foot_ik.cpp)
 extern bool view_motion;     // subtle weapon sway and head bob (src/game/sway.cpp)
 void GunSway(int player, uint32_t gun, float keep);

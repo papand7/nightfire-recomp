@@ -31,6 +31,14 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Story co-op: friendly fire toggle
+
+- nf::coop_friendly_fire (settings: coop_friendly_fire; More Settings > Story Co-op: Off / Split Screen / Split
+  Screen + Friendly Fire). Off: in 0x3D900 (every shot's damage) a hit whose shooter is one co-op player's and whose
+  victim is the other's does nothing. On: the game's own (whether it hurts an ally player is not yet seen). Not yet
+  tested with a shot between the players.
+
+
 ### 2026-11-07 - Story co-op: a setting, the views' shape, one-camera effects off when split
 
 - nf::coop (settings: coop; More Settings > Story Co-op: Off / Split Screen): story co-op as NF_COOP_TEST=3, from the

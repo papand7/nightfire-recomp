@@ -72,6 +72,15 @@ X86_FUNC(sub_0003D900) {
         ctx.esp += 4;
         return;
     }
+    // story co-op without friendly fire: one player's shot at the other does nothing
+    if (nf::CoopSplit() && !nf::coop_friendly_fire && hit) {
+        uint32_t p = R32(hit + 0x4C), o = p ? R32(p + 0xBC) : 0;
+        int shooter = PlayerOf(o ? R32(o + 0x24) : 0), victim = PlayerOf(who ? R32(who) : 0);
+        if (shooter >= 0 && victim >= 0 && shooter != victim) {
+            ctx.esp += 4;
+            return;
+        }
+    }
     uint32_t data = who ? R32(who + 4) : 0;
     float before = data ? F32(data + 0x90) : 0;
     __imp__sub_0003D900(ctx, base);
