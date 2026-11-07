@@ -44,6 +44,8 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
   join_ip, now editable in the settings window's General) and relaunches (kernel::Relaunch); back to Off or Split
   Screen relaunches without it. Checked: Network: Host restarts as "hosting on UDP port 27015, waiting for 2 players".
 - Both PCs need the same saved data and settings for the menus to match (netplay.h).
+- Movement checked (the pointer parked on both copies first: one over a row pulls the menu's focus): each copy's
+  stick moved its player, 1.2 to 7.4 units apart, the same on both copies, no desync.
 
 
 ### 2026-11-07 - Story co-op: the multiplayer's player animations in story levels (src/game/mp_anims.cpp)
