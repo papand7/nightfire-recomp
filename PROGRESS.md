@@ -98,6 +98,29 @@ is written but not compiled yet. The Windows build stays green after each step.
   - The PC Settings resolution list comes from `app::DisplayModes()` on Linux.
   - LAN play's UDP sockets are now built everywhere through the Winsock shim, which moved from `sdk/harness/compat` to
     `sdk/runtime/compat`. The player and computer names come from `gethostname` and `$USER`.
+- Images: the WIC code for the splash and texture packs now sits behind `app::DecodeImage` / `app::EncodePng` in
+  `app/image.cpp`. On Linux these are stubs that return false for now (no splash, packs or dumps), with a TODO for
+  stb_image. Windows check: a texture pack's 187 PNGs loaded and a shot PNG was written. That run had no splash file,
+  so the splash path wasn't exercised.
+- Phase 2 needs to:
+  - add a Linux branch to `XbeRecomp.cmake`:
+    - `runtime/compat` on the include path
+    - `-DXBE_HEADLESS` must not be defined there
+    - SDL3 includes for the app and audio files
+    - imgui's `imgui_impl_sdl3.cpp`; 1.91.0's backend may need a newer imgui to build with SDL 3.4
+    - leave out `wheel.cpp`, `d3d12/11`, `xaudio2.cpp`, `main.cpp`
+    - stb_image
+    - DXC's `libdxcompiler.so`
+  - make the Vulkan renderer's Win32 code portable:
+    - surface through `app::CreateVulkanSurface`
+    - the loader from `VulkanGetInstanceProcAddr` or a dlopen of `libvulkan.so.1`
+    - `GetClientRect` replaced by `WindowPixels`
+    - HDR query and `MonitorFromWindow`
+    - `ImGui_ImplSDL3_NewFrame`
+  - split `d3d_common.h`.
+  - port `game_files.cpp`, `system_info.cpp` and `overlay.cpp`: message boxes, environment and display modes.
+  - port `netplay.cpp` and `xnet.cpp`: their `HWND` uses still need checking.
+  - add a launcher.
 
 ### 2026-11-07 - Water: Phoenix Base's pit found, modern water shader, on by default
 
