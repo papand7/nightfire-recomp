@@ -1,12 +1,12 @@
-# 007: NightFire - XBE Recomp: Remastered (fork)
+# 007: NightFire Remastered (PC)
 
-A fork of [hk21x/nightfire-recomp](https://github.com/hk21x/nightfire-recomp), the native PC port of the original Xbox
-007: NightFire, built on its runtime fork [hk21x/XboxXBERecomp](https://github.com/hk21x/XboxXBERecomp) (from
-[TGP482/XboxXBE-Recomp](https://github.com/TGP482/XboxXBE-Recomp)). All credit for the port itself, the recompiler and
-the reverse engineering it stands on goes to those projects: see the
-[original README](https://github.com/hk21x/nightfire-recomp#readme) for the port, its supported game versions,
-controls and troubleshooting. This fork adds a Vulkan renderer with ray tracing, remaster-style graphics, HD texture
-packs, LAN multiplayer and more PC controls, all chosen in the game's own menus.
+A native PC version of the original Xbox 007: NightFire with a Vulkan renderer and ray tracing, remastered graphics,
+HD texture packs, LAN multiplayer, story co-op, modern menus and full PC controls, all set in the game's own menus.
+The game's own x86 code is statically recompiled into Windows programs; it is not an emulator.
+
+Built on [hk21x/nightfire-recomp](https://github.com/hk21x/nightfire-recomp) by Harry, the port this project started
+from, and the [Xbox XBE Recomp](https://github.com/TGP482/XboxXBE-Recomp) recompiler by TGP482 (see
+[Credits](#credits)).
 
 ![The Exchange: Original, Enhanced with ray tracing, Toon and Noir](docs/images/exchange_looks.webp)
 
@@ -31,10 +31,23 @@ Noir. Same build; only the Graphics menu changed.*
 animations and a gun in hand.*
 
 > [!NOTE]
-> Like the original project, this fork contains **no game files**, and no textures made from them. You build and play
+> This project contains **no game files**, and no textures made from them. You build and play
 > it from your own legally acquired copy of the game. The screenshots above are of the author's own copy.
 
-## What's new in this fork
+## Features
+
+**The port**
+- **Native PC port:** the game's own x86 code statically recompiled into Windows programs; the Xbox's graphics, sound
+  and system libraries reimplemented (Vulkan, Direct3D 12, XAudio2, SDL).
+- **Both releases:** the European (PAL) and North American (NTSC) discs, on foot and the driving missions (a second
+  program the game switches to and back on its own), each with its own movies; saves on an emulated hard disk.
+
+**Display**
+- Fullscreen, borderless or windowed at any resolution the monitor offers; the game's 16:9 mode.
+- **Ultrawide:** the 3D view widened to fill a 21:9 or wider screen, on foot and driving; the HUD and menus keep their
+  16:9 shape in the centre.
+- **Field of view** 50 to 150% (on foot, driving and in the engine's cutscenes; the scope zooms in proportion).
+- Vsync, a frame rate cap and an FPS counter.
 
 **Renderer and graphics**
 - **Vulkan renderer**, always (Direct3D 12 only where Vulkan cannot start); no Renderer choice.
@@ -68,8 +81,18 @@ animations and a gun in hand.*
 - **Blood** (optional, every style): a spray where your shots hit, and blood at the edges of your view when you are hit.
 - **Quality presets** (Low to Ultra), anisotropic filtering, SMAA / FXAA / MSAA, sharpening, and render scale from 50% to 200%.
 - **HDR output** (Vulkan, Windows' HDR on): HDR10 with the screen's own peak brightness; lamps, the sun and bright skies glow past SDR white while the HUD and menus stay at Windows' SDR brightness.
+- **Clean fonts:** the game's text redrawn at eight times the console's resolution from Sour Gummy Black, smooth at any
+  resolution; sharp text and HUD pictures at high resolutions.
+- **Modern button pictures** for today's Xbox pad (LB and RB for White and Black, Menu and View for Start and Back).
+- A **shader cache**: each shader compiled once, so later sessions do not stutter.
 
 **Gameplay and controls**
+- **Mouse aiming:** the mouse turns the view and aim directly, like a PC shooter (no stick curve, no auto-aim); the
+  driving missions' mounted guns aim with it too. Sensitivity and invert options.
+- **Keyboard prompts:** while you play on the keyboard and mouse, the game's button pictures show your keys; they
+  switch back when you pick up a controller.
+- Full **keyboard and mouse layouts** on foot and in the driving missions, every key rebindable; Xbox, PlayStation and
+  Switch **controllers** with hot plugging and rumble.
 - **Aim down sights:** right mouse raises the gun and zooms in instead of the red crosshair. Each weapon's sights are
   aligned, and an optional focus blur softens the background.
 - **Sprint** (Shift, or a controller's left stick click; the original has none) and **hold-to-crouch** on the keyboard.
@@ -85,20 +108,24 @@ animations and a gun in hand.*
 - **Story co-op:** play the missions with a second player, split screen or over the network (Co-op in Select
   Difficulty): friendly fire on or off, keep together, player 2 respawns, and the usual saves and unlocks.
 
-**Menus**
+**Menus and more**
 - **Modern menus** (optional, in the launcher): every menu page redrawn in the blues of the PS2 cover over the
   game's own background movie, made for the mouse (hover, click, wheel); the title screen turns blue too.
 - **Graphics**, **Effects**, **Style Options**, **More Settings**, **Netplay** and **Key Bindings** pages, drawn in
   the game's own menu style, under Settings in the main menu and the pause screen.
 - **Start in Menus:** START at the title opens the menus instead of the Paris mission.
 - Blue PC-style menu backgrounds (optional); the game's own font, redrawn sharp at high resolutions.
+- **Settings window** (F1) with every option, saved at once to `settings.toml`.
+- **Achievements:** 19 (every mission, medals, 00 Agent, Bond Moves) with pop-ups (see [ACHIEVEMENTS.md](ACHIEVEMENTS.md)).
+- **Hide HUD** for screenshots, **Quit Game** in the main menu, **Skip Intro Movies**, a boot splash, logs and frame
+  captures.
 
-## The launcher (new in this fork)
+## The launcher
 
 ![NightFire PC Launcher](docs/images/launcher.png)
 
-**NightFire PC Launcher** (`launcher/electron`) is a new launcher drawn in Electron, alongside the original's
-plain one. It runs the same builder underneath (the runtime's `NightFireLauncherService.exe`), so nothing is
+**NightFire PC Launcher** (`launcher/electron`) is drawn in Electron. It runs the builder from the original port
+underneath (the runtime's `NightFireLauncherService.exe`), so nothing is
 installed in Windows and no admin rights are needed:
 - **Mission:** choose your disc image (`.iso`), accept the build tools' licence terms, then **Install** builds the
   game on your PC from your disc (portable Clang, CMake, Ninja and Git, about 1.4 GB the first time); **Play**,
@@ -111,35 +138,13 @@ installed in Windows and no admin rights are needed:
   first time).
 - **Log:** the build's and the launcher's logs.
 
-The launcher builds the repository named in `launcher/game.json` (this fork). While the repository is private, the
+The launcher builds the repository named in `launcher/game.json` (this one). While the repository is private, the
 launcher cannot download it: make it public, or build from source as below.
 
 To build the launcher: `launcher\electron\build_service.bat` (the builder service), then in `launcher\electron`
 `npm install` and `npm start` to run it, or `npm run dist -- -c.directories.output=C:\Temp\nf-launcher` for the
 portable `NightFireLauncher.exe` (an output folder outside the repository: electron-builder fails on one under `out\`
 while its files are in use).
-
-## From the original project (not changes of this fork)
-
-These come from [hk21x/nightfire-recomp](https://github.com/hk21x/nightfire-recomp) and its runtime, and are kept
-here as they are; credit is theirs.
-
-- **Native PC port:** the game's own x86 code statically recompiled into Windows programs (not an emulator); the
-  Xbox's graphics, sound and system libraries reimplemented on Direct3D 12 or 11, XAudio2 and SDL.
-- **Both releases:** the European (PAL) and North American (NTSC) discs, the on-foot game and the driving missions
-  (a second program the game switches to and back), saves on an emulated hard disk.
-- **Display:** fullscreen, borderless or windowed at any resolution; the game's 16:9 mode; **ultrawide** (the 3D
-  view widened, the HUD and menus kept 16:9); **field of view** 50-150%; vsync, a frame rate cap and an FPS counter.
-- **Graphics:** render scale, anisotropic filtering, MSAA, FXAA and sharpening on Direct3D; sharp text and HUD
-  pictures at high resolutions; a shader cache.
-- **Keyboard and mouse:** direct mouse aiming (no stick curve, no auto-aim), the mounted guns aimed with the mouse,
-  the game's prompts showing the bound keys, every key rebindable in the settings window (F1).
-- **Modern button pictures** for today's Xbox pad.
-- **Settings** in the game's own menus (main menu and pause screen: field of view, mouse, skip intro, sharp text,
-  aspect) and the **settings window** (F1).
-- **Achievements:** 19, with pop-ups (see [ACHIEVEMENTS.md](ACHIEVEMENTS.md)).
-- **Hide HUD**, **Quit Game**, **Skip Intro Movies**, a boot splash, logs and frame captures.
-- **The builder** behind both launchers: the build tools fetched portably, the game built from your disc, Play and Update (the original's own `NightFireLauncher.exe` builds the original project).
 
 ## Building
 
@@ -158,9 +163,17 @@ Vulkan 1.3; for ray tracing, one with ray queries (RTX-class).
 3. Run `build.bat`. The first build recompiles both programs and takes a while; later builds are quicker.
 4. Run `out\build\release\Nightfire.exe`.
 
-Or use [the launcher](#the-launcher-new-in-this-fork), which does all of this for you.
+Or use [the launcher](#the-launcher), which does all of this for you.
+
+## Credits
+
+- **The original port,** [hk21x/nightfire-recomp](https://github.com/hk21x/nightfire-recomp) by Harry: the recompiled
+  game, its first PC features (mouse aiming, keyboard prompts, clean fonts, ultrawide, field of view, PC settings,
+  achievements) and the builder behind the launcher.
+- **The recompiler and runtime,** [TGP482/XboxXBE-Recomp](https://github.com/TGP482/XboxXBE-Recomp) by TGP482, through
+  Harry's runtime fork [hk21x/XboxXBERecomp](https://github.com/hk21x/XboxXBERecomp).
 
 ## License
 
-MIT, as the original: see [LICENSE](LICENSE). 007: NightFire is the property of its owners; this project contains
-none of the game's code or assets.
+MIT, as the projects it is built on: see [LICENSE](LICENSE). 007: NightFire is the property of its owners; this
+project contains none of the game's code or assets.
