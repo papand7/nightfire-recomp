@@ -234,7 +234,8 @@ void CoopFrame(X86Context& ctx) {
     }();
     static uint32_t level_frames = 0, level_seen = 0;
     if (R32(0x1F658C) != level_seen) level_seen = R32(0x1F658C), level_frames = 0;
-    if (kill_at && ++level_frames == uint32_t(kill_at) && Plausible(second) && Plausible(R32(second + kActor)))
+    ++level_frames;
+    if (kill_at && level_frames == uint32_t(kill_at) && Plausible(second) && Plausible(R32(second + kActor)))
         SetF(R32(second + kActor) + 0x824, 0), LOGR("nightfire: co-op test: player 2's health set to 0");
     static uint32_t calls = 0;
     if (++calls % 600 == 0)

@@ -31,6 +31,14 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Co-op mission end: not yet seen
+
+- [0x1DF19B] = 1 (0x9C227 sets it with messages 0x2000059/5A; 0x9C31F then sets the mission state [0x17E540] 2)
+  ends the mission as failed ("Mission Failed: Replay / Quit", drawn over player 1's view): not the success flag.
+  The success state of 0x9C2BC's machine is not yet known; a co-op mission's save and unlocks not yet seen.
+- coop.cpp's level frame count counted only with NF_COOP_KILL2 set: now always.
+
+
 ### 2026-11-07 - Co-op friendly fire works (players' hit lists)
 
 - .local/ff_notes.md: 0x3D900 damages NPCs and bots only; a player is damaged from its own hit list ([obj+0xAC],
