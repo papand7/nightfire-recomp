@@ -36,8 +36,7 @@ wheel support. Everything is set from the game's own menus.
   stones and mortar that stand out.
 - **Graphics styles:** Original, Enhanced, Toon, Retro and Noir, switched live from the menu.
 - **Explosions and gunfire:** sparks that bounce, flying debris, dust, rising smoke and fireballs.
-- **Water** (experimental, off by default): ripples, reflections, depth tint and edge foam. Real-water visual checks
-  are still pending.
+- **Water:** waves, reflections of the lights, see-through water that darkens with depth, and foam at the edges.
 - **Snow:** falling snow, blizzards and footprints that fill in again; snow that sparkles.
 - **More detailed ground and walls:** real lumps and hollows in grass, snow, rock and concrete.
 - **HDR lighting:** bright snow and lamps glow instead of turning flat white; HDR on HDR screens.
