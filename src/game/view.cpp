@@ -34,11 +34,14 @@ void SetF(uint32_t va, float f) { std::memcpy(&kernel::G<uint32_t>(va), &f, 4); 
 
 float Scaled(float fov) { return std::min(fov * nf::FovScale(), 2.9f); }  // short of 180 degrees
 
-// the camera at [esp+4] widened and its angle scaled while call runs
+// the camera at [esp+4] widened and its angle scaled while call runs; story co-op's split views at their own shape
+// (the game halves or doubles the aspect for a split only with the multiplayer flag: 0x25190)
 template <class Fn>
 void Widened(uint32_t cam, Fn call) {
     float k = R32(kWidescreen) ? nf::Ultrawide() : 1.0f, s = nf::FovScale();
-    if (!cam || (k <= 1.0f + 1e-3f && s == 1.0f)) return call();
+    if (int split = nf::CoopSplit(); split && cam && (cam == R32(kCameras) || cam == R32(kCameras + 4)))
+        k *= split == 1 ? 2.0f : 0.5f;
+    if (!cam || (std::abs(k - 1.0f) <= 1e-3f && s == 1.0f)) return call();
     float aspect = GetF(cam + kAspect), fov = GetF(cam + kFov);
     SetF(cam + kAspect, aspect * k);
     SetF(cam + kFov, Scaled(fov));

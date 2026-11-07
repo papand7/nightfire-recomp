@@ -31,6 +31,20 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Story co-op: a setting, the views' shape, one-camera effects off when split
+
+- nf::coop (settings: coop; More Settings > Story Co-op: Off / Split Screen): story co-op as NF_COOP_TEST=3, from the
+  next mission. nf::CoopSplit() the split now (0 none, 1 one above the other, 2 side by side): set when the cameras
+  are split, cleared at each level's start and back at the front end.
+- The views' shape: 0x25190 halves or doubles a split view's aspect only with the multiplayer flag; view.cpp's
+  Widened now doubles (one above the other) or halves it for cameras 0 and 1 while the projection and culling planes
+  are built. Checked: The Exchange's two views no longer squashed.
+- gpu::SetViewCount: with two views the passes that take one full screen camera are left out (ray tracing, snow,
+  motion blur, contact shadows, depth of field, GTAO, effect lights, screen-space reflections, smooth turning).
+- Next (RE under way, .local/coop_notes.md): the radar in each view (the ammo is drawn in both), the other player's
+  gun drawn in the lower view, cutscenes full screen, player 2's death, triggers, the mission's end.
+
+
 ### 2026-11-07 - Merged to main; v1.2.0
 
 - On the user's word (no Linux smoke test on this PC; The Exchange and Paris checked on Windows): the SDK's main

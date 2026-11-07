@@ -17,7 +17,9 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "common/nightfire.h"
 #include "core/log.h"
+#include "gpu/style.h"
 #include "kernel/kernel.h"
 #include "kernel/memory.h"
 #include "xdk/hle.h"
@@ -25,18 +27,27 @@
 namespace {
 constexpr uint32_t kMulti = 0x260018, kHumans = 0x260044, kMode = 0x26002C /* the characters: humans and bots */, kNextLevel = 0x1F6588;
 
+// the setting (nf::coop: story co-op, =3) or the test switch
 int CoopTest() {
     static const int n = [] {
         const char* e = std::getenv("NF_COOP_TEST");
         return e && *e ? std::atoi(e) : 0;
     }();
-    return n;
+    return n ? n : nf::coop ? 3 : 0;
+}
+int g_split = 0;  // the screen split now (nf::CoopSplit)
+void Views(int split) {
+    g_split = split;
+    gpu::SetViewCount(split ? 2 : 1);
 }
 }  // namespace
+
+int nf::CoopSplit() { return g_split; }
 
 X86_EXTERN_FUNC(__imp__sub_000BDDF0);
 X86_FUNC(sub_000BDDF0) {  // a level started (the level, 0, 0): its players made from [0x260044] at its load
     uint32_t level = kernel::R32(ctx.esp + 4);
+    Views(0);  // one view until the level's cameras are split again
     __imp__sub_000BDDF0(ctx, base);
     if (!CoopTest()) return;
     LOGR("nightfire: coop test: level %08X starting, %u humans, mode %u", level, kernel::R32(kHumans), kernel::R32(kMode));
@@ -60,6 +71,7 @@ X86_FUNC(sub_0006CF50) {  // the players' pads read, each frame (menus too): the
         kernel::W32(kNextLevel, forced);
         next = forced;
     }
+    if (next == 0x7000048 && g_split) Views(0);  // back to the front end: one view
     if (CoopTest() && next && next != 0x7000048 && kernel::R32(kHumans) != 2) {  // a mission chosen
         LOGR("nightfire: coop test: %u humans made 2 (level %08X, next %08X)", kernel::R32(kHumans), kernel::R32(0x1F658C), next);
         kernel::W32(kHumans, 2);
@@ -84,6 +96,7 @@ void SplitScreen(X86Context& ctx) {
     uint32_t w = side ? kHalfW : kFullW, h = side ? kFullH : kHalfH;
     kernel::CallGuest(ctx, 0x25B80, {0, 0, 0, w, h});
     kernel::CallGuest(ctx, 0x25B80, {1, side ? kHalfW : 0, side ? 0 : kHalfH, w, h});
+    Views(side ? 2 : 1);
 }
 }  // namespace
 
