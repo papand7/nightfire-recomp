@@ -31,6 +31,16 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Co-op friendly fire works (players' hit lists)
+
+- .local/ff_notes.md: 0x3D900 damages NPCs and bots only; a player is damaged from its own hit list ([obj+0xAC],
+  read after the collisions 0xAB450, applied by 0xADD00 / 0xAC0A0). nf::CoopHits (after 0xAB450): a node from the
+  other co-op player's round (+0x4C the projectile, its +0xBC +0x24 the shooter) keeps its damage (+8) with friendly
+  fire on, is zeroed without.
+- Checked (.local/vk/ff_test.sh): player 2's three rounds hit player 1 for 3.5 each; with friendly fire off the same
+  hits "taken away". (The earlier "no hit" was the log watching 0x3D900.)
+
+
 ### 2026-11-07 - Menu pointer: no walking through a menu by itself
 
 - A row under the pointer the focus could not reach (the menu's order unlike the rows' places) was pursued for up to

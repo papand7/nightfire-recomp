@@ -1889,6 +1889,7 @@ X86_EXTERN_FUNC(__imp__sub_000AB450);
 X86_FUNC(sub_000AB450) {
     uint32_t obj = R32(ctx.esp + 4);
     __imp__sub_000AB450(ctx, base);
+    nf::CoopHits(obj);  // story co-op: the other player's rounds (friendly fire)
     if (!g_on) return;
     // a round from a puppet (another copy's shot, replayed for its tracer) does nothing: its copy sends the hits
     for (uint32_t n = R32(obj + kHitList), guard = 0; n && guard < 64; n = R32(n + 4), guard++) {

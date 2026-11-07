@@ -188,6 +188,33 @@ void CoopHud(uint32_t actor, bool after) {
     if (g_full.size() > 4096) g_full.clear();
 }
 
+// a player's hit list after the player's collisions (0xAB450; lan_play.cpp's hook): nodes from [obj+0xAC], +4 the
+// next, +8 the damage, +0x4C what hit (a projectile: its +0xBC's +0x24 the shooter; .local/ff_notes.md). The other
+// co-op player's rounds have their damage taken away without friendly fire; the player's damage is then 0xADD00's
+void CoopHits(uint32_t obj) {
+    if (!On() || !Plausible(obj)) return;
+    const int victim = obj == Player(0) ? 0 : obj == Player(1) ? 1 : -1;
+    if (victim < 0) return;
+    static int told = 0;
+    if (told < 2) {  // why a round might never land: the collision filter's bit, the body's hit shapes
+        told++;
+        uint32_t inst = R32(obj + 0xB8);
+        LOGR("nightfire: co-op: player %d's body: flags +CC %08X +D6 %04X, model flags %02X", victim + 1,
+             R32(obj + 0xCC), kernel::G<uint16_t>(obj + 0xD6), Plausible(inst) ? kernel::G<uint8_t>(inst + 0xA8) : 0);
+    }
+    for (uint32_t n = R32(obj + 0xAC), guard = 0; Plausible(n) && guard < 64; n = R32(n + 4), guard++) {
+        uint32_t src = R32(n + 0x4C), data = Plausible(src) ? R32(src + 0xBC) : 0;
+        uint32_t shooter = Plausible(data) ? R32(data + 0x24) : 0;
+        int from = shooter == Player(0) ? 0 : shooter == Player(1) ? 1 : -1;
+        if (from < 0 || from == victim) continue;
+        static int said = 0;
+        if (said++ < 6)
+            LOGR("nightfire: co-op: player %d's round hits player %d (damage %.1f%s)", from + 1, victim + 1, F(n + 8),
+                 nf::coop_friendly_fire ? "" : ", taken away: no friendly fire");
+        if (!nf::coop_friendly_fire) SetF(n + 8, 0);
+    }
+}
+
 // each frame (coop_test.cpp's pad hook): the guns' views, player 2's respawn and leash
 void CoopFrame(X86Context& ctx) {
     if (!On()) {
