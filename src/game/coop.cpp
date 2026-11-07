@@ -285,10 +285,20 @@ void WalkSet(X86Context& ctx, uint32_t obj) {
 }
 }  // namespace
 
+// the multiplayer flag set for a call alone: the walk sets' choice reads it once (coop_notes2.md)
+template <typename F>
+void WithMulti(F&& call) {
+    uint32_t was = R32(kMulti);
+    W32(kMulti, 1);
+    call();
+    W32(kMulti, was);
+}
+
 X86_EXTERN_FUNC(__imp__sub_000A91E0);
 X86_FUNC(sub_000A91E0) {  // a player's standing walk set (obj)
     uint32_t obj = R32(ctx.esp + 4);
     if (BodyOn() && obj && (obj == Player(0) || obj == Player(1))) {
+        if (nf::CoopMpAnims()) return WithMulti([&] { __imp__sub_000A91E0(ctx, base); });  // the match's own sets
         WalkSet(ctx, obj);
         ctx.esp += 4;
         return;
@@ -296,14 +306,29 @@ X86_FUNC(sub_000A91E0) {  // a player's standing walk set (obj)
     __imp__sub_000A91E0(ctx, base);
 }
 X86_EXTERN_FUNC(__imp__sub_000A9350);
-X86_FUNC(sub_000A9350) {  // a player's crouching walk set (obj): the same (no crouch walk loaded in story levels)
+X86_FUNC(sub_000A9350) {  // a player's crouching walk set (obj): the guards' set without the match's animations
     uint32_t obj = R32(ctx.esp + 4);
     if (BodyOn() && obj && (obj == Player(0) || obj == Player(1))) {
+        if (nf::CoopMpAnims()) return WithMulti([&] { __imp__sub_000A9350(ctx, base); });
         WalkSet(ctx, obj);
         ctx.esp += 4;
         return;
     }
     __imp__sub_000A9350(ctx, base);
+}
+X86_EXTERN_FUNC(__imp__sub_000A94C0);
+X86_FUNC(sub_000A94C0) {  // a player's posture move (obj): the match's with its animations
+    uint32_t obj = R32(ctx.esp + 4);
+    if (BodyOn() && nf::CoopMpAnims() && obj && (obj == Player(0) || obj == Player(1)))
+        return WithMulti([&] { __imp__sub_000A94C0(ctx, base); });
+    __imp__sub_000A94C0(ctx, base);
+}
+X86_EXTERN_FUNC(__imp__sub_000A9590);
+X86_FUNC(sub_000A9590) {
+    uint32_t obj = R32(ctx.esp + 4);
+    if (BodyOn() && nf::CoopMpAnims() && obj && (obj == Player(0) || obj == Player(1)))
+        return WithMulti([&] { __imp__sub_000A9590(ctx, base); });
+    __imp__sub_000A9590(ctx, base);
 }
 X86_EXTERN_FUNC(__imp__sub_00018BB0);
 X86_FUNC(sub_00018BB0) {  // the walk driver (obj, node, |forward|, forward, .., side, ..)
@@ -325,10 +350,10 @@ void WeaponCheck(X86Context& ctx, uint32_t obj, int p) {
     if (said_level[p] == level) return;
     uint32_t inst = R32(obj + 0xB8);
     if (!Plausible(inst)) return;
-    said_level[p] = level;
     int w = kernel::G<int8_t>(inst + 0x52);
     uint32_t md = R32(inst + 0x74);
-    if (w < 0 || w >= 0x73 || !Plausible(md)) return;
+    if (w < 0 || w >= 0x47 || !Plausible(md)) return;  // 0x47: none yet (a weapon comes after the player is made)
+    said_level[p] = level;
     uint32_t W = 0x10C * uint32_t(w), attach = kernel::G<uint8_t>(0x18CFF0 + W), mesh = R32(0x18D020 + W);
     uint32_t n = kernel::G<uint8_t>(md + 0x2B), list = R32(md + 0x1C);
     bool found = false;

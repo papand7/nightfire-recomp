@@ -27,7 +27,9 @@ int CoopSplit();             // 0 one view, 1 two one above the other, 2 side by
 void CoopHud(uint32_t actor, bool after);  // a player's HUD in its own view (src/game/coop.cpp; around 0xB6190)
 void CoopFrame(X86Context& ctx);           // co-op's frame: the guns' views, player 2's respawn and leash
 void CoopNpc(uint32_t obj);  // an NPC's think (NF_COOP_ANIMS=1: the animations its body plays, logged)
-void CoopWeaponCheck(X86Context& ctx);  // once a level: whether each player's body can show its weapon (logged)
+void CoopWeaponCheck(X86Context& ctx);
+void InjectMpAnims(X86Context& ctx);  // a story level: the multiplayer's player animations put in (src/game/mp_anims.cpp)
+bool CoopMpAnims();                   // this level has them  // once a level: whether each player's body can show its weapon (logged)
 extern bool view_motion;     // subtle weapon sway and head bob (src/game/sway.cpp)
 void GunSway(int player, uint32_t gun, float keep);
 void WeaponKeys(X86Context& ctx, uint32_t obj);  // 1-9 pick a weapon (src/game/weapon_keys.cpp)

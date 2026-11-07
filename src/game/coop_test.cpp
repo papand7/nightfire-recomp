@@ -121,6 +121,11 @@ X86_FUNC(sub_00025D10) {  // the cameras made for a level: two, split, in a stor
 
 X86_EXTERN_FUNC(__imp__sub_000AE870);
 X86_FUNC(sub_000AE870) {  // a story level's player made at its start record
+    if (CoopTest() && kernel::R32(kNextLevel) != 0x7000048) {  // co-op: the multiplayer's animations first
+        uint32_t eax = ctx.eax;
+        nf::InjectMpAnims(ctx);
+        ctx.eax = eax;
+    }
     __imp__sub_000AE870(ctx, base);
     uint32_t first = kernel::R32(kPlayerObjects);
     if (CoopTest() != 3 || kernel::R32(kMulti) || !first || kernel::R32(kPlayerObjects + 4)) return;

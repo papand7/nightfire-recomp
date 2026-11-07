@@ -31,6 +31,20 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Story co-op: the multiplayer's player animations in story levels (src/game/mp_anims.cpp)
+
+- .local/anim_load_notes.md: level files are a table of sub-files (kind 4 motions, 5 animations) read whole into the
+  level heap; resources registered in the sorted table 0x1F6680 (0x6B420 insert, 0x6B540 ranges, 0x138E0 a motion's
+  in-place fixup). The 75 animations of the walk tables and posture moves and their 75 motions are only in the
+  multiplayer levels' files.
+- Each co-op story level, before player 1 is made (0xAE870), those 150 records (542,688 bytes, read once a session
+  from 07000023.bin through the game's archive: 0xE2D50 / 0xE3280 / 0xE2D90) are copied into a block outside the
+  game's heap and registered. Then 0xA91E0 / 0xA9350 / 0xA94C0 / 0xA9590 run with the multiplayer flag for the co-op
+  players: the match's own walk sets and posture moves. (Without them, the guards' set as before.)
+- Checked: "150 multiplayer animation records put in level 07000005 (found)"; player 2's view shows player 1 in the
+  match's aiming stance. The third person weapon itself not yet seen in the hand.
+
+
 ### 2026-11-07 - Co-op in single player's Select Difficulty
 
 - .local/sp_menu_notes.md: Select Difficulty is page 0x40000023, list 0x100000BF, handler 0x86410, table 0x17C760
