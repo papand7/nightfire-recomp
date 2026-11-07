@@ -31,6 +31,21 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Network co-op: story co-op over the SDK's lockstep netplay
+
+- The existing netplay (sdk core/netplay.h: every copy runs the whole game, only the controllers travel, a state
+  hash compared each minute) carries story co-op: the host's controller plays player 1, the joiner's player 2,
+  each copy shows the same split screen. (lan_play.cpp's puppets suit a match, not a story level: each copy would
+  run its own guards.)
+- Checked with two copies on this PC (.local/vk/netcoop_test.sh): the menus, then The Exchange in co-op on both
+  (150 animation records, two views), the copies agreeing at frames 0 and 3600, no desync. A walk on each pad was
+  not seen to move (the scripted stick, also flaky alone); not yet played across two PCs.
+- Co-op page: Off / Split Screen / Network: Host / Network: Join. Network sets XBE_NETPLAY (host, or the settings'
+  join_ip, now editable in the settings window's General) and relaunches (kernel::Relaunch); back to Off or Split
+  Screen relaunches without it. Checked: Network: Host restarts as "hosting on UDP port 27015, waiting for 2 players".
+- Both PCs need the same saved data and settings for the menus to match (netplay.h).
+
+
 ### 2026-11-07 - Story co-op: the multiplayer's player animations in story levels (src/game/mp_anims.cpp)
 
 - .local/anim_load_notes.md: level files are a table of sub-files (kind 4 motions, 5 animations) read whole into the

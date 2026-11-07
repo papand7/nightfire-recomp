@@ -19,6 +19,15 @@
 #include <vector>
 
 #include <cstring>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 
 #include "app/app.h"
 #include "common/nightfire.h"
@@ -26,6 +35,7 @@
 #include "core/log.h"
 #include "game/menu_page.h"
 #include "gpu/style.h"
+#include "core/netplay.h"
 #include "kernel/kernel.h"
 
 namespace nf {
@@ -182,7 +192,7 @@ const std::vector<MenuRow> kKeysRows = KeySetRows(false), kKeys2Rows = KeySetRow
 constexpr uint32_t kCoopMode = 0x1000FCC1, kCoopSplit = 0x1000FCC2, kCoopFF = 0x1000FCC3, kCoopNear = 0x1000FCC4,
                    kCoopRespawn = 0x1000FCC5, kCoopDone = 0x1000FCC6;
 const std::vector<MenuRow> kCoopRows = {
-    {kCoopMode, nf::kMenuChoice, "Co-op", "Off, Split Screen (player 2 on controller 2), or Network. From the next mission.", 0},
+    {kCoopMode, nf::kMenuChoice, "Co-op", "Split Screen: player 2 on controller 2. Network: the game restarts linked to another PC (Host, or Join the address in the settings window).", 0},
     {kCoopSplit, nf::kMenuChoice, "Screen Split", "The two views one above the other, or side by side.", 1},
     {kCoopFF, nf::kMenuChoice, "Friendly Fire", "Your shots hurt each other.", 2},
     {kCoopNear, nf::kMenuChoice, "Keep Together", "Player 2 is brought back beside player 1 when far away or lost.", 3},
@@ -600,7 +610,8 @@ void EnterMore(X86Context& ctx, uint32_t player) {
 }
 // Co-op
 void EnterCoop(X86Context& ctx, uint32_t player) {
-    Choice(ctx, player, kCoopMode, {{"Off", 0}, {"Split Screen", 1}, {"Network (not ready)", 2}}, nf::coop ? 1 : 0);
+    const uint32_t mode = netplay::Active() ? (netplay::Me() == 0 ? 2u : 3u) : nf::coop ? 1u : 0u;
+    Choice(ctx, player, kCoopMode, {{"Off", 0}, {"Split Screen", 1}, {"Network: Host", 2}, {"Network: Join", 3}}, mode);
     Choice(ctx, player, kCoopSplit, {{"One Above the Other", 0}, {"Side by Side", 1}}, nf::coop_side ? 1 : 0);
     ShowOptions(ctx, player, kCoopFF, kOffOn, nf::coop_friendly_fire ? 1.0f : 0.0f);
     ShowOptions(ctx, player, kCoopNear, kOffOn, nf::coop_leash ? 1.0f : 0.0f);
@@ -609,15 +620,28 @@ void EnterCoop(X86Context& ctx, uint32_t player) {
 }
 void KeepCoop(X86Context& ctx, uint32_t player) {
     uint32_t mode = ChoiceValue(ctx, player, kCoopMode), split = ChoiceValue(ctx, player, kCoopSplit);
-    if (mode <= 2) nf::coop = mode == 1;  // Network: not ready, kept off
+    if (mode <= 3) nf::coop = mode >= 1;  // network co-op: split screen co-op over the SDK's lockstep netplay
     if (split <= 1) nf::coop_side = split == 1;
     nf::coop_friendly_fire = ReadOption(ctx, player, kCoopFF, kOffOn) > 0;
     nf::coop_leash = ReadOption(ctx, player, kCoopNear, kOffOn) > 0;
     nf::coop_respawn = ReadOption(ctx, player, kCoopRespawn, kOffOn) > 0;
     std::lock_guard<std::recursive_mutex> lock(app::UiLock());
     app::Save();
-    LOGR("nightfire: Co-op kept: %s, %s, friendly fire %d, keep together %d, respawn %d", nf::coop ? "split screen" : "off",
+    LOGR("nightfire: Co-op kept: %s, %s, friendly fire %d, keep together %d, respawn %d",
+         mode == 2 ? "network host" : mode == 3 ? "network join" : nf::coop ? "split screen" : "off",
          nf::coop_side ? "side by side" : "one above the other", nf::coop_friendly_fire, nf::coop_leash, nf::coop_respawn);
+    // network: the game started again in lockstep (every copy runs the whole game, only the controllers travel:
+    // core/netplay.h), from the title, the host's controller playing player 1, the joiner's player 2; leaving it the same
+    const bool want = mode == 2 || mode == 3, now = netplay::Active();
+    if (mode > 3 || (!want && !now) || (want && now && (mode == 2) == (netplay::Me() == 0))) return;
+    std::string spec = mode == 2 ? "host" : mode == 3 ? app::Get().join_ip : "";
+    if (mode == 3 && spec.empty()) {
+        nf::MenuHelp(ctx, player, "Set the host's address in the settings window (F1, General) first.");
+        return;
+    }
+    SetEnvironmentVariableA("XBE_NETPLAY", spec.empty() ? nullptr : spec.c_str());
+    LOGR("nightfire: Co-op: restarting %s", spec.empty() ? "without network play" : ("for network play: " + spec).c_str());
+    kernel::Relaunch("Nightfire");
 }
 
 void KeepMore(X86Context& ctx, uint32_t player) {
@@ -1033,12 +1057,6 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
                 KeepMore(ctx, player);
                 OpenCoopPage(ctx, player);
                 return true;
-            }
-            if (id == kStylePage && g_style_rows == kCoopPage && on != Wid(kCoopDone)) {
-                if (on == Wid(kCoopMode) && ChoiceValue(ctx, player, kCoopMode) == 2) {
-                    MenuHelp(ctx, player, "Network co-op is not ready yet: the story missions are played on one PC for now.");
-                    return true;
-                }
             }
             if (id == kStylePage && g_style_rows == kMorePage && on == Wid(kKeys)) {
                 // Key Bindings: More Settings kept, then the keys' rows on the same page (back returns to Settings)
