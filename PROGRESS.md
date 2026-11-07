@@ -31,6 +31,16 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Menu pointer: no walking through a menu by itself
+
+- A row under the pointer the focus could not reach (the menu's order unlike the rows' places) was pursued for up to
+  32 d-pad presses: the menu moved by itself. Now a step that brings the focus no nearer gives the row up at once
+  (16 steps at most), and the pointer leads only after moving 8 game pixels from where it rested.
+- Checked (.local/vk/menukeys_test.sh): the pointer resting on Settings, the d-pad's down moved the focus and it stayed.
+- Friendly fire: player 2's shots at player 1's chest never reach 0x3D900 (logged): the story's shots skip players.
+  RE under way (.local/ff_notes.md).
+
+
 ### 2026-11-07 - Network play's wait shown; the menu pointer no longer steals the focus
 
 - Netplay (SDK): while the lobby waits (the title not yet started, the window black) a box says so ("waiting for

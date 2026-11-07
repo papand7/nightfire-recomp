@@ -152,7 +152,7 @@ void Pointer(input::Pad& p, uint32_t held, int64_t now, bool moved) {
     static bool hovering = false;  // the pointer leads the focus until the d-pad moves it
     static uint32_t target = 0, page_was = 0;
     static uint32_t given_up = 0;  // a row the d-pad did not reach: not tried again until the pointer leaves it
-    static int steps = 0;
+    static int steps = 0, last_gap = -1;  // the focus's distance to the target after the last step
     static bool click = false, click_value = false, click_left = false;
     if (now < 0) {
         was_held = 0, act = -1, target = 0, click = false, hovering = false;
@@ -187,7 +187,7 @@ void Pointer(input::Pad& p, uint32_t held, int64_t now, bool moved) {
     if (page != page_was) {
         // a new page: the pointer leads again only once it moves (one left over a row pulled the new page's focus
         // to it, against the keyboard and the d-pad)
-        target = 0, click = false, steps = 0, page_was = page, given_up = 0, hovering = false;
+        target = 0, click = false, steps = 0, page_was = page, given_up = 0, hovering = false, last_gap = -1;
         // each page's rows once in the log: what the pointer finds there
         static std::vector<uint32_t> told;
         if (page && std::find(told.begin(), told.end(), page) == told.end() && told.size() < 64) {
@@ -209,7 +209,7 @@ void Pointer(input::Pad& p, uint32_t held, int64_t now, bool moved) {
     // hand resting on the mouse)
     if (in && !hovering) {
         if (last_x < 0) last_x = gx, last_y = gy;
-        if (std::fabs(gx - last_x) > 4.0f || std::fabs(gy - last_y) > 4.0f) hovering = true;
+        if (std::fabs(gx - last_x) > 8.0f || std::fabs(gy - last_y) > 8.0f) hovering = true;
     }
     if (!in || hovering) last_x = -1;
     const Row* hit = nullptr;
@@ -225,12 +225,12 @@ void Pointer(input::Pad& p, uint32_t held, int64_t now, bool moved) {
             return;
         }
         if (hit) {
-            target = hit->id, steps = 0, click = true;
+            target = hit->id, steps = 0, click = true, last_gap = -1;
             click_value = hit->value && gx >= hit->vx0 - 24 && gx < hit->vx1 + 24;
             click_left = gx < (hit->vx0 + hit->vx1) / 2;
         }
     } else if (hovering && hit && hit->id != target && hit->id != given_up) {
-        target = hit->id, steps = 0;
+        target = hit->id, steps = 0, last_gap = -1;
     }
     if (!hit || hit->id != given_up) given_up = 0;
     if (now < rest_end || !target) return;
@@ -246,8 +246,13 @@ void Pointer(input::Pad& p, uint32_t held, int64_t now, bool moved) {
     }
     if (f != t) {
         // a press toward it: across when they share a line, else up or down; given up if it does not get there
-        auto give_up = [&] { given_up = target, target = 0, click = false; };
-        if (++steps > 32) return give_up();
+        auto give_up = [&] { given_up = target, target = 0, click = false, last_gap = -1; };
+        // a step that brought the focus no nearer: the row is not reached this way (the menu's order differs from
+        // the rows' places): given up at once, the menu not walked through by itself
+        const int gap = f < 0 ? 1000 : std::abs(t - f);
+        if (steps > 0 && last_gap >= 0 && gap >= last_gap) return give_up();
+        last_gap = gap;
+        if (++steps > 16) return give_up();
         if (f < 0) {  // nothing focused yet (a page waits for the d-pad's first press): one wakes it
             if (steps > 2) return give_up();  // still on no row (a panel): not the d-pad's to move further
             play(input::kDown);
@@ -259,6 +264,7 @@ void Pointer(input::Pad& p, uint32_t held, int64_t now, bool moved) {
         play(across ? (t > f ? input::kRight : input::kLeft) : (t > f ? input::kDown : input::kUp));
         return;
     }
+    last_gap = -1;
     if (click) {
         click = false;
         const Row& r = rows[size_t(t)];
