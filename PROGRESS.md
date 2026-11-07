@@ -31,6 +31,29 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Look fixes (grade, exposure), 4:3 movies, water detector; pale sunlit walls still open
+
+- Double Cross's orange (fixed): the grade's curves work per channel, so a strong colour got stronger and moved
+  toward yellow, and saturation 1.25 added more. Strongly coloured pixels now take most of the curves' change in
+  brightness alone, keeping their hue and saturation. Saturation over 1 now acts as vibrance: it lifts dull colours
+  and leaves strong ones nearly as they are. Checked: Double Cross is warm, not burnt orange; the Exchange's snow is
+  unchanged.
+- Auto exposure: bright scenes are taken down 2.8 times as firmly as dark ones are lifted, with a floor of 0.35.
+- Movies 4:3 (movie_43, on): a movie's draw (stage 0 YUY2) on a 4:3 frame stretched wide is squeezed back about the
+  middle (DrawConstants::hud[0] = -1 / stretch), with black at the sides. Checked on the attract movie.
+- Water: gpu::TextureWater (blue or green, not bright, even), behind XBE_WATER_DUMP=folder for now: logs and dumps
+  candidate textures, to find the levels' water before the shader.
+- README: Night Shift (07000009, the teal-green garage) added to the indoor comparison.
+- NOT FIXED after 3 attempts, stopped as CLAUDE.md asks: Chain Reaction's sunlit pale concrete goes flat white with
+  ray tracing on (with it off it keeps its texture). Settings off one at a time (`.local/vk/set_test.sh`): materials,
+  the texture pack, reflections, ground detail, bloom and the grade change nothing; ray tracing off fixes it.
+  Tried: (1) on a bright day the outdoor sun ratio scaled so full sun equals the baked light (k from the pixel's baked
+  brightness); (2) the auto exposure changes above; (3) relighting only the surface's share of a fogged colour
+  instead of dividing by the fog factor and clipping. None changed it. XBE_RT_TEST=5 (the ratio halved) still shows
+  sunlit walls near white, a ratio of about 2, while the deck in shade is about 1. So the sun reaches the ratio
+  another way: likely through `added` (lamps() may include the sun or effect lights) or the open() test failing on
+  walls, which takes the indoor branch. Next: show `added / baked` and the open() result in their own test views.
+
 ### 2026-11-07 - Movies upscaled (Vulkan)
 
 - New option movie_upscale (graphics.toml, on; F1 > Movies): each new frame of a movie (YUY2 640x480, decoded to BGRA

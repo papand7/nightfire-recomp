@@ -19,9 +19,11 @@ Noir. Same build; only the Graphics menu changed.*
 <td><img src="docs/images/exchange_remastered.jpg" alt="The Exchange, Remastered"></td></tr>
 <tr><td><img src="docs/images/phoenix_original.jpg" alt="Phoenix Fire, Original"></td>
 <td><img src="docs/images/phoenix_remastered.jpg" alt="Phoenix Fire, Remastered"></td></tr>
+<tr><td><img src="docs/images/nightshift_original.jpg" alt="Night Shift, Original"></td>
+<td><img src="docs/images/nightshift_remastered.jpg" alt="Night Shift, Remastered"></td></tr>
 </table>
 
-*Outdoors (The Exchange, at night in falling snow) and indoors (Phoenix Fire, the Phoenix building in Tokyo), from where each mission starts.*
+*Outdoors (The Exchange, at night in falling snow) and indoors (Phoenix Fire, the Phoenix building in Tokyo, and Night Shift's green-lit garage), from where each mission starts.*
 
 ![Split-screen story co-op in The Exchange](docs/images/coop_split.jpg)
 
@@ -57,7 +59,7 @@ animations and a gun in hand.*
 - **Snow:** falling snow that stays in the world as you turn, blown by gusts, kept out from under roofs, a blizzard
   setting, and footprints that the snow fills in again.
 - **Movies upscaled:** the 640x480 intro and story movies enlarged to the screen with edge-aware filtering and
-  sharpening instead of a plain stretch.
+  sharpening instead of a plain stretch, shown 4:3 with black at the sides (optional).
 - **Motion blur:** optional, subtle: a little blur as the camera turns and moves; the gun and HUD stay sharp.
 - **HDR tone mapping:** the effects drawn in 16 bit float, then AgX or ACES, with optional auto exposure: sunlit snow
   and lamps roll off instead of clipping to white.
