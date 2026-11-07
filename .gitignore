@@ -31,3 +31,6 @@ settings.toml
 
 # harness frame captures (game imagery)
 /captures/
+
+# local AI instructions, kept off GitHub
+CLAUDE.md
