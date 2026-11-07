@@ -97,9 +97,10 @@ function render() {
     $('license').disabled = busy;
     const canBuild = g.ok && (S.built || $('license').checked) && !S.path_too_long && !busy;
     const bb = $('btn-build');
-    bb.textContent = !S.built ? 'Build' : S.update ? 'Update' : 'Rebuild';
+    // the big INSTALL button installs; this one only updates (or rebuilds) an installed game
+    bb.textContent = S.update ? 'Update' : 'Rebuild';
     bb.disabled = !canBuild;
-    bb.hidden = building;
+    bb.hidden = building || !S.built;
     $('btn-stop').hidden = !building;
     $('progress').hidden = !busy || S.job === 'check_update';
     const clean = $('btn-clean');
@@ -165,6 +166,8 @@ function itemValue(it) {
         return `${w}x${h}`;
     }
     const v = value(it.f, it.key);
+    // a choice since removed reads as the one the game takes it for (it.alias: old value -> today's)
+    if (it.alias && v in it.alias) return it.alias[v];
     return v === undefined ? it.def : v;
 }
 function vulkan() { return (value('s', 'renderer') || 'd3d12') === 'vulkan'; }
