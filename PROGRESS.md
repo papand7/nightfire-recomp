@@ -49,6 +49,20 @@ is written but not compiled yet. The Windows build stays green after each step.
   The Exchange, W walked forward, the mouse turned the view and S walked back.
 - Sound: `audio/sdl.cpp` implements `audio::StartOutput` with SDL3's `SDL_AudioStream`. It follows the XAudio2 version:
   10 ms chunks, silence while paused, and a silent real-time pull when no device opens.
+- Window: `app/main_sdl.cpp` is the Linux entry point and SDL3 event loop, doing what `app/main.cpp` does on Windows:
+  - window modes: windowed, borderless (desktop fullscreen) and fullscreen through SDL display modes
+  - pause on lost focus
+  - mouse look through SDL's relative mouse mode
+  - the menu pointer as an SDL colour cursor
+  - F1, F3 and F4
+  - key binding capture
+  - ImGui's SDL3 backend
+  - boot and quit
+
+  It also provides SDL's displays and the hooks phase 2's Vulkan changes will call: `app::VulkanInstanceExtensions`,
+  `CreateVulkanSurface`, `VulkanGetInstanceProcAddr`, `WindowPixels` and `DisplayModes`. A Linux relaunch passes
+  `XBE_RELAUNCHED` and `XBE_INSTANCE` through the environment. Linux has no handover. `settings.cpp` guards its Win32
+  parts.
 
 ### 2026-11-07 - Water: Phoenix Base's pit found, modern water shader, on by default
 
