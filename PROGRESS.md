@@ -31,6 +31,16 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Bug sweep
+
+- Single player (The Exchange, every effect): no error, failed shader or trap in the log. Split screen co-op: no errors,
+  the animations put in, two views. Paris (rt_run copy, the release folder's save): START launches Driving.xbe into
+  Paris; with rt_run's own save START goes to the menus (that profile is past Paris: not a bug).
+- Fixed: co-op's HUD places kept by sprite address across levels (a new level's sprite at the same address would
+  have been moved to another's place); cleared at each level.
+- .local/vk/paris_rt.sh: Paris in the rt_run copy (stops only its own processes).
+
+
 ### 2026-11-07 - Co-op mission end: not yet seen
 
 - [0x1DF19B] = 1 (0x9C227 sets it with messages 0x2000059/5A; 0x9C31F then sets the mission state [0x17E540] 2)

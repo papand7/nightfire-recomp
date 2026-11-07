@@ -165,6 +165,8 @@ void CoopNpc(uint32_t obj) {
 // aim.cpp's 0xB6190 hook: before the HUD's update the full screen places back, after it the places in the view
 void CoopHud(uint32_t actor, bool after) {
     if (!On() || !Plausible(actor) || (Off() & 1)) return;
+    static uint32_t level = 0;  // the places kept by sprite: a new level's sprites may sit where the last's did
+    if (R32(0x1F658C) != level) level = R32(0x1F658C), g_full.clear();
     int p = kernel::G<int8_t>(actor + 0x8DE);
     if (p < 0 || p > 1) return;
     if (!after) {
