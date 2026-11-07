@@ -32,6 +32,10 @@ struct ModernPage {
     bool up = false;
     uint32_t page = 0;  // the page's id
     std::string title, help, prompt;  // prompt: the page's button line ("~A Select  ~B Back")
+    std::vector<std::string> tabs;     // a row of tabs (the pause screen's: Mission, Objectives ...), left / right moves
+    int tab = -1;                      // the current one
+    std::vector<std::string> texts;    // a page of text (objectives, a score): its lines, top down
+    std::vector<std::string> agents;   // the split screen's Agent 1 to 4 panels (Join Game): their names
     std::vector<ModernRow> rows;
     int focus = -1;
 };
@@ -46,6 +50,7 @@ void ModernMenuPublish(const ModernPage& page);  // the game's thread, each fram
 bool ModernMenuAction(ModernAction& a);          // the game's thread: the UI's next click
 void ModernMenuPress(int control);               // a press for the polled pad
 bool ModernMenuActive();                         // modern menus on and a page up
+bool ModernHidesClassic();                       // default.xbe: the game's own widgets not drawn (hud.cpp)
 void ModernMenuPad(input::Pad& p);               // the presses played (MenuMouse)
 bool TitlePicture(uint32_t header);              // modern menus: the title screen and logos blue
 void TitleLog(uint32_t header);                  // NF_TITLE_LOG: the menus' big pictures (menu_colors.cpp)

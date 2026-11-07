@@ -3,6 +3,10 @@
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Status
+- Latest validation (2026-11-07): both Windows executables build; Exchange geometry, two-copy co-op, localhost host
+  discovery, particle captures and wheel menu checks completed. Water is an off-by-default prototype pending a real
+  water-surface capture. SDK work is committed on `vulkan` at 06bf5b7; main updates still await the required Linux smoke
+  tests (unavailable here) or an explicit user exception. No wheel hardware was connected for binding/force tests.
 - Released: v1.0.1 (2026-10-30; v1.0.0's launcher built default.xbe alone), public, MIT; NightFireLauncher.exe from
   GitHub Actions (v1.0.1 run 41045371616, sha256 7f18f58a...).
 - Milestone: 3 - plays on Windows. Harry (2026-10-28, D3D12, RX 7900 XT): the Paris driving mission to its end and
@@ -30,6 +34,43 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Data: `eurocom/filesys.d00`-`d10` and `eurocom/25_fps` (on foot), `driving/*.viv`, `.mus`, `.spe` (driving)
 
 ## Log
+
+### 2026-11-07 - Remaining feature checks: geometry, network co-op, water, particles and wheel
+
+- Geometry: the 20:37 build passed. Exchange comparison `ge10` records about 18.9 ms GPU without refinement and
+  19.0 ms with it, 38.5 refined draws and 18,101 triangles per frame. Red/green in that comparison is the intentional
+  XBE_DISP_TEST=6 view. Fixed the local perf script's corrupted sed back-reference, which falsely said NOT IN LEVEL.
+- Network co-op: two local copies of the rebuilt game reached the Exchange with two players. Client and host movement
+  were exercised; both logs report the same player separation at level frames 600, 1200 and 1800 (3.2, 12.4, 7.6).
+  No DESYNC, rendering errors or peer timeout in either log. Evidence: `.local/netcoop_{host,client}_checked.log`,
+  `.local/rt_run/shots/continue_net_*`. A separate localhost discovery probe received the waiting host's correct
+  name, UDP port and player count (`.local/discovery_checked.log`). A remote PC and broadcast discovery remain untested.
+- Water prototype (off by default): `water` in graphics.toml, F1 and launcher; Graphics > Effects > Water / Floors.
+  Its own reflection-mask tag selects animated normals, screen-space reflection/refraction, depth absorption and
+  shallow-edge foam. The RT reflection pass leaves that tag to the later surface pass; ordinary RT reflections
+  are not applied twice. Sky is excluded; only square 64-128 textures with opaque, smoothly varying patterns are
+  accepted automatically. Survey pictures confirmed that this rejects the observed carpet, clothing and splash
+  false positives (adjacent-pixel variation separates the carpet from the smooth water candidate).
+  HD replacements retain the original texture's water classification when the option is switched live.
+  Both executables build; Double Cross off/on comparison compiled the shader without errors. Real water placement
+  still needs visual verification: colour alone also finds suits, carpet, sky and splash pictures. The option
+  remains experimental. `mods/reflections.toml` entries set to zero exclude misidentified textures.
+- Local water survey fix: use `cygpath -aw` for XBE_WATER_DUMP; a relative script path otherwise gave the game a
+  dump folder relative to its run directory and silently failed to write the candidate pictures.
+- Particles: Exchange gunfire with NF_FX_TEST=1 and XBE_PARTICLE_TEST=1 exercised both real hit/explosion hooks and
+  synthetic events. Captures show sparks, debris and smoke with the gun intact. The runtime reports GPU particles
+  drawn, real hit positions/materials and real test explosions; no shader, Vulkan or guest exception errors.
+  Evidence: `.local/particles_checked_runtime.log`, `.local/rt_run2/shots/continue_particles_*`.
+  Initialized the diagnostic explosion log's fallback coordinates so a rejected place never logs uninitialized data.
+- Wheel menu: fixed hidden row gaps that blocked Buttons and Gear Shifter, and the guest overwriting the initial
+  focus after a page switch (focus now settles on the first row two frames later). Modern menus have a fallback
+  for the row help when the guest omits its help widget. Retested Steering/Pedals -> Buttons -> Gears -> Steering,
+  No Shifter, the no-device help, and rotation changing 900 -> 1080 -> 900 with the saved settings updated.
+  Evidence: `.local/wheel_checked_runtime.log`, `.local/rt_run/shots/continue_wheel_final_*`. Zero devices attached:
+  physical axis/button capture and forces are not verified. All test settings were restored.
+- Final validation: Windows BUILD OK (`.local/b_wheel_focus.log`), launcher schema syntax and both diffs' whitespace
+  checks pass. Main still requires the Linux smoke tests in CLAUDE.md. `wsl --list --quiet` confirms WSL is not
+  installed; no Linux tests were claimed or bypassed.
 
 ### 2026-11-07 - Modern menus (blue, for the mouse)
 

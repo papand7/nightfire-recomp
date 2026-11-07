@@ -261,6 +261,12 @@ function control(it) {
         wrap.append(r, out);
         return wrap;
     }
+    if (it.type === 'text') {
+        const t = document.createElement('input');
+        t.type = 'text'; t.value = val ?? ''; t.spellcheck = false;
+        t.onchange = () => set(it, t.value.trim());
+        return t;
+    }
     if (it.type === 'int') {
         const n = document.createElement('input');
         n.type = 'number'; n.min = it.min; n.max = it.max; n.value = val;

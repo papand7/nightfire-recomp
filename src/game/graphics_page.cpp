@@ -13,11 +13,13 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include <cstdlib>
 #include <cstring>
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -51,7 +53,8 @@ using nf::MenuRow;
 // same lines, the others hidden, its title rewritten in place for the set shown (SetSharedTitle)
 constexpr uint32_t kGfxPage = 0x4000FC20, kStylePage = 0x4000FC30;
 constexpr uint32_t kEnhPage = 1, kToonPage = 2, kRetroPage = 3, kMorePage = 4, kNetPage = 5,
-                   kEffectsPage = 6, kKeysPage = 7, kKeys2Page = 8, kCoopPage = 9;  // the shared page's rows
+                   kEffectsPage = 6, kKeysPage = 7, kKeys2Page = 8, kCoopPage = 9,
+                   kWheelPage = 10, kWheel2Page = 11, kWheel3Page = 12;  // the shared page's rows
 // the Graphics page's rows
 constexpr uint32_t kQuality = 0x1000FC21, kStyle = 0x1000FC22, kStyleOptions = 0x1000FC23, kFilter = 0x1000FC24,
                    kAo = 0x1000FC25, kBloom = 0x1000FC26, kAa = 0x1000FC27, kSharpen = 0x1000FC28,
@@ -60,6 +63,8 @@ constexpr uint32_t kQuality = 0x1000FC21, kStyle = 0x1000FC22, kStyleOptions = 0
                    kLighting = 0x1000FC30, kEffects = 0x1000FC38, kRayTracing = 0x1000FC39,
                    kDof = 0x1000FC3A, kBlood = 0x1000FC3B, kHdr = 0x1000FC3C, kToneHdr = 0x1000FC3D,
                    kMotion2 = 0x1000FC3E, kSmoothTurn = 0x1000FC3F, kContact = 0x1000FC40, kFloorRefl = 0x1000FC5F;
+// the upscaler's rows (gpu/upscale.h: FSR 2; DLSS and XeSS shown, not installed)
+constexpr uint32_t kUpscaler = 0x1000FC2A, kUpQuality = 0x1000FC47, kUpscaleSharp = 0x1000FC48;
 // the style pages' rows
 constexpr uint32_t kExposure = 0x1000FC31, kTonemap = 0x1000FC32, kContrast = 0x1000FC33, kSaturation = 0x1000FC34,
                    kVignette = 0x1000FC35, kGrain = 0x1000FC36, kSceneSharpen = 0x1000FC37;
@@ -70,7 +75,8 @@ constexpr uint32_t kPixel = 0x1000FC51, kDepth = 0x1000FC52, kDither = 0x1000FC5
 // More Settings' rows
 constexpr uint32_t kFps = 0x1000FC61, kPauseBg = 0x1000FC62, kHideHud = 0x1000FC63, kButtonPics = 0x1000FC64,
                    kStartMenus = 0x1000FC65, kKeyboard = 0x1000FC66, kMouseLook = 0x1000FC67, kLanguage = 0x1000FC68,
-                   kKeys = 0x1000FC69, kMenuColors = 0x1000FC6A, kAds = 0x1000FC6B, kMotion = 0x1000FC6C, kCoop = 0x1000FC6D;
+                   kKeys = 0x1000FC69, kMenuColors = 0x1000FC6A, kAds = 0x1000FC6B, kMotion = 0x1000FC6C, kCoop = 0x1000FC6D,
+                   kWheel = 0x1000FC6E;
 
 const std::vector<MenuRow> kGfxRows = {
     {kQuality, nf::kMenuChoice, "Graphics Quality", "Low to Ultra set the rows below at once; changing one makes it Custom."},
@@ -83,6 +89,9 @@ const std::vector<MenuRow> kGfxRows = {
     {kScale, nf::kMenuChoice, "Render Scale", "The 3D picture's size against the screen's: lower is faster, higher smoother."},
     {kPack, nf::kMenuChoice, "Texture Packs", "Pictures in mods/textures drawn in place of the game's textures."},
     {kHdr, nf::kMenuChoice, "HDR", "Brighter highlights on an HDR screen (Windows' HDR on). HUD and menus stay at SDR white."},
+    {kUpscaler, nf::kMenuChoice, "Upscaler", "FSR 2: the 3D scene drawn smaller and rebuilt over frames, the HUD sharp. DLSS and XeSS need their vendors' SDKs."},
+    {kUpQuality, nf::kMenuChoice, "Upscale Quality", "Native AA: full size, the smoothest edges. Quality 1.5x, Balanced 1.7x, Performance 2x: faster."},
+    {kUpscaleSharp, nf::kMenuChoice, "Upscale Sharpness", "The upscaler's own sharpening of the rebuilt scene."},
     {kDefaults, nf::kMenuButton, "Restore Defaults", "Every row on this page and the style options as they first were."},
 };
 // Effects (Graphics' Effects button): what only Vulkan draws, apart from the style
@@ -100,7 +109,7 @@ const std::vector<MenuRow> kEffectsRows = {
     {kMotion2, nf::kMenuChoice, "Motion Blur", "A little blur as you turn and move. The gun and HUD stay sharp.", 10},
     {kSmoothTurn, nf::kMenuChoice, "Smooth Turning", "A frame in between, turned by the mouse: 120 Hz turning on a 120 Hz+ screen.", 11},
     {kContact, nf::kMenuChoice, "Contact Shadows", "Short, crisp shadows under props, feet and ledges (without ray traced lighting).", 12},
-    {kFloorRefl, nf::kMenuChoice, "Floor Reflections", "Ice, and polished floors, reflect where they face up (with Reflections on).", 13},
+    {kFloorRefl, nf::kMenuChoice, "Water / Floors", "Water: ripples, reflections, depth tint and foam. Ice and polished floors reflect too. Needs Reflections on.", 13},
 };
 const std::vector<MenuRow> kEnhRows = {
     {kExposure, nf::kMenuChoice, "Exposure", "How bright the scene is drawn.", 0},
@@ -136,11 +145,12 @@ const std::vector<MenuRow> kMoreRows = {
     {kKeyboard, nf::kMenuChoice, "Keyboard and Mouse", "Player 1 with the first controller, Player 1 alone, or off.", 5},
     {kMouseLook, nf::kMenuChoice, "Mouse Look", "The mouse turns and aims on foot.", 6},
     {kLanguage, nf::kMenuChoice, "Language", "The game's language, at the next start.", 7},
-    {kKeys, nf::kMenuChoice, "Key Bindings", "The keyboard and mouse keys for each action. A steering wheel: F1.", 8},
-    {kMenuColors, nf::kMenuChoice, "Menu Colours", "The menu backgrounds as the game has them, or blue as on the PC version. Text and Bond stay.", 9},
-    {kAds, nf::kMenuChoice, "Aim Down Sights", "L (right mouse) raises the gun and zooms in, not the red crosshair. Blur: the background too.", 10},
-    {kMotion, nf::kMenuChoice, "Weapon Sway", "A very light head bob and weapon sway as you move and turn.", 11},
-    {kCoop, nf::kMenuChoice, "Co-op", "A second player in the story missions: split screen, network, friendly fire.", 12},
+    {kKeys, nf::kMenuChoice, "Key Bindings", "The keyboard and mouse keys for each action.", 8},
+    {kWheel, nf::kMenuChoice, "Steering Wheel", "A wheel, pedals and shifter for the driving missions: bindings, rotation, force feedback.", 9},
+    {kMenuColors, nf::kMenuChoice, "Menu Colours", "The menu backgrounds as the game has them, or blue as on the PC version. Text and Bond stay.", 10},
+    {kAds, nf::kMenuChoice, "Aim Down Sights", "L (right mouse) raises the gun and zooms in, not the red crosshair. Blur: the background too.", 11},
+    {kMotion, nf::kMenuChoice, "Weapon Sway", "A very light head bob and weapon sway as you move and turn.", 12},
+    {kCoop, nf::kMenuChoice, "Co-op", "A second player in the story missions: split screen, network, friendly fire.", 13},
 };
 // Key Bindings (More Settings' row), two sets of rows: each an action on foot, its two keys shown; A waits for the
 // next key or mouse button (app::BeginKeyCapture), which becomes its first key and the old first its second; Escape
@@ -188,16 +198,113 @@ std::vector<MenuRow> KeySetRows(bool second) {
 }
 const std::vector<MenuRow> kKeysRows = KeySetRows(false), kKeys2Rows = KeySetRows(true);
 
+// Steering Wheel (More Settings' row), three sets of rows: the steering and pedals and their feel, the buttons of the
+// driving controls, an H-pattern shifter's gears. A on a binding waits for the control to be turned, pressed or moved
+// on any wheel, pedals, shifter or button box (app::WheelDetectStart, as the settings window's Wheel tab did); A again
+// unbinds it. The choices are saved as they change (WheelPageFrame), each in app::Settings' wheel_ and ffb_ values
+enum WheelKind { kWheelAxis, kWheelButton, kWheelGear, kWheelValue, kWheelGo, kWheelDo };
+struct WheelRow {
+    uint32_t id;
+    uint32_t set;  // kWheelPage, kWheel2Page or kWheel3Page
+    WheelKind kind;
+    int what;      // axis: 0 steering, 1 throttle, 2 brake, 3 clutch; button: input::Control; gear: 0 R, 1 to 7;
+                   // value: kWheelValues' index; go: the set opened; do: 0 the default buttons, 1 no gears
+    const char* label;
+    const char* help;
+    int slot;
+};
+struct WheelValue {
+    const char* text;  // "Off" for 0, else the number and this
+    std::vector<uint32_t> steps;
+};
+// Invert Steering, Wheel Rotation, Full Steering At, Dead Zone, Force Feedback, Road and Impacts
+const WheelValue kWheelValues[] = {
+    {"", {0, 1}},
+    {" Degrees", {180, 240, 270, 360, 450, 540, 720, 900, 1080, 1440, 1800, 2520, 2880}},
+    {" Degrees", {90, 120, 180, 240, 270, 300, 360, 450, 540, 720, 900, 1080}},
+    {"%", {0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20}},
+    {"%", {0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100}},
+    {"%", {0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100}},
+};
+constexpr const char* kNoWheel = "No wheel, pedals, shifter or button box found. One plugged in is found within two seconds.";
+const WheelRow kWheelRows[] = {
+    {0x1000FCD1, kWheelPage, kWheelAxis, 0, "Steering", "A, then turn the wheel to the right. A again: unbound.", 0},
+    {0x1000FCD2, kWheelPage, kWheelValue, 0, "Invert Steering", "Turning right steers left (set by itself when the steering is bound).", 1},
+    {0x1000FCD3, kWheelPage, kWheelValue, 1, "Wheel Rotation", "The wheel's turn lock to lock, as its own software sets it (Logitech G HUB: 900).", 2},
+    {0x1000FCD4, kWheelPage, kWheelValue, 2, "Full Steering At", "Degrees of wheel turn for the car's full steering: less turns it sooner (360 suits most).", 3},
+    {0x1000FCD5, kWheelPage, kWheelValue, 3, "Dead Zone", "How much of the steering around the centre reads as straight.", 4},
+    {0x1000FCD6, kWheelPage, kWheelAxis, 1, "Throttle", "Let the pedal rest, A, then press it all the way. A again: unbound.", 5},
+    {0x1000FCD7, kWheelPage, kWheelAxis, 2, "Brake", "Let the pedal rest, A, then press it all the way. A again: unbound.", 6},
+    {0x1000FCD8, kWheelPage, kWheelAxis, 3, "Clutch", "Let the pedal rest, A, then press it all the way (the game has no clutch).", 7},
+    {0x1000FCD9, kWheelPage, kWheelValue, 4, "Force Feedback", "The wheel's forces overall: centring, the car's grip, kerbs and impacts.", 8},
+    {0x1000FCDA, kWheelPage, kWheelValue, 5, "Road and Impacts", "How much of the game's rumble (kerbs, gravel, impacts) shakes the wheel.", 9},
+    {0x1000FCDB, kWheelPage, kWheelGo, int(kWheel2Page), "Buttons", "The wheel's buttons for gas, brake, handbrake, weapons, camera and pause.", 10},
+    {0x1000FCDC, kWheelPage, kWheelGo, int(kWheel3Page), "Gear Shifter", "An H-pattern shifter's gears.", 11},
+
+    {0x1000FCE1, kWheel2Page, kWheelButton, input::kRT, "Gas", "A button that accelerates, for a wheel without pedals. A again: unbound.", 0},
+    {0x1000FCE2, kWheel2Page, kWheelButton, input::kLT, "Brake / Reverse", "A button that brakes and reverses. A again: unbound.", 1},
+    {0x1000FCE3, kWheel2Page, kWheelButton, input::kB, "Handbrake", "The handbrake. A again: unbound.", 2},
+    {0x1000FCE4, kWheel2Page, kWheelButton, input::kA, "Fire", "Fire the car's weapon. A again: unbound.", 3},
+    {0x1000FCE5, kWheel2Page, kWheelButton, input::kX, "Gadget", "Use the car's gadget. A again: unbound.", 4},
+    {0x1000FCE6, kWheel2Page, kWheelButton, input::kY, "Camera", "Change the camera. A again: unbound.", 5},
+    {0x1000FCE7, kWheel2Page, kWheelButton, input::kBlack, "Next Weapon", "The next weapon. A again: unbound.", 6},
+    {0x1000FCE8, kWheel2Page, kWheelButton, input::kWhite, "Weapon Before", "The weapon before. A again: unbound.", 7},
+    {0x1000FCE9, kWheel2Page, kWheelButton, input::kRThumb, "Look Back", "Look behind the car. A again: unbound.", 8},
+    {0x1000FCEA, kWheel2Page, kWheelButton, input::kStart, "Pause", "The pause screen. A again: unbound.", 9},
+    {0x1000FCEB, kWheel2Page, kWheelButton, input::kBack, "Back / View", "The console's Back button. A again: unbound.", 10},
+    {0x1000FCEC, kWheel2Page, kWheelDo, 0, "Default Buttons", "A Logitech G920 or G923's buttons. The wheel's hat is the d-pad.", 11},
+    {0x1000FCED, kWheel2Page, kWheelGo, int(kWheel3Page), "Gear Shifter", "An H-pattern shifter's gears.", 12},
+    {0x1000FCEE, kWheel2Page, kWheelGo, int(kWheelPage), "Steering and Pedals", "Steering, pedals and force feedback.", 13},
+
+    {0x1000FCF1, kWheel3Page, kWheelGear, 0, "Reverse", "A, then put the shifter in reverse. A again: unbound.", 0},
+    {0x1000FCF2, kWheel3Page, kWheelGear, 1, "Gear 1", "A, then put the shifter in first. A again: unbound.", 1},
+    {0x1000FCF3, kWheel3Page, kWheelGear, 2, "Gear 2", "A, then put the shifter in second. A again: unbound.", 2},
+    {0x1000FCF4, kWheel3Page, kWheelGear, 3, "Gear 3", "A, then put the shifter in third. A again: unbound.", 3},
+    {0x1000FCF5, kWheel3Page, kWheelGear, 4, "Gear 4", "A, then put the shifter in fourth. A again: unbound.", 4},
+    {0x1000FCF6, kWheel3Page, kWheelGear, 5, "Gear 5", "A, then put the shifter in fifth. A again: unbound.", 5},
+    {0x1000FCF7, kWheel3Page, kWheelGear, 6, "Gear 6", "A, then put the shifter in sixth. A again: unbound.", 6},
+    {0x1000FCF8, kWheel3Page, kWheelGear, 7, "Gear 7", "A, then put the shifter in seventh. A again: unbound.", 7},
+    {0x1000FCF9, kWheel3Page, kWheelDo, 1, "No Shifter", "Every gear unbound: the game's own shift buttons change gear.", 8},
+    {0x1000FCFA, kWheel3Page, kWheelGo, int(kWheel2Page), "Buttons", "The wheel's buttons for gas, brake, handbrake, weapons, camera and pause.", 9},
+    {0x1000FCFB, kWheel3Page, kWheelGo, int(kWheelPage), "Steering and Pedals", "Steering, pedals and force feedback.", 10},
+};
+std::vector<MenuRow> WheelSetRows(uint32_t set) {
+    std::vector<MenuRow> v;
+    for (const WheelRow& r : kWheelRows)
+        if (r.set == set) v.push_back({r.id, nf::kMenuChoice, r.label, r.help, r.slot});
+    return v;
+}
+const std::vector<MenuRow> kWheelRows1 = WheelSetRows(kWheelPage), kWheelRows2 = WheelSetRows(kWheel2Page),
+                           kWheelRows3 = WheelSetRows(kWheel3Page);
+bool WheelSet(uint32_t set) { return set == kWheelPage || set == kWheel2Page || set == kWheel3Page; }
+
 // Co-op's rows (single player's Co-op, More Settings' Co-op): how a second player joins the story missions
 constexpr uint32_t kCoopMode = 0x1000FCC1, kCoopSplit = 0x1000FCC2, kCoopFF = 0x1000FCC3, kCoopNear = 0x1000FCC4,
-                   kCoopRespawn = 0x1000FCC5, kCoopDone = 0x1000FCC6;
+                   kCoopRespawn = 0x1000FCC5, kCoopDone = 0x1000FCC6, kCoopAddr = 0x1000FCC7;
 const std::vector<MenuRow> kCoopRows = {
-    {kCoopMode, nf::kMenuChoice, "Co-op", "Split Screen: player 2 on controller 2. Network: the game restarts linked to another PC (Host, or Join the address in the settings window).", 0},
-    {kCoopSplit, nf::kMenuChoice, "Screen Split", "The two views one above the other, or side by side.", 1},
-    {kCoopFF, nf::kMenuChoice, "Friendly Fire", "Your shots hurt each other.", 2},
-    {kCoopNear, nf::kMenuChoice, "Keep Together", "Player 2 is brought back beside player 1 when far away or lost.", 3},
-    {kCoopRespawn, nf::kMenuChoice, "Player 2 Respawn", "Player 2 comes back beside player 1 after dying; player 1's death ends the mission.", 4},
-    {kCoopDone, nf::kMenuButton, "Done", "Keep these and go back.", 5},
+    {kCoopMode, nf::kMenuChoice, "Co-op", "Split Screen: player 2 on controller 2. Network: the game restarts linked to another PC. Host: this PC waits (its address below). Join: the games found on this network, or an address.", 0},
+    {kCoopAddr, nf::kMenuChoice, "Your Address", "", 1},  // its help made from this PC's addresses (CoopAddrHelp)
+    {kCoopSplit, nf::kMenuChoice, "Screen Split", "The two views one above the other, or side by side.", 2},
+    {kCoopFF, nf::kMenuChoice, "Friendly Fire", "Your shots hurt each other.", 3},
+    {kCoopNear, nf::kMenuChoice, "Keep Together", "Player 2 is brought back beside player 1 when far away or lost.", 4},
+    {kCoopRespawn, nf::kMenuChoice, "Player 2 Respawn", "Player 2 comes back beside player 1 after dying; player 1's death ends the mission.", 5},
+    {kCoopDone, nf::kMenuButton, "Done", "Keep these and go back.", 6},
+};
+// Network: Join's rows (Co-op's Keep with Network: Join): the hosts waiting on this network (netplay::FindHosts, the
+// list kept up to date each frame), then an address typed as four numbers for a host past this network
+constexpr uint32_t kJoinNetPage = 20;  // a set of the shared page's rows
+constexpr uint32_t kJoinHost0 = 0x1000FC94, kJoinHosts = 5, kJoinOctet0 = 0x1000FC99, kJoinAddress = 0x1000FC9D;
+const std::vector<MenuRow> kJoinRows = {
+    {kJoinHost0 + 0, nf::kMenuChoice, "Found Game 1", "A host waiting on this network: A joins it (the game restarts linked to it).", 0},
+    {kJoinHost0 + 1, nf::kMenuChoice, "Found Game 2", "A host waiting on this network: A joins it (the game restarts linked to it).", 1},
+    {kJoinHost0 + 2, nf::kMenuChoice, "Found Game 3", "A host waiting on this network: A joins it (the game restarts linked to it).", 2},
+    {kJoinHost0 + 3, nf::kMenuChoice, "Found Game 4", "A host waiting on this network: A joins it (the game restarts linked to it).", 3},
+    {kJoinHost0 + 4, nf::kMenuChoice, "Found Game 5", "A host waiting on this network: A joins it (the game restarts linked to it).", 4},
+    {kJoinOctet0 + 0, nf::kMenuChoice, "Address (1st)", "A host's address, its first number (left and right). Over the internet: the host's public address, its port forwarded.", 6},
+    {kJoinOctet0 + 1, nf::kMenuChoice, "Address (2nd)", "The address's second number (left and right).", 7},
+    {kJoinOctet0 + 2, nf::kMenuChoice, "Address (3rd)", "The address's third number (left and right).", 8},
+    {kJoinOctet0 + 3, nf::kMenuChoice, "Address (4th)", "The address's fourth number (left and right).", 9},
+    {kJoinAddress, nf::kMenuChoice, "Join This Address", "Join the host at the address above (UDP port 27015 unless the launcher's Host address names another).", 10},
 };
 // Netplay's rows (the main menu's Netplay item): host, the games found on this network, join the one chosen
 constexpr uint32_t kNetHost = 0x1000FC91, kNetServer = 0x1000FC92, kNetJoin = 0x1000FC93;
@@ -269,6 +376,13 @@ const Options kPixels = {{"1", 1}, {"2", 2}, {"3", 3}, {"4", 4}, {"5", 5}, {"6",
 const Options kDepths = {{"3 bits", 3}, {"4 bits", 4}, {"5 bits", 5}, {"6 bits", 6}, {"8 bits", 8}};
 const Options kRetroFilters = {{"Nearest", 1}, {"As the Game", 0}};
 const Options kTints = {{"Off", 0}, {"Low", 0.4f}, {"High", 0.8f}};
+const Options kUpscaleSharps = {{"Off", 0}, {"Low", 0.2f}, {"Medium", 0.4f}, {"High", 0.7f}};
+std::vector<std::pair<const char*, uint32_t>> UpscalerItems() {
+    return {{"Off", gpu::kUpscalerOff},
+            {"FSR 2", gpu::kUpscalerFsr},
+            {gpu::UpscalerAvailable(gpu::kUpscalerDlss) ? "DLSS" : "DLSS (Not Installed)", gpu::kUpscalerDlss},
+            {gpu::UpscalerAvailable(gpu::kUpscalerXess) ? "XeSS" : "XeSS (Not Installed)", gpu::kUpscalerXess}};
+}
 const char* kQualityNames[] = {"Low", "Medium", "High", "Ultra", "Custom"};
 
 bool Vulkan() { return gpu::StyleRendererActive(); }
@@ -351,6 +465,14 @@ void EnterGraphics(X86Context& ctx, uint32_t player) {
     } else {
         Choice(ctx, player, kHdr, {{"Needs Vulkan", 0xFF}}, 0xFF);
     }
+    if (Vulkan()) {
+        Choice(ctx, player, kUpscaler, UpscalerItems(), uint32_t(st.upscaler));
+        Choice(ctx, player, kUpQuality, {{"Native AA", 0}, {"Quality", 1}, {"Balanced", 2}, {"Performance", 3}},
+               uint32_t(st.upscale_quality));
+        ShowOptions(ctx, player, kUpscaleSharp, kUpscaleSharps, st.upscale_sharpness);
+    } else {
+        for (uint32_t id : {kUpscaler, kUpQuality, kUpscaleSharp}) Choice(ctx, player, id, {{"Needs Vulkan", 0xFF}}, 0xFF);
+    }
     LOGR("nightfire: Graphics page entered (quality %s, style %s)", kQualityNames[g_entered_quality],
          st.preset.empty() ? "edited" : st.preset.c_str());
 }
@@ -381,6 +503,7 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
             st.materials = keep.materials, st.material_strength = keep.material_strength;
             st.surface_depth = keep.surface_depth, st.relief_high = keep.relief_high;
             st.displacement = keep.displacement, st.displace_depth = keep.displace_depth;
+            st.wall_displacement = keep.wall_displacement;
             st.ground_detail = keep.ground_detail, st.detail_strength = keep.detail_strength;
             st.detail_distance = keep.detail_distance;
             st.atmosphere = keep.atmosphere, st.fog_strength = keep.fog_strength, st.shaft_strength = keep.shaft_strength;
@@ -395,8 +518,17 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
             st.motion_blur = keep.motion_blur, st.motion_blur_strength = keep.motion_blur_strength;
             st.smooth_turn = keep.smooth_turn;
             st.contact_shadows = keep.contact_shadows, st.floor_reflections = keep.floor_reflections;
+            st.upscaler = keep.upscaler, st.upscale_quality = keep.upscale_quality;
+            st.upscale_sharpness = keep.upscale_sharpness;
         }
         st.texture_pack = ReadOption(ctx, player, kPack, kOffOn) > 0;
+        // an upscaler this build or PC lacks (DLSS, XeSS) is not taken: the one before stays
+        if (uint32_t up = ChoiceValue(ctx, player, kUpscaler); up < uint32_t(gpu::kUpscalers)) {
+            if (gpu::UpscalerAvailable(int(up))) st.upscaler = int(up);
+            else LOGR("nightfire: upscaler %u is not installed; left as it was", up);
+        }
+        if (uint32_t q = ChoiceValue(ctx, player, kUpQuality); q <= 3) st.upscale_quality = int(q);
+        st.upscale_sharpness = ReadOption(ctx, player, kUpscaleSharp, kUpscaleSharps);
     }
     bool fxaa = aa == 1, smaa = Vulkan() ? aa == kAaSmaa : app::Get().smaa;
     uint32_t msaa = aa >= 2 && aa <= 4 ? aa - 1 : 0;
@@ -462,13 +594,15 @@ void EnterEffects(X86Context& ctx, uint32_t player) {
     ShowOptions(ctx, player, kReflect, kReflectLevels, float(st.reflections));
     Choice(ctx, player, kParticles, {{"Original", 0}, {"Soft", 1}, {"Soft + Lights", 2}},
            st.effect_lights ? 2 : st.soft_particles ? 1 : 0);
-    // bit 0 the pack's maps, bit 1 relief, bit 2 ground detail, bit 3 relief High, bit 4 ground geometry
+    // bit 0 the pack's maps, bit 1 relief, bit 2 ground detail, bit 3 relief High, bit 4 ground geometry, bit 5 wall
+    // geometry
     const bool relief = st.materials && st.surface_depth > 0;
     Choice(ctx, player, kMaterials,
-           {{"Original", 0}, {"Detail", 4}, {"Detail + Geometry", 20}, {"Detail + PBR", 5}, {"Detail + Relief", 7},
-            {"Detail + Relief High", 15}, {"Everything", 31}, {"PBR", 1}, {"PBR + Relief", 3}, {"PBR + Relief High", 11}},
+           {{"Original", 0}, {"Detail", 4}, {"Detail + Geometry", 20}, {"Detail + All Geometry", 52}, {"Detail + PBR", 5},
+            {"Detail + Relief", 7}, {"Detail + Relief High", 15}, {"Everything but Walls", 31}, {"Everything", 63}, {"PBR", 1},
+            {"PBR + Relief", 3}, {"PBR + Relief High", 11}},
            (st.materials ? 1u : 0u) | (relief ? 2u : 0u) | (st.ground_detail ? 4u : 0u) | (relief && st.relief_high ? 8u : 0u) |
-               (st.displacement ? 16u : 0u));
+               (st.displacement ? 16u : 0u) | (st.wall_displacement ? 32u : 0u));
     Choice(ctx, player, kLighting,
            {{"Original", 0}, {"Fog", 1}, {"Bounce", 2}, {"Fog + Bounce", 3}, {"Fog + Snow", 5}, {"Fog + Bounce + Snow", 7}},
            (st.atmosphere ? 1u : 0u) | (st.bounce_light ? 2u : 0u) | (st.weather ? 4u : 0u));
@@ -489,7 +623,9 @@ void EnterEffects(X86Context& ctx, uint32_t player) {
     ShowOptions(ctx, player, kMotion2, kOffOn, st.motion_blur ? 1.0f : 0.0f);
     ShowOptions(ctx, player, kSmoothTurn, kOffOn, st.smooth_turn ? 1.0f : 0.0f);
     ShowOptions(ctx, player, kContact, kOffOn, st.contact_shadows ? 1.0f : 0.0f);
-    Choice(ctx, player, kFloorRefl, {{"Off", 0}, {"Ice", 1}, {"Ice + Polished Floors", 2}}, uint32_t(st.floor_reflections));
+    Choice(ctx, player, kFloorRefl, {{"Off", 0}, {"Ice", 1}, {"Ice + Polished Floors", 2},
+                                    {"Water", 3}, {"Water + Ice", 4}, {"Water + Floors", 5}},
+           uint32_t(st.floor_reflections + (st.water ? 3 : 0)));
 }
 void KeepEffects(X86Context& ctx, uint32_t player) {
     gpu::GraphicsStyle st = Current();
@@ -510,12 +646,13 @@ void KeepEffects(X86Context& ctx, uint32_t player) {
         st.effect_lights = pv == 2;
     }
     uint32_t mat = ChoiceValue(ctx, player, kMaterials);
-    if (mat <= 31) {
+    if (mat <= 63) {
         st.materials = mat & 1;
         st.surface_depth = mat & 2 ? std::max(st.surface_depth, 0.6f) : 0.0f;
         st.ground_detail = mat & 4;
         st.relief_high = mat & 8;
         st.displacement = mat & 16;
+        st.wall_displacement = mat & 32;
     }
     if (uint32_t rt = ChoiceValue(ctx, player, kRayTracing); rt <= 6) {
         st.ray_tracing = rt >= 1;
@@ -530,7 +667,7 @@ void KeepEffects(X86Context& ctx, uint32_t player) {
     st.motion_blur = ReadOption(ctx, player, kMotion2, kOffOn) > 0;
     st.smooth_turn = ReadOption(ctx, player, kSmoothTurn, kOffOn) > 0;
     st.contact_shadows = ReadOption(ctx, player, kContact, kOffOn) > 0;
-    if (uint32_t f = ChoiceValue(ctx, player, kFloorRefl); f <= 2) st.floor_reflections = int(f);
+    if (uint32_t f = ChoiceValue(ctx, player, kFloorRefl); f <= 5) st.floor_reflections = int(f % 3), st.water = f >= 3;
     {
         // AO and bloom are the quality preset's: a change here can make it Custom
         std::lock_guard<std::recursive_mutex> lock(app::UiLock());
@@ -603,22 +740,47 @@ void EnterMore(X86Context& ctx, uint32_t player) {
     if (langs.empty()) langs.push_back({LanguageName(s.language), s.language});
     Choice(ctx, player, kLanguage, langs, s.language);
     Choice(ctx, player, kKeys, {{"Open", 0}}, 0);
+    Choice(ctx, player, kWheel, {{"Open", 0}}, 0);
     Choice(ctx, player, kMenuColors, {{"Original", 0}, {"PC Blue", 1}}, s.menu_colors ? 1 : 0);
     Choice(ctx, player, kAds, {{"Off", 0}, {"On", 1}}, nf::aim_down_sights ? 1 : 0);
     ShowOptions(ctx, player, kMotion, kOffOn, nf::view_motion ? 1.0f : 0.0f);
     Choice(ctx, player, kCoop, {{"Open", 0}}, 0);
 }
 // Co-op
+// this PC's addresses for a host to give (netplay::LocalAddresses), "192.168.1.20:27015"; the help line says the rest
+std::vector<std::string> CoopAddresses() {
+    std::vector<std::string> v;
+    for (const std::string& a : netplay::LocalAddresses()) v.push_back(a + ":" + std::to_string(netplay::kPort));
+    return v;
+}
+std::string CoopAddrHelp() {
+    std::string ips;
+    for (const std::string& a : netplay::LocalAddresses()) ips += (ips.empty() ? "" : " or ") + a;
+    if (ips.empty()) return "This PC is on no network: network co-op needs one.";
+    return "Your address: " + ips + " (port " + std::to_string(netplay::kPort) +
+           "). Friends over the internet need your public address and the port forwarded (UDP).";
+}
+uint32_t g_coop_player = 0, g_coop_mode = 0xFF;  // the Co-op page open (its mode as last seen), else 0xFF
 void EnterCoop(X86Context& ctx, uint32_t player) {
     const uint32_t mode = netplay::Active() ? (netplay::Me() == 0 ? 2u : 3u) : nf::coop ? 1u : 0u;
     Choice(ctx, player, kCoopMode, {{"Off", 0}, {"Split Screen", 1}, {"Network: Host", 2}, {"Network: Join", 3}}, mode);
+    {
+        static std::vector<std::string> shown;  // the guest's copies are made once for each text (nf::MenuString)
+        shown = CoopAddresses();
+        if (shown.empty()) shown.push_back("No Network");
+        std::vector<std::pair<const char*, uint32_t>> items;
+        for (size_t i = 0; i < shown.size(); i++) items.push_back({shown[i].c_str(), uint32_t(i)});
+        Choice(ctx, player, kCoopAddr, items, 0);
+    }
+    g_coop_player = player, g_coop_mode = mode;
     Choice(ctx, player, kCoopSplit, {{"One Above the Other", 0}, {"Side by Side", 1}}, nf::coop_side ? 1 : 0);
     ShowOptions(ctx, player, kCoopFF, kOffOn, nf::coop_friendly_fire ? 1.0f : 0.0f);
     ShowOptions(ctx, player, kCoopNear, kOffOn, nf::coop_leash ? 1.0f : 0.0f);
     ShowOptions(ctx, player, kCoopRespawn, kOffOn, nf::coop_respawn ? 1.0f : 0.0f);
     Choice(ctx, player, kCoopDone, {{"Keep", 0}}, 0);
 }
-void KeepCoop(X86Context& ctx, uint32_t player) {
+// Co-op kept; true when Network: Join's page is to open (the joining is done there)
+bool KeepCoop(X86Context& ctx, uint32_t player) {
     uint32_t mode = ChoiceValue(ctx, player, kCoopMode), split = ChoiceValue(ctx, player, kCoopSplit);
     if (mode <= 3) nf::coop = mode >= 1;  // network co-op: split screen co-op over the SDK's lockstep netplay
     if (split <= 1) nf::coop_side = split == 1;
@@ -633,15 +795,109 @@ void KeepCoop(X86Context& ctx, uint32_t player) {
     // network: the game started again in lockstep (every copy runs the whole game, only the controllers travel:
     // core/netplay.h), from the title, the host's controller playing player 1, the joiner's player 2; leaving it the same
     const bool want = mode == 2 || mode == 3, now = netplay::Active();
-    if (mode > 3 || (!want && !now) || (want && now && (mode == 2) == (netplay::Me() == 0))) return;
-    std::string spec = mode == 2 ? "host" : mode == 3 ? app::Get().join_ip : "";
-    if (mode == 3 && spec.empty()) {
-        nf::MenuHelp(ctx, player, "Set the host's address in the settings window (F1, General) first.");
-        return;
-    }
+    if (mode > 3 || (!want && !now) || (want && now && (mode == 2) == (netplay::Me() == 0))) return false;
+    if (mode == 3) return true;  // the host chosen on Network: Join's page (JoinNetwork)
+    std::string spec = mode == 2 ? "host" : "";
     SetEnvironmentVariableA("XBE_NETPLAY", spec.empty() ? nullptr : spec.c_str());
     LOGR("nightfire: Co-op: restarting %s", spec.empty() ? "without network play" : ("for network play: " + spec).c_str());
     kernel::Relaunch("Nightfire");
+    return false;
+}
+
+// ---- Network: Join: the hosts found and an address of four numbers (prefilled from the launcher's Host address,
+// else this PC's network with .1); A on a host, or on Join This Address, saves it as the Host address and restarts
+// joining it
+bool g_join_open = false;
+uint32_t g_join_player = 0;
+std::vector<netplay::FoundHost> g_join_shown;
+uint16_t g_join_port = netplay::kPort;  // the Host address's port, kept for an address typed here
+
+std::string HostLabel(const netplay::FoundHost& h) {
+    std::string name = h.name.substr(0, 14);
+    return name + " " + h.address + (h.port != netplay::kPort ? ":" + std::to_string(h.port) : "");
+}
+void ShowFoundHosts(X86Context& ctx, uint32_t player) {
+    g_join_shown = netplay::FindHosts();
+    static std::vector<std::string>* labels = new std::vector<std::string>;  // the guest's copies stay (MenuString)
+    for (uint32_t i = 0; i < kJoinHosts; i++) {
+        std::string t = i < g_join_shown.size() ? HostLabel(g_join_shown[i]) : i == 0 ? "Searching..." : "-";
+        size_t k = std::find(labels->begin(), labels->end(), t) - labels->begin();
+        if (k == labels->size()) labels->push_back(t);
+        Choice(ctx, player, kJoinHost0 + i, {{(*labels)[k].c_str(), 0}}, 0);
+    }
+}
+// an address's four numbers, false when it is not one ("a.b.c.d", a port after it kept apart)
+bool ParseAddress(const std::string& text, uint32_t (&octets)[4], uint16_t& port) {
+    unsigned a[4], p = netplay::kPort;
+    char tail = 0;
+    int n = std::sscanf(text.c_str(), "%u.%u.%u.%u:%u%c", &a[0], &a[1], &a[2], &a[3], &p, &tail);
+    if (n < 4 || n == 6 || p == 0 || p > 65535) return false;
+    for (int i = 0; i < 4; i++) {
+        if (a[i] > 255) return false;
+        octets[i] = a[i];
+    }
+    port = uint16_t(n == 5 ? p : netplay::kPort);
+    return true;
+}
+void EnterJoin(X86Context& ctx, uint32_t player) {
+    g_join_open = true, g_join_player = player;
+    ShowFoundHosts(ctx, player);
+    uint32_t oct[4] = {192, 168, 1, 1};
+    uint16_t port = netplay::kPort;
+    if (!ParseAddress(app::Get().join_ip, oct, port)) {
+        port = netplay::kPort;
+        std::vector<std::string> mine = netplay::LocalAddresses();
+        uint16_t unused = 0;
+        if (!mine.empty() && ParseAddress(mine[0], oct, unused)) oct[3] = 1;
+    }
+    g_join_port = port;
+    static std::vector<std::string> numbers;
+    static std::vector<std::pair<const char*, uint32_t>> items;
+    if (items.empty()) {
+        numbers.reserve(256);
+        for (uint32_t i = 0; i < 256; i++) numbers.push_back(std::to_string(i));
+        for (uint32_t i = 0; i < 256; i++) items.push_back({numbers[i].c_str(), i});
+    }
+    for (uint32_t i = 0; i < 4; i++) Choice(ctx, player, kJoinOctet0 + i, items, oct[i]);
+    Choice(ctx, player, kJoinAddress, {{"Join", 0}}, 0);
+    LOGR("nightfire: Network: Join opened: searching this network; address %u.%u.%u.%u:%u", oct[0], oct[1], oct[2], oct[3],
+         port);
+}
+void JoinNetwork(const std::string& spec) {
+    {
+        std::lock_guard<std::recursive_mutex> lock(app::UiLock());
+        app::Get().join_ip = spec;
+        app::Save();
+    }
+    netplay::StopFindingHosts();
+    g_join_open = false;
+    SetEnvironmentVariableA("XBE_NETPLAY", spec.c_str());
+    LOGR("nightfire: Co-op: restarting for network play: %s", spec.c_str());
+    kernel::Relaunch("Nightfire");
+}
+bool JoinActivate(X86Context& ctx, uint32_t player, uint32_t on) {
+    for (uint32_t i = 0; i < kJoinHosts; i++) {
+        if (on != Wid(kJoinHost0 + i)) continue;
+        if (i >= g_join_shown.size()) {
+            nf::MenuHelp(ctx, player, "No game found on this line yet. The host chooses Co-op, Network: Host and waits; "
+                                  "or type its address below.");
+            return true;
+        }
+        const netplay::FoundHost& h = g_join_shown[i];
+        JoinNetwork(h.address + (h.port != netplay::kPort ? ":" + std::to_string(h.port) : ""));
+        return true;
+    }
+    if (on == Wid(kJoinAddress)) {
+        uint32_t o[4];
+        for (uint32_t i = 0; i < 4; i++) o[i] = ChoiceValue(ctx, player, kJoinOctet0 + i);
+        std::string spec = std::to_string(o[0]) + "." + std::to_string(o[1]) + "." + std::to_string(o[2]) + "." +
+                           std::to_string(o[3]);
+        if (g_join_port != netplay::kPort) spec += ":" + std::to_string(g_join_port);
+        JoinNetwork(spec);
+        return true;
+    }
+    nf::MenuHelp(ctx, player, "Left and right set this number; A on Join This Address joins.");
+    return true;
 }
 
 void KeepMore(X86Context& ctx, uint32_t player) {
@@ -723,10 +979,14 @@ const std::vector<MenuRow>& RowsOf(uint32_t page) {
            : page == kKeysPage ? kKeysRows
            : page == kKeys2Page ? kKeys2Rows
            : page == kCoopPage ? kCoopRows
+           : page == kJoinNetPage ? kJoinRows
+           : page == kWheelPage ? kWheelRows1
+           : page == kWheel2Page ? kWheelRows2
+           : page == kWheel3Page ? kWheelRows3
                                : kRetroRows;
 }
 constexpr uint32_t kSharedSets[] = {kEnhPage, kToonPage, kRetroPage, kMorePage, kNetPage, kEffectsPage, kKeysPage,
-                                    kKeys2Page, kCoopPage};
+                                    kKeys2Page, kCoopPage, kWheelPage, kWheel2Page, kWheel3Page, kJoinNetPage};
 uint32_t g_style_rows = kEnhPage;  // the set the shared page was opened for
 uint32_t Wid(uint32_t id) {
     for (uint32_t set : kSharedSets)
@@ -744,10 +1004,12 @@ const MenuRow* SharedRow(uint32_t line) {
 // "Style Options"; the rows' are blanks as long as the longest label), rewritten for the set shown before the page
 // opens
 constexpr char kStyleTitle[] = "Style Options ", kMoreTitle[] = "More Settings ", kNetTitle[] = "Netplay       ",
-               kEffectsTitle[] = "Effects       ", kKeysTitle[] = "Key Bindings  ", kCoopTitle[] = "Co-op         ";
+               kEffectsTitle[] = "Effects       ", kKeysTitle[] = "Key Bindings  ", kCoopTitle[] = "Co-op         ",
+               kWheelTitle[] = "Steering Wheel", kJoinTitle[] = "Network: Join ";
 static_assert(sizeof(kStyleTitle) == sizeof(kMoreTitle) && sizeof(kStyleTitle) == sizeof(kNetTitle) &&
               sizeof(kStyleTitle) == sizeof(kEffectsTitle) && sizeof(kStyleTitle) == sizeof(kKeysTitle) &&
-              sizeof(kStyleTitle) == sizeof(kCoopTitle));
+              sizeof(kStyleTitle) == sizeof(kCoopTitle) && sizeof(kStyleTitle) == sizeof(kWheelTitle) &&
+              sizeof(kStyleTitle) == sizeof(kJoinTitle));
 constexpr size_t kLabelBytes = 32;
 const char* SharedLabel(uint32_t line) {
     static std::string labels[kSharedRows];
@@ -761,6 +1023,8 @@ void SetSharedTexts(uint32_t set) {
                 : set == kEffectsPage ? kEffectsTitle
                 : set == kKeysPage || set == kKeys2Page ? kKeysTitle
                 : set == kCoopPage    ? kCoopTitle
+                : set == kJoinNetPage ? kJoinTitle
+                : WheelSet(set)       ? kWheelTitle
                                       : kStyleTitle,
                 sizeof(kStyleTitle));
     g_style_rows = set;
@@ -944,6 +1208,244 @@ bool KeysActivate(X86Context& ctx, uint32_t player, uint32_t page_widget, uint32
     return true;
 }
 
+// ---- Steering Wheel
+struct WheelWait {
+    bool open = false;              // the shared page shows a wheel set (entered, not yet left)
+    uint32_t player = 0;
+    uint32_t focus_page = 0;
+    int focus_delay = 0;  // the guest finishes the activating row's focus after its handler returns
+    const WheelRow* row = nullptr;  // the binding waiting for its control (app::WheelDetectStart)
+} g_wheel;
+
+app::Settings::WheelBind* WheelBindOf(app::Settings& s, const WheelRow& r) {
+    if (r.kind == kWheelAxis) {
+        app::Settings::WheelBind* axes[] = {&s.wheel_steer, &s.wheel_throttle, &s.wheel_brake, &s.wheel_clutch};
+        return axes[std::clamp(r.what, 0, 3)];
+    }
+    if (r.kind == kWheelButton && r.what >= 0 && r.what < int(s.wheel_buttons.size())) return &s.wheel_buttons[size_t(r.what)];
+    if (r.kind == kWheelGear && r.what >= 0 && r.what < int(s.wheel_gears.size())) return &s.wheel_gears[size_t(r.what)];
+    return nullptr;
+}
+bool WheelBinding(const WheelRow& r) { return r.kind == kWheelAxis || r.kind == kWheelButton || r.kind == kWheelGear; }
+// a value row's setting (0, the steering's invert, is a flag)
+uint32_t* WheelValueOf(app::Settings& s, int what) {
+    switch (what) {
+        case 1: return &s.wheel_range;
+        case 2: return &s.wheel_lock;
+        case 3: return &s.wheel_deadzone;
+        case 4: return &s.ffb_strength;
+        case 5: return &s.ffb_road;
+        default: return nullptr;
+    }
+}
+uint32_t WheelValueNow(app::Settings& s, int what) {
+    if (what == 0) return s.wheel_steer.invert ? 1 : 0;
+    const uint32_t* v = WheelValueOf(s, what);
+    return v ? *v : 0;
+}
+uint32_t WheelStep(int what, uint32_t v) {  // the step shown for a value: the nearest
+    const std::vector<uint32_t>& steps = kWheelValues[what].steps;
+    uint32_t best = 0;
+    for (uint32_t i = 1; i < steps.size(); i++)
+        if (std::llabs(int64_t(steps[i]) - int64_t(v)) < std::llabs(int64_t(steps[best]) - int64_t(v))) best = i;
+    return best;
+}
+std::string WheelValueText(int what, uint32_t v) {
+    if (what == 0) return v ? "On" : "Off";
+    if (v == 0 && what >= 3) return "Off";
+    return std::to_string(v) + kWheelValues[what].text;
+}
+// a binding as the row shows it: "Wheel: X Axis", "Logitech G920: Button 3" (the device's name to a word that fits)
+std::string WheelBindShort(const app::Settings::WheelBind& b) {
+    if (b.axis < 0 && b.button < 0) return "None";
+    std::string dev = b.device.empty() ? "Wheel" : b.device;
+    if (dev.size() > 18) {
+        size_t cut = dev.rfind(' ', 18);
+        dev.resize(cut == std::string::npos || cut < 6 ? 18 : cut);
+    }
+    return dev + ": " + (b.axis >= 0 ? std::string(app::WheelAxisName(b.axis)) + " Axis" : "Button " + std::to_string(b.button));
+}
+bool NoWheel() { return input::Wheel().devices.empty(); }
+const char* WheelHelp(const WheelRow& r) { return WheelBinding(r) && NoWheel() ? kNoWheel : r.help; }
+
+void ShowWheelRow(X86Context& ctx, uint32_t player, const WheelRow& r) {
+    app::Settings s;
+    {
+        std::lock_guard<std::recursive_mutex> lock(app::UiLock());
+        s = app::Get();
+    }
+    if (r.kind == kWheelValue) {
+        const std::vector<uint32_t>& steps = kWheelValues[r.what].steps;
+        std::vector<std::string> texts;
+        for (uint32_t v : steps) texts.push_back(WheelValueText(r.what, v));
+        std::vector<std::pair<const char*, uint32_t>> items;
+        for (uint32_t i = 0; i < steps.size(); i++) items.push_back({texts[i].c_str(), i});
+        Choice(ctx, player, r.id, items, WheelStep(r.what, WheelValueNow(s, r.what)));
+    } else if (r.kind == kWheelGo) {
+        Choice(ctx, player, r.id, {{"Open", 0}}, 0);
+    } else if (r.kind == kWheelDo) {
+        Choice(ctx, player, r.id, {{r.what == 0 ? "Restore" : "Clear", 0}}, 0);
+    } else {
+        const app::Settings::WheelBind* b = WheelBindOf(s, r);
+        std::string t = g_wheel.row != &r            ? (b ? WheelBindShort(*b) : "None")
+                        : r.kind == kWheelGear       ? "Select the Gear..."
+                        : r.kind == kWheelButton     ? "Press a Button..."
+                        : r.what == 0                ? "Turn Right..."
+                                                     : "Press Fully...";
+        Choice(ctx, player, r.id, {{t.c_str(), 0}}, 0);
+    }
+}
+void EnterWheel(X86Context& ctx, uint32_t player) {
+    g_wheel.open = true, g_wheel.player = player;
+    for (const WheelRow& r : kWheelRows)
+        if (r.set == g_style_rows) ShowWheelRow(ctx, player, r);
+}
+void EndWheelWait(X86Context& ctx, uint32_t player, bool show) {
+    if (!g_wheel.row) return;
+    const WheelRow* r = g_wheel.row;
+    app::WheelDetectCancel();
+    g_wheel.row = nullptr;
+    if (show && r->set == g_style_rows) ShowWheelRow(ctx, player, *r);
+}
+// the other sets of the wheel's rows on the same page, the focus on its first row
+void SwitchWheel(X86Context& ctx, uint32_t player, uint32_t page_widget, uint32_t set) {
+    EndWheelWait(ctx, player, false);
+    SetSharedTexts(set);
+    ShowStyleRows(ctx, player);
+    EnterWheel(ctx, player);
+    g_wheel.focus_page = page_widget, g_wheel.focus_delay = 2;
+    nf::MenuFocus(ctx, player, page_widget, kShared0);
+    for (const WheelRow& r : kWheelRows)
+        if (r.set == set && r.slot == 0) nf::MenuHelp(ctx, player, WheelHelp(r));
+}
+bool WheelActivate(X86Context& ctx, uint32_t player, uint32_t page_widget, uint32_t on) {
+    const WheelRow* row = nullptr;
+    for (const WheelRow& r : kWheelRows)
+        if (r.set == g_style_rows && kShared0 + uint32_t(r.slot) == on) row = &r;
+    if (!row || row->kind == kWheelValue) return true;
+    if (row->kind == kWheelGo) {
+        SwitchWheel(ctx, player, page_widget, uint32_t(row->what));
+        return true;
+    }
+    if (row->kind == kWheelDo) {
+        EndWheelWait(ctx, player, true);
+        {
+            std::lock_guard<std::recursive_mutex> lock(app::UiLock());
+            app::Settings& s = app::Get();
+            if (row->what == 0)
+                for (int c = 0; c < input::kControls && c < int(s.wheel_buttons.size()); c++)
+                    s.wheel_buttons[size_t(c)] = {.button = app::DefaultWheelButton(c)};
+            else
+                for (app::Settings::WheelBind& g : s.wheel_gears) g = {};
+            app::Save();
+        }
+        input::WheelSetup();
+        EnterWheel(ctx, player);
+        nf::MenuHelp(ctx, player, row->what == 0 ? "The buttons are a Logitech G920 or G923's." : "No gear is bound.");
+        LOGR("nightfire: Steering Wheel: %s", row->what == 0 ? "the default buttons" : "no shifter");
+        return true;
+    }
+    if (g_wheel.row == row) {  // A again: unbound
+        EndWheelWait(ctx, player, false);
+        {
+            std::lock_guard<std::recursive_mutex> lock(app::UiLock());
+            if (app::Settings::WheelBind* b = WheelBindOf(app::Get(), *row)) *b = {};
+            app::Save();
+        }
+        input::WheelSetup();
+        ShowWheelRow(ctx, player, *row);
+        nf::MenuHelp(ctx, player, "Unbound.");
+        LOGR("nightfire: Steering Wheel: %s unbound", row->label);
+        return true;
+    }
+    EndWheelWait(ctx, player, true);
+    if (NoWheel()) {
+        nf::MenuHelp(ctx, player, kNoWheel);
+        return true;
+    }
+    {
+        std::lock_guard<std::recursive_mutex> lock(app::UiLock());
+        app::Settings::WheelBind* b = WheelBindOf(app::Get(), *row);
+        if (!b) return true;
+        app::WheelDetectStart(row->kind == kWheelButton || row->kind == kWheelGear ? app::WheelDetect::Button
+                              : row->what == 0                                     ? app::WheelDetect::Steer
+                                                                                   : app::WheelDetect::Pedal,
+                              *b);
+    }
+    g_wheel.row = row;
+    ShowWheelRow(ctx, player, *row);
+    nf::MenuHelp(ctx, player, row->kind == kWheelGear     ? "Put the shifter in this gear. A again: unbound."
+                              : row->kind == kWheelButton ? "Press the button on the wheel or button box. A again: unbound."
+                              : row->what == 0            ? "Turn the wheel to the right. A again: unbound."
+                                                          : "Press the pedal all the way. A again: unbound.");
+    return true;
+}
+const char* GraphicsMenuHelp(uint32_t page, uint32_t id) {
+    if (page == kStylePage && id >= kShared0 && id < kShared0 + kSharedRows) {
+        if (WheelSet(g_style_rows)) {
+            for (const WheelRow& r : kWheelRows)
+                if (r.set == g_style_rows && kShared0 + uint32_t(r.slot) == id)
+                    return g_wheel.row == &r ? "Waiting for the control. A again: unbound." : WheelHelp(r);
+        }
+        if (const MenuRow* r = SharedRow(id - kShared0)) return r->help;
+    }
+    if (page == kGfxPage)
+        for (const MenuRow& r : kGfxRows)
+            if (r.id == id) return r.help;
+    return "";
+}
+
+// each frame (nf::LanFrame) while a wheel set is shown: the control taken for the binding waiting, the choices
+// saved as they change
+void WheelPageFrame(X86Context& ctx) {
+    if (!g_wheel.open || !WheelSet(g_style_rows)) return;
+    const uint32_t eax = ctx.eax, player = g_wheel.player;
+    if (g_wheel.focus_delay && --g_wheel.focus_delay == 0)
+        nf::MenuFocus(ctx, player, g_wheel.focus_page, kShared0);
+    if (g_wheel.row && app::WheelDetectPoll()) {
+        const WheelRow& r = *g_wheel.row;
+        g_wheel.row = nullptr;
+        for (const WheelRow& o : kWheelRows)  // the steering's direction sets Invert Steering
+            if (o.set == g_style_rows && (&o == &r || (r.kind == kWheelAxis && r.what == 0 && o.kind == kWheelValue && o.what == 0)))
+                ShowWheelRow(ctx, player, o);
+        nf::MenuHelp(ctx, player, r.help);
+        app::Settings s;
+        {
+            std::lock_guard<std::recursive_mutex> lock(app::UiLock());
+            s = app::Get();
+        }
+        if (const app::Settings::WheelBind* b = WheelBindOf(s, r))
+            LOGR("nightfire: Steering Wheel: %s is %s", r.label, app::WheelBindText(*b).c_str());
+    } else if (g_wheel.row && app::WheelDetecting() == app::WheelDetect::None) {
+        EndWheelWait(ctx, player, true);  // ended elsewhere
+    }
+    bool changed = false;
+    for (const WheelRow& r : kWheelRows) {
+        if (r.set != g_style_rows || r.kind != kWheelValue) continue;
+        uint32_t i = ChoiceValue(ctx, player, r.id);
+        const std::vector<uint32_t>& steps = kWheelValues[r.what].steps;
+        if (i >= steps.size()) continue;
+        std::lock_guard<std::recursive_mutex> lock(app::UiLock());
+        app::Settings& s = app::Get();
+        if (WheelStep(r.what, WheelValueNow(s, r.what)) == i) continue;
+        if (r.what == 0) s.wheel_steer.invert = steps[i] != 0;
+        else if (uint32_t* v = WheelValueOf(s, r.what)) *v = steps[i];
+        changed = true;
+    }
+    if (changed) {
+        {
+            std::lock_guard<std::recursive_mutex> lock(app::UiLock());
+            app::Save();
+            const app::Settings& s = app::Get();
+            LOGR("nightfire: Steering Wheel: invert %d, rotation %u, full steering at %u, dead zone %u%%, force feedback "
+                 "%u%%, road %u%%",
+                 s.wheel_steer.invert, s.wheel_range, s.wheel_lock, s.wheel_deadzone, s.ffb_strength, s.ffb_road);
+        }
+        input::WheelSetup();
+    }
+    ctx.eax = eax;
+}
+
 void OpenMorePage(X86Context& ctx, uint32_t player) {
     SetSharedTexts(kMorePage);
     MenuGoTo(ctx, player, kStylePage);
@@ -988,6 +1490,7 @@ void KeysPageFrame(X86Context& ctx) {
 // each frame (nf::LanFrame): the games found shown as they come and go, outside the menu's update
 void NetplayPageFrame(X86Context& ctx) {
     KeysPageFrame(ctx);
+    WheelPageFrame(ctx);
     if (!g_net_open) return;
     std::vector<nf::LanServer> now = nf::NetServers();
     bool same = now.size() == g_net_shown.size();
@@ -1003,6 +1506,7 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
     if (IsPage(id)) {
         if (msg == 0x4D && id == kStylePage && g_net_open) nf::NetSearch(false), g_net_open = false;
         if (msg == 0x4D && id == kStylePage) EndCapture();
+        if (msg == 0x4D && id == kStylePage) EndWheelWait(ctx, player, false), g_wheel.open = false;
         if (msg == 0x4C) {
             if (id == kGfxPage) {
                 EnterGraphics(ctx, player);
@@ -1013,12 +1517,18 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
                 else if (g_style_rows == kEffectsPage) EnterEffects(ctx, player);
                 else if (g_style_rows == kKeysPage || g_style_rows == kKeys2Page) EnterKeys(ctx, player);
                 else if (g_style_rows == kCoopPage) EnterCoop(ctx, player);
+                else if (WheelSet(g_style_rows)) EnterWheel(ctx, player);
                 else EnterStyle(ctx, player, g_style_rows);
             }
             uint32_t first = kGfxRows[0].id;  // the first row shown (back gives the row it kept after)
             for (uint32_t line = kSharedRows; id != kGfxPage && line-- > 0;)
                 if (SharedRow(line)) first = kShared0 + line;
             MenuFocus(ctx, player, widget, first);
+            if (id == kStylePage && WheelSet(g_style_rows))
+                g_wheel.focus_page = widget, g_wheel.focus_delay = 2;
+            if (id == kStylePage && WheelSet(g_style_rows))  // with no wheel plugged in, the first row says so
+                for (const WheelRow& r : kWheelRows)
+                    if (r.set == g_style_rows && kShared0 + uint32_t(r.slot) == first) MenuHelp(ctx, player, WheelHelp(r));
         }
         if (msg == 0x4B) {
             uint32_t on = arg ? R32(arg + 0x18) : 0;
@@ -1053,6 +1563,7 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
             if (id == kStylePage && g_style_rows == kNetPage) return NetActivate(ctx, player, on);
             if (id == kStylePage && (g_style_rows == kKeysPage || g_style_rows == kKeys2Page))
                 return KeysActivate(ctx, player, widget, on);
+            if (id == kStylePage && WheelSet(g_style_rows)) return WheelActivate(ctx, player, widget, on);
             if (id == kStylePage && g_style_rows == kMorePage && on == Wid(kCoop)) {
                 KeepMore(ctx, player);
                 OpenCoopPage(ctx, player);
@@ -1066,6 +1577,14 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
                 LOGR("nightfire: Key Bindings opened");
                 return true;
             }
+            if (id == kStylePage && g_style_rows == kMorePage && on == Wid(kWheel)) {
+                // Steering Wheel: More Settings kept, then the wheel's rows on the same page, as Key Bindings
+                KeepMore(ctx, player);
+                SetSharedTexts(kWheelPage);
+                MenuGoTo(ctx, player, kStylePage);
+                LOGR("nightfire: Steering Wheel opened (%zu devices)", input::Wheel().devices.size());
+                return true;
+            }
             if (id == kGfxPage) KeepGraphics(ctx, player);
             else if (g_style_rows == kMorePage) KeepMore(ctx, player);
             else if (g_style_rows == kEffectsPage) KeepEffects(ctx, player);
@@ -1077,6 +1596,12 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
     }
     if (msg == 0x4E) {  // focus gained: the row's help line
         if (id >= kShared0 && id < kShared0 + kSharedRows) {
+            if (WheelSet(g_style_rows)) {
+                for (const WheelRow& r : kWheelRows)
+                    if (r.set == g_style_rows && kShared0 + uint32_t(r.slot) == id)
+                        MenuHelp(ctx, player, g_wheel.row == &r ? "Waiting for the control. A again: unbound." : WheelHelp(r));
+                return false;
+            }
             if (const MenuRow* r = SharedRow(id - kShared0)) MenuHelp(ctx, player, r->help);
             return false;
         }

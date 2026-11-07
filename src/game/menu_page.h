@@ -50,5 +50,6 @@ void OpenNetplayPage(X86Context& ctx, uint32_t player);  // the main menu's Netp
 void OpenCoopPage(X86Context& ctx, uint32_t player);     // Co-op (single player's, More Settings')
 void NetplayPageFrame(X86Context& ctx);                  // each frame: the games found  // Settings' More Settings (the style page's last row set)
 bool MenuRowHidden(uint32_t page, uint32_t id);  // a row the page has hidden (the style page's other styles')
+const char* GraphicsMenuHelp(uint32_t page, uint32_t id);  // fallback when the guest page has no help widget
 
 }  // namespace nf

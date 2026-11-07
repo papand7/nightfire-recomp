@@ -26,7 +26,7 @@
 
 namespace nf {
 
-bool modern_menus = false;
+bool modern_menus = true;  // the default; Classic in the launcher or settings.toml
 
 namespace {
 std::mutex g_lock;
@@ -118,6 +118,21 @@ void ModernMenuFonts(void*) {
 #endif
 }
 
+// the game's button marks as keys: ~A Enter, ~B Esc, ~V up / down, ~H left / right, others as their letter
+std::string Keys(const std::string& t) {
+    std::string o;
+    for (size_t i = 0; i < t.size(); i++) {
+        char c = t[i];
+        if (c != '~' || i + 1 >= t.size()) {
+            o += c;
+            continue;
+        }
+        char k = t[++i];
+        o += k == 'A' ? "[Enter]" : k == 'B' ? "[Esc]" : k == 'V' ? "[Up/Down]" : k == 'H' ? "[Left/Right]" : std::string("[") + k + "]";
+    }
+    return o;
+}
+
 // GameInfo::ui: the page drawn, the mouse's clicks queued for the game's thread
 void ModernMenuUi(double) {
 #ifdef _WIN32
@@ -156,8 +171,92 @@ void ModernMenuUi(double) {
     for (char& c : t) c = char(std::toupper(static_cast<unsigned char>(c)));
     dl->AddText(title, ft, {x0, 116 * s}, kWhite, t.c_str());
 
+    // tabs (the pause screen's): pills in a row, arrows either side for left / right
+    int tab_click = 0;
+    if (!page.tabs.empty()) {
+        float tx = x0 + 44 * s, ty2 = 212 * s, th = 44 * s;
+        ImVec2 mp = io.MousePos;
+        auto arrow = [&](float x, bool right) {
+            ImVec2 a{x, ty2}, b{x + 34 * s, ty2 + th};
+            bool in = mp.x >= a.x && mp.x < b.x && mp.y >= a.y && mp.y < b.y;
+            float cy = ty2 + th * 0.5f, cx = x + 17 * s, d = right ? 1.0f : -1.0f;
+            dl->AddTriangleFilled({cx + 8 * s * d, cy}, {cx - 5 * s * d, cy - 10 * s}, {cx - 5 * s * d, cy + 10 * s},
+                                  in ? kWhite : kCyan);
+            return in;
+        };
+        bool left_in = arrow(x0, false);
+        // the current tab: an electric pill sliding (eased) from the last one's place and width to its own
+        static float pill_x = -1, pill_w = 0;
+        std::vector<std::pair<float, float>> at;
+        for (const std::string& t : page.tabs) {
+            ImVec2 ts = small->CalcTextSizeA(fs, 1e9f, 0, t.c_str());
+            at.push_back({tx, ts.x + 36 * s});
+            dl->AddRectFilled({tx, ty2}, {tx + ts.x + 36 * s, ty2 + th}, IM_COL32(20, 50, 120, 140), th * 0.5f);
+            tx += ts.x + 48 * s;
+        }
+        if (page.tab >= 0 && page.tab < int(at.size())) {
+            const float e = 1 - std::exp(-io.DeltaTime * 22);
+            if (pill_x < 0) pill_x = at[page.tab].first, pill_w = at[page.tab].second;
+            pill_x = Lerp(pill_x, at[page.tab].first, e), pill_w = Lerp(pill_w, at[page.tab].second, e);
+            dl->AddRectFilled({pill_x, ty2}, {pill_x + pill_w, ty2 + th}, IM_COL32(40, 120, 255, 235), th * 0.5f);
+            dl->AddRect({pill_x, ty2}, {pill_x + pill_w, ty2 + th}, IM_COL32(120, 210, 255, 220), th * 0.5f, 0, 2 * s);
+        } else {
+            pill_x = -1;
+        }
+        for (size_t k = 0; k < page.tabs.size(); k++) {
+            const bool cur = int(k) == page.tab;
+            dl->AddText(small, fs, {at[k].first + 18 * s, ty2 + (th - fs) * 0.5f},
+                        cur ? kWhite : page.tab >= 0 ? IM_COL32(150, 180, 225, 200) : kIce, page.tabs[k].c_str());
+        }
+        bool right_in = arrow(tx, true);
+        tab_click = left_in ? -1 : right_in ? 1 : 0;
+    }
+    // a tab changed: the page's content slides up 20 px and fades in over 0.15 s (its vertices moved and faded below)
+    static int last_tab = -1;
+    static uint32_t last_tab_page = 0;
+    static float content_t = 1;
+    if (page.tab != last_tab || page.page != last_tab_page) {
+        if (page.page == last_tab_page && last_tab >= 0 && page.tab >= 0) content_t = 0;
+        last_tab = page.tab, last_tab_page = page.page;
+    }
+    content_t = std::min(1.0f, content_t + io.DeltaTime / 0.15f);
+    const int content_from = dl->VtxBuffer.Size;
+    // a page of text (objectives, a score, a message box's words): its lines under the title, a table's (a tab
+    // between a line's label and its value) values on the right; the rows, if any, under them
+    const float top0 = (page.tabs.empty() ? 250 : 290) * s, bottom = H - 190 * s;
+    float ty3 = top0;
+    for (const std::string& t0 : page.texts) {
+        const std::string t = Keys(t0);
+        if (t.find('\t') != std::string::npos) {  // a table's line: the first column left, the others right aligned
+            std::vector<std::string> col;
+            for (size_t a = 0, b; a <= t.size(); a = b + 1) {
+                b = t.find('\t', a);
+                if (b == std::string::npos) b = t.size();
+                col.push_back(t.substr(a, b - a));
+            }
+            // the first line a header when it is words alone (the score's "Category  Current  Target")
+            const bool head = &t0 == &page.texts.front() && t0.find('~') == std::string::npos &&
+                              std::none_of(t0.begin(), t0.end(), [](char c) { return c >= '0' && c <= '9'; });
+            const float lh = fb * 0.72f, cw = 200 * s;
+            dl->AddRectFilled({x0, ty3 - 5 * s}, {x0 + rw, ty3 + lh + 5 * s},
+                              head ? IM_COL32(20, 50, 120, 170) : IM_COL32(9, 24, 60, 120), 8 * s);
+            dl->AddText(body, lh, {x0 + 20 * s, ty3}, head ? kCyan : kIce, col[0].c_str());
+            for (size_t k = 1; k < col.size(); k++) {
+                ImVec2 vs = body->CalcTextSizeA(lh, 1e9f, 0, col[k].c_str());
+                const float right = x0 + rw - 20 * s - float(col.size() - 1 - k) * cw;
+                const float x = col.size() == 2 ? x0 + rw * 0.5f + 10 * s : right - vs.x;
+                dl->AddText(body, lh, {x, ty3}, head ? kCyan : col.size() == 2 ? kIce : kWhite, col[k].c_str());
+            }
+            ty3 += lh + 16 * s;
+        } else {
+            ImVec2 ts = body->CalcTextSizeA(fb * 0.8f, 1e9f, rw, t.c_str());
+            dl->AddText(body, fb * 0.8f, {x0 + 8 * s, ty3}, kIce, t.c_str(), nullptr, rw);
+            ty3 += ts.y + 14 * s;
+        }
+        if (ty3 > bottom) break;
+    }
     // the rows: one under another, the focused one kept in view
-    const float top = 250 * s, rh = 70 * s, gap = 12 * s, bottom = H - 190 * s;
+    const float top = page.texts.empty() ? top0 : std::min(ty3 + 26 * s, bottom - 70 * s), rh = 70 * s, gap = 12 * s;
     const int n = int(page.rows.size());
     static float scroll = 0, glow_y = -1;
     static uint32_t last_page = 0;
@@ -192,7 +291,8 @@ void ModernMenuUi(double) {
         }
         ImU32 tc = r.disabled ? IM_COL32(140, 160, 190, 160) : kIce;
         float ty = y + (rh - fb) * 0.5f;
-        dl->AddText(body, fb, {a.x + 28 * s, ty}, r.focused ? kWhite : tc, r.label.c_str());
+        const std::string label = Keys(r.label);
+        dl->AddText(body, fb, {a.x + 28 * s, ty}, r.focused ? kWhite : tc, label.c_str());
         // a choice's, list's or slider's value: between arrows on the right
         if (r.kind == kModernChoice || r.kind == kModernSlider || r.kind == kModernList) {
             std::string v = r.value;
@@ -226,6 +326,15 @@ void ModernMenuUi(double) {
         dl->AddRectFilled({a.x, a.y + 10 * s}, {a.x + 6 * s, b.y - 10 * s}, kCyan, 3 * s);
     }
     dl->PopClipRect();
+    if (content_t < 1) {
+        const float ct = 1 - (1 - content_t) * (1 - content_t), dy = (1 - ct) * 20 * s;  // eased out
+        for (int k = content_from; k < dl->VtxBuffer.Size; k++) {
+            ImDrawVert& v = dl->VtxBuffer[k];
+            v.pos.y += dy;
+            const uint32_t a = (v.col >> IM_COL32_A_SHIFT) & 0xFF;
+            v.col = (v.col & ~IM_COL32_A_MASK) | (uint32_t(float(a) * ct) << IM_COL32_A_SHIFT);
+        }
+    }
     // more above or below: a fade
     if (scroll > 1) dl->AddRectFilledMultiColor({0, top - 4 * s}, {pw, top + 40 * s}, IM_COL32(5, 14, 36, 230),
                                                 IM_COL32(5, 14, 36, 230), IM_COL32(5, 14, 36, 0), IM_COL32(5, 14, 36, 0));
@@ -233,6 +342,18 @@ void ModernMenuUi(double) {
         dl->AddRectFilledMultiColor({0, bottom - 40 * s}, {pw, bottom + 4 * s}, IM_COL32(5, 14, 36, 0),
                                     IM_COL32(5, 14, 36, 0), IM_COL32(5, 14, 36, 230), IM_COL32(5, 14, 36, 230));
 
+    // the split screen's agents: four cards on the right, the first the keyboard's and controller 1's
+    if (page.agents.size() >= 2) {
+        const float cw = 330 * s, ch = 150 * s, gx = pw + 40 * s, gy = top;
+        for (int k = 0; k < int(page.agents.size()) && k < 4; k++) {
+            ImVec2 a{gx + (k % 2) * (cw + 24 * s), gy + (k / 2) * (ch + 24 * s)}, b{a.x + cw, a.y + ch};
+            dl->AddRectFilled(a, b, k == 0 ? IM_COL32(20, 60, 150, 220) : IM_COL32(8, 22, 56, 200), 14 * s);
+            dl->AddRect(a, b, k == 0 ? IM_COL32(120, 210, 255, 220) : IM_COL32(60, 110, 200, 120), 14 * s, 0, 2 * s);
+            dl->AddText(body, fb * 0.9f, {a.x + 22 * s, a.y + 18 * s}, kWhite, page.agents[k].c_str());
+            const char* st = k == 0 ? (page.rows.empty() ? "Press Enter to join" : "Joined") : "Connect a controller";
+            dl->AddText(small, fs, {a.x + 22 * s, a.y + ch - 50 * s}, k == 0 ? kCyan : IM_COL32(140, 165, 205, 200), st);
+        }
+    }
     // the help line
     if (!page.help.empty())
         dl->AddText(small, fs, {x0, bottom + 30 * s}, IM_COL32(170, 200, 240, 230), page.help.c_str(), nullptr, rw);
@@ -243,16 +364,7 @@ void ModernMenuUi(double) {
     dl->AddRectFilled(ba, bb, on_back ? IM_COL32(40, 120, 255, 200) : IM_COL32(20, 50, 120, 170), 26 * s);
     dl->AddText(body, fb * 0.8f, {ba.x + 30 * s, ba.y + 10 * s}, kWhite, "<  Back");
     // the page's own button line, its marks as keys (~A Enter, ~B Esc, ~V up / down, ~H left / right), else ours
-    std::string prompt;
-    for (size_t i = 0; i < page.prompt.size(); i++) {
-        char c = page.prompt[i];
-        if (c != '~' || i + 1 >= page.prompt.size()) {
-            prompt += c;
-            continue;
-        }
-        char k = page.prompt[++i];
-        prompt += k == 'A' ? "[Enter]" : k == 'B' ? "[Esc]" : k == 'V' ? "[Up/Down]" : k == 'H' ? "[Left/Right]" : std::string("[") + k + "]";
-    }
+    std::string prompt = Keys(page.prompt);
     const char* hint = !prompt.empty() ? prompt.c_str() : "[Enter] Select     [Esc] Back     [Left/Right] Change     [Wheel] Scroll";
     ImVec2 hs = small->CalcTextSizeA(fs, 1e9f, 0, hint);
     dl->AddText(small, fs, {W - hs.x - 64 * s, H - 62 * s}, IM_COL32(150, 180, 230, 200), hint);
@@ -275,6 +387,10 @@ void ModernMenuUi(double) {
     was_held = held;
     const bool left = pressed & 1, right = pressed & 2;
     if (over_ui) return;
+    if (left && tab_click) {
+        g_actions.push_back({0, tab_click < 0 ? input::kLeft : input::kRight, page.page, false, 0});
+        return;
+    }
     if (right || (on_back && left)) {
         g_actions.push_back({0, input::kB, page.page, false, 0});
         return;

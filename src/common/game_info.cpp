@@ -276,5 +276,6 @@ const app::GameInfo app::kGame = {
     .menu_up = nf::MenuUp,                // the menus: the cursor shown, the mouse a pointer (src/common/menu_mouse.cpp)
     .menu_cursor = nf::MenuCursor,        // its picture: the menus' orange pointer
     .vulkan_only = true,                  // the styles and effects are Vulkan's: no Renderer choice
+    .settings_window = false,             // no F1 window: the settings are in the game's menus and the launcher
     .view_turn = nf::ViewTurn,            // smooth turning's in-between frames (src/game/mouse.cpp)
 };
