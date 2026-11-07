@@ -31,6 +31,23 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Contact shadows, floor reflections, smooth turning with HDR
+
+- Contact shadows (GraphicsStyle::contact_shadows; Effects > Contact Shadows; not under ray traced lighting): from
+  each world pixel a 12-step, 0.35 m march toward the world's up in the view (ViewUp, from rt_cams_) through the kept
+  depth; something within a thickness above shades it 40%, less the farther. XBE_CONTACT_TEST=1 the shadows alone:
+  under branches, the truck, ledges; flat ground clear.
+- Floor reflections (GraphicsStyle::floor_reflections 1 ice, 2 also polished floors; Effects > Floor Reflections):
+  gpu::TextureIce (opaque, bright, bluish, smooth) and ground detail's concrete reflect 0.5 / 0.2, written to the
+  mask negative; the reflection passes (SSR, ray traced) keep them only where the surface faces up (the view's up in
+  a free constant). Checked in 0x7000027's garage: the far concrete takes a faint reflection of the shutter.
+- Smooth turning with an HDR chain: its own copy (Target::warp_copy, the gun in its alpha) instead of hdr_scene; HDR's
+  copy turned alongside (kWarpHlsl warphdr), HdrCompose / HdrOut with both in place. In-between frames seen running;
+  their brightness against the real frames not yet checked (another program held the GPU at 99%).
+- The shared settings page has 14 rows (Effects needed 14); checked on screen.
+- .local/vk scripts now stop only this repo's copies of the game (they stopped any NightFire).
+
+
 ### 2026-11-07 - Volumetric light's steps by the air's brightness
 
 - The volumetric march takes 12 steps by day, fewer as the air dims (round(12 x sqrt(strength)), 6 to 12; The

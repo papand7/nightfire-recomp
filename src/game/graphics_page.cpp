@@ -49,7 +49,7 @@ constexpr uint32_t kQuality = 0x1000FC21, kStyle = 0x1000FC22, kStyleOptions = 0
                    kReflect = 0x1000FC2D, kParticles = 0x1000FC2E, kMaterials = 0x1000FC2F,
                    kLighting = 0x1000FC30, kEffects = 0x1000FC38, kRayTracing = 0x1000FC39,
                    kDof = 0x1000FC3A, kBlood = 0x1000FC3B, kHdr = 0x1000FC3C, kToneHdr = 0x1000FC3D,
-                   kMotion2 = 0x1000FC3E, kSmoothTurn = 0x1000FC3F;
+                   kMotion2 = 0x1000FC3E, kSmoothTurn = 0x1000FC3F, kContact = 0x1000FC40, kFloorRefl = 0x1000FC5F;
 // the style pages' rows
 constexpr uint32_t kExposure = 0x1000FC31, kTonemap = 0x1000FC32, kContrast = 0x1000FC33, kSaturation = 0x1000FC34,
                    kVignette = 0x1000FC35, kGrain = 0x1000FC36, kSceneSharpen = 0x1000FC37;
@@ -88,7 +88,9 @@ const std::vector<MenuRow> kEffectsRows = {
     {kBlood, nf::kMenuChoice, "Blood", "Blood where your shots hit, and at your view's edges when you are hit. Every style.", 8},
     {kToneHdr, nf::kMenuChoice, "Tone Mapping", "AgX or ACES: bright light rolls off instead of clipping to white. Auto: the exposure adapts.", 9},
     {kMotion2, nf::kMenuChoice, "Motion Blur", "A little blur as you turn and move. The gun and HUD stay sharp.", 10},
-    {kSmoothTurn, nf::kMenuChoice, "Smooth Turning", "A frame in between, turned by the mouse: 120 Hz turning on a 120 Hz+ screen (SDR).", 11},
+    {kSmoothTurn, nf::kMenuChoice, "Smooth Turning", "A frame in between, turned by the mouse: 120 Hz turning on a 120 Hz+ screen.", 11},
+    {kContact, nf::kMenuChoice, "Contact Shadows", "Short, crisp shadows under props, feet and ledges (without ray traced lighting).", 12},
+    {kFloorRefl, nf::kMenuChoice, "Floor Reflections", "Ice, and polished floors, reflect where they face up (with Reflections on).", 13},
 };
 const std::vector<MenuRow> kEnhRows = {
     {kExposure, nf::kMenuChoice, "Exposure", "How bright the scene is drawn.", 0},
@@ -197,10 +199,10 @@ uint32_t Nearest(const Options& o, float v) {
         if (std::fabs(o[i].value - v) < std::fabs(o[best].value - v)) best = i;
     return best;
 }
-// the shared page (Style Options, More Settings): twelve rows of its own, kShared0 + the line, each set's rows drawn
+// the shared page (Style Options, More Settings): fourteen rows of its own, kShared0 + the line, each set's rows drawn
 // on them by their slot; the page's widgets stay as few as the menu builder takes (a page of every set's rows, 28,
 // crashed it as the front end loaded). A set's row id stands for the shared row on its line
-constexpr uint32_t kShared0 = 0x1000FC71, kSharedRows = 12;
+constexpr uint32_t kShared0 = 0x1000FC71, kSharedRows = 14;
 uint32_t Wid(uint32_t id);
 void Choice(X86Context& ctx, uint32_t player, uint32_t id, const std::vector<std::pair<const char*, uint32_t>>& items,
             uint32_t value) {
@@ -370,6 +372,7 @@ void KeepGraphics(X86Context& ctx, uint32_t player) {
             st.hdr_tonemap = keep.hdr_tonemap, st.auto_exposure = keep.auto_exposure;
             st.motion_blur = keep.motion_blur, st.motion_blur_strength = keep.motion_blur_strength;
             st.smooth_turn = keep.smooth_turn;
+            st.contact_shadows = keep.contact_shadows, st.floor_reflections = keep.floor_reflections;
         }
         st.texture_pack = ReadOption(ctx, player, kPack, kOffOn) > 0;
     }
@@ -427,7 +430,7 @@ void RestoreDefaults(X86Context& ctx, uint32_t player) {
 void EnterEffects(X86Context& ctx, uint32_t player) {
     ShowOptions(ctx, player, kBlood, kOffOn, Current().blood ? 1.0f : 0.0f);  // drawn over the picture: any renderer
     if (!Vulkan()) {
-        for (uint32_t id : {kAo, kBloom, kReflect, kParticles, kMaterials, kLighting, kRayTracing, kDof, kToneHdr, kMotion2, kSmoothTurn})
+        for (uint32_t id : {kAo, kBloom, kReflect, kParticles, kMaterials, kLighting, kRayTracing, kDof, kToneHdr, kMotion2, kSmoothTurn, kContact, kFloorRefl})
             Choice(ctx, player, id, {{"Needs Vulkan", 0xFF}}, 0xFF);
         return;
     }
@@ -463,6 +466,8 @@ void EnterEffects(X86Context& ctx, uint32_t player) {
            uint32_t(st.hdr_tonemap) | (st.hdr_tonemap && st.auto_exposure ? 4u : 0u));
     ShowOptions(ctx, player, kMotion2, kOffOn, st.motion_blur ? 1.0f : 0.0f);
     ShowOptions(ctx, player, kSmoothTurn, kOffOn, st.smooth_turn ? 1.0f : 0.0f);
+    ShowOptions(ctx, player, kContact, kOffOn, st.contact_shadows ? 1.0f : 0.0f);
+    Choice(ctx, player, kFloorRefl, {{"Off", 0}, {"Ice", 1}, {"Ice + Polished Floors", 2}}, uint32_t(st.floor_reflections));
 }
 void KeepEffects(X86Context& ctx, uint32_t player) {
     gpu::GraphicsStyle st = Current();
@@ -502,6 +507,8 @@ void KeepEffects(X86Context& ctx, uint32_t player) {
         st.hdr_tonemap = int(tm & 3), st.auto_exposure = (tm & 4) != 0;
     st.motion_blur = ReadOption(ctx, player, kMotion2, kOffOn) > 0;
     st.smooth_turn = ReadOption(ctx, player, kSmoothTurn, kOffOn) > 0;
+    st.contact_shadows = ReadOption(ctx, player, kContact, kOffOn) > 0;
+    if (uint32_t f = ChoiceValue(ctx, player, kFloorRefl); f <= 2) st.floor_reflections = int(f);
     {
         // AO and bloom are the quality preset's: a change here can make it Custom
         std::lock_guard<std::recursive_mutex> lock(app::UiLock());
