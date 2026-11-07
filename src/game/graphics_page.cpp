@@ -109,7 +109,7 @@ const std::vector<MenuRow> kEffectsRows = {
     {kMotion2, nf::kMenuChoice, "Motion Blur", "A little blur as you turn and move. The gun and HUD stay sharp.", 10},
     {kSmoothTurn, nf::kMenuChoice, "Smooth Turning", "A frame in between, turned by the mouse: 120 Hz turning on a 120 Hz+ screen.", 11},
     {kContact, nf::kMenuChoice, "Contact Shadows", "Short, crisp shadows under props, feet and ledges (without ray traced lighting).", 12},
-    {kFloorRefl, nf::kMenuChoice, "Water / Floors", "Water: ripples, reflections, depth tint and foam. Ice and polished floors reflect too. Needs Reflections on.", 13},
+    {kFloorRefl, nf::kMenuChoice, "Water / Floors", "Water: ripples, reflections, depth tint and foam. Ice and polished floors need Reflections on.", 13},
 };
 const std::vector<MenuRow> kEnhRows = {
     {kExposure, nf::kMenuChoice, "Exposure", "How bright the scene is drawn.", 0},

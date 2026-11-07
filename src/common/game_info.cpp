@@ -1,7 +1,9 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdint>
 #include <cstdlib>
+#include <iterator>
 #include <string>
 
 #ifdef _WIN32
@@ -12,6 +14,7 @@
 #include "core/input.h"
 #include "core/log.h"
 #include "core/netplay.h"
+#include "gpu/style.h"
 #include "nightfire.h"
 
 namespace nf {
@@ -73,6 +76,13 @@ void Init() {
         if (std::string e = achievements::Check(d.condition); !e.empty())
             LOGE("nightfire: achievement %s: %s", d.id, e.c_str());
     netplay::SetStateHash(nf::NetStateHash);
+    // the water shader's surfaces (texture pack keys; found with XBE_WATER_TEST): Phoenix Base's pit, a 64x64 grey
+    // ripple animated through 12 pictures (more frames are followed as they change in place)
+    static constexpr uint64_t kWater[] = {
+        0x6fc863232e14d8ee, 0x422cf5356530ab90, 0x040dc3feb5fb3a5b, 0xc970eb5147f9ca28,
+        0x325c7dc7d0b126d1, 0xee54d538fa8e079e, 0xcb871baab76822d4, 0x4b0c9f589c19e6fc,
+        0xa3c651a2bb9ee016, 0x60133cf7b5953d83, 0x8d1eaa1843c69a11, 0x8a5a696b74fb6145};
+    gpu::AddWaterTextures(kWater, std::size(kWater));
     if (nf::skip_intro) LOGR("nightfire: the intro logos are skipped (skip_intro)");
     if (nf::hide_hud) LOGR("nightfire: the HUD is hidden (hide_hud)");
     if (!nf::modern_buttons) LOGR("nightfire: the console's button pictures (modern_buttons off)");

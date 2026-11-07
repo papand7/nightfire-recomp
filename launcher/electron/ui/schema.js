@@ -109,7 +109,7 @@ window.SCHEMA = [
                     { f: 'g', key: 'reflections', label: 'Reflections', def: 'off', options: pick(['off', 'Off'], ['low', 'Low'], ['high', 'High']) },
                     { f: 'g', key: 'reflection_strength', label: 'Reflection strength', def: 0.5, type: 'range', min: 0, max: 1, step: 0.01 },
                     { f: 'g', key: 'reflections_auto', label: 'Find glass by itself', def: true, help: 'Off: only glass and the surfaces mods/reflections.toml lists reflect.' },
-                    { f: 'g', key: 'water', label: 'Water (experimental)', def: false, help: 'Ripples, reflections, depth tint and shore foam on water surfaces. Requires Reflections (Vulkan).' },
+                    { f: 'g', key: 'water', label: 'Water', def: true, help: 'Ripples, reflections, depth tint and shore foam on water surfaces (Vulkan).' },
                 ],
             },
             {

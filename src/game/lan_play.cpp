@@ -1063,6 +1063,9 @@ X86_FUNC(sub_000AD520) {  // a player's think (cdecl: the object): a match is on
 X86_EXTERN_FUNC(__imp__sub_00031530);
 X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
     uint32_t obj = R32(ctx.esp + 4);
+    // diagnostic: NF_WATER_TEST=bots holds the bots still (looking at a level's water with no one shooting)
+    static const bool hold = [] { const char* e = std::getenv("NF_WATER_TEST"); return e && !std::strcmp(e, "bots"); }();
+    if (hold) { ctx.esp += 4; return; }  // its return (cdecl: the caller takes the argument off)
     if (gpu::Style().weather) nf::NoteWalker(obj);
     nf::CoopNpc(obj);
     int slot = g_on ? SlotOf(obj) : -1;

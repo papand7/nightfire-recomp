@@ -4,8 +4,8 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Status
 - Latest validation (2026-11-07): both Windows executables build; Exchange geometry, two-copy co-op, localhost host
-  discovery, particle captures and wheel menu checks completed. Water is an off-by-default prototype pending a real
-  water-surface capture. SDK work is committed on `vulkan` at 06bf5b7; main updates still await the required Linux smoke
+  discovery, particle captures and wheel menu checks completed. Water is on by default: Phoenix Base's pit water
+  is known by its texture keys (2026-11-07). SDK work is committed on `vulkan` at 06bf5b7; main updates still await the required Linux smoke
   tests (unavailable here) or an explicit user exception. No wheel hardware was connected for binding/force tests.
 - Released: v1.0.1 (2026-10-30; v1.0.0's launcher built default.xbe alone), public, MIT; NightFireLauncher.exe from
   GitHub Actions (v1.0.1 run 41045371616, sha256 7f18f58a...).
@@ -34,6 +34,30 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Data: `eurocom/filesys.d00`-`d10` and `eurocom/25_fps` (on foot), `driving/*.viv`, `.mus`, `.spe` (driving)
 
 ## Log
+
+### 2026-11-07 - Water: Phoenix Base's pit found, modern water shader, on by default
+
+- Found the water: Phoenix Base (multiplayer, Split Screen -> Arena -> 4th map, one bot) has it at the bottom of the
+  central pit (x about 22, z -1, y about -12). Its surface is a 64x64 grey ripple (ARGB) animated through 12 pictures,
+  drawn blended with depth writes, nearly invisible in the original. XBE_WATER_TEST=2 numbered every texture and
+  overlay 2 drew each pixel's number as a colour, which read the pit as one key; the other 11 frames share its size,
+  mean and spread in the survey log. The old colour test never matched it and matched suits, carpet and sky instead.
+- Detection: src/common/game_info.cpp registers the 12 keys (gpu::AddWaterTextures); mods/reflections.toml's [water]
+  table adds or removes keys; a water picture that changes in place within 8 frames passes it on (animation frames).
+  No colour guessing by default.
+- Look (SDK water_shade): eight travelling sines for smooth normals, refraction of the scene captured before the
+  water, depth absorption to a deep blue-green, screen-space reflections with a room fallback and Fresnel, glints
+  from the game's six nearest lights, a soft animated foam band where walls stand in the water. Fixed on the way
+  with the user's screenshots: a foam halo round the gun (far-nearer pixels are not edges), stepped foam (8 turned
+  directions, 6 radii, smoothstep), blocky glints (value-noise chop replaced by sines; the surface placed from the
+  scene depth, not the mask's 16-bit distance). The water passes run only in frames that drew water.
+- Particles: our sparks and dust are skipped when the hit made the game's water splash (texture 0x2000129); the
+  game's splash is kept. Not yet seen in a log: pit-floor hits read material 6, no splash was caught.
+- water is on by default (style, launcher; Graphics > Effects > Water / Floors unchanged).
+- Diagnostics (all env-gated, off by default): XBE_WATER_TEST (+ water_pick file), NF_WATER_TEST (player place
+  logged, water_warp file moves the player; =bots holds bots still).
+- Evidence: before `.local/rt_run/shots/wt_before_pit.png`, after `.local/rt_run/shots/wt_after_pit.png`,
+  number view `wt_o2.png`. Not checked: other maps (Atlantis, Sub Pen) and story levels may have other water textures.
 
 ### 2026-11-07 - Remaining feature checks: geometry, network co-op, water, particles and wheel
 

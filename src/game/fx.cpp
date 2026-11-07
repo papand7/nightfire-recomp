@@ -61,6 +61,7 @@ void Hide(uint32_t obj) {
 }
 
 int g_hit_material = -1;  // the hit 0x70430 is making (its material), else -1
+bool g_hit_splash = false;  // that hit made the game's water splash (sub_000CD140)
 
 bool Water(uint32_t m) { return m == 0x0D || m == 0x0E; }
 
@@ -104,7 +105,17 @@ X86_FUNC(sub_00070430) {  // a shot's mark on a surface
     float pos[3], n[3];
     const uint32_t m = hit >= 0x10000 ? kernel::G<uint8_t>(hit + 0x44) & 0x3F : 0;
     const bool placed = hit >= 0x10000 && Place(hit + 0x38, pos);
-    if ((flags & 0x11) && placed && !Water(m) && Place(hit + 0x10, n)) {
+    if (placed && std::getenv("NF_WATER_TEST"))
+        LOG_FIRST(16, "water hit: material %u at %.2f %.2f %.2f%s", m, pos[0], pos[1], pos[2],
+                  Water(m) ? " (water)" : "");
+    const int was = g_hit_material;
+    const bool was_splash = g_hit_splash;
+    g_hit_material = hit >= 0x10000 ? int(m) : -1;
+    g_hit_splash = false;
+    __imp__sub_00070430(ctx, base);
+    // our sparks and dust, after the game's own effects: none where it made its water splash (texture 0x2000129;
+    // water in a level need not have the water material)
+    if ((flags & 0x11) && placed && !Water(m) && !g_hit_splash && Place(hit + 0x10, n)) {
         float len = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
         if (len > 1e-3f) {
             for (float& v : n) v /= len;
@@ -118,10 +129,10 @@ X86_FUNC(sub_00070430) {  // a shot's mark on a surface
                      n[0], n[1], n[2], m, flags);
         }
     }
-    const int was = g_hit_material;
-    g_hit_material = hit >= 0x10000 ? int(m) : -1;
-    __imp__sub_00070430(ctx, base);
+    if (placed && g_hit_splash) LOG_FIRST(4, "fx: a hit on water (the game's splash) at %.1f %.1f %.1f, material %u",
+                                         pos[0], pos[1], pos[2], m);
     g_hit_material = was;
+    g_hit_splash = was_splash;
     // NF_FX_TEST: an explosion where every third hit lands (the hit's object its owner), not within 6 m of the
     // object's place (+0x24) when it has one
     static uint32_t hits = 0;
@@ -147,6 +158,7 @@ X86_FUNC(sub_000CD140) {  // a sprite particle
     const bool on_water = g_hit_material >= 0 && Water(uint32_t(g_hit_material));
     const bool puff = (from == 0x70151 && !on_water) || from == 0x6FD49;
     const bool hide = Ours() && (smoke || fire || (puff && tex != 0x2000129 && tex != 0x2000039));
+    if (tex == 0x2000129 && g_hit_material >= 0) g_hit_splash = true;
     if (smoke || fire) {
         static uint32_t count = 0;
         float pos[3];

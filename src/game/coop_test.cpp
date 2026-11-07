@@ -13,9 +13,12 @@
 // flag, then laid out by 0x25B80 (camera, x, y, w, h: floats of the 640 x 480 screen; two players one above the other,
 // side by side when [0x1F660C] is 1). So after 0xAE870 the second camera is made (0x25BF0 as 0x25D10 makes it) and the
 // screen split, then the second player made a step beside the first.
+#include <bit>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 
 #include "common/nightfire.h"
 #include "core/log.h"
@@ -87,6 +90,40 @@ X86_FUNC(sub_0006CF50) {  // the players' pads read, each frame (menus too): the
         kernel::W32(kMulti, 1);
     }
     __imp__sub_0006CF50(ctx, base);
+    // A forced sublevel can leave its actor in scripted control without the preceding mission's events.
+    // Diagnostic only: a water_release file requests the game's normal player-release function once.
+    if (std::getenv("NF_WATER_TEST") && next != 0x07000048 && !kernel::R32(0x1F6678)) {
+        const uint32_t obj = kernel::R32(0x1F6654);
+        if (obj >= 0x10000 && (obj & 0x7FFFFFFF) < 0x08000000) {
+            if (FILE* f = std::fopen("water_release", "r")) {
+                std::fclose(f);
+                std::remove("water_release");
+                const uint32_t eax = ctx.eax;
+                kernel::CallGuest(ctx, 0xABBD0, {obj, 0, 0});
+                ctx.eax = eax;
+                LOGR("water test: the forced sublevel's player released");
+            }
+            // the player's place (+0x24) logged every 2 seconds; a water_warp file ("x y z", or "+ dx dy dz") moves
+            // them there once, to look at a level's water without walking to it
+            static uint32_t said = 0;
+            if (const uint32_t now = uint32_t(std::clock() / (2 * CLOCKS_PER_SEC)); now != said && (said = now))
+                LOGR("water test: player at %.1f %.1f %.1f", kernel::G<float>(obj + 0x24), kernel::G<float>(obj + 0x28),
+                     kernel::G<float>(obj + 0x2C));
+            if (FILE* f = std::fopen("water_warp", "r")) {
+                char rel = 0;
+                float v[3] = {};
+                const bool relative = std::fscanf(f, " %c", &rel) == 1 && rel == '+';
+                if (!relative) std::rewind(f);
+                const bool ok = std::fscanf(f, "%f %f %f", &v[0], &v[1], &v[2]) == 3;
+                std::fclose(f);
+                std::remove("water_warp");
+                for (int k = 0; ok && k < 3; k++)
+                    kernel::W32(obj + 0x24 + 4 * k, std::bit_cast<uint32_t>(v[k] + (relative ? kernel::G<float>(obj + 0x24 + 4 * k) : 0.0f)));
+                if (ok) LOGR("water test: player moved to %.1f %.1f %.1f", kernel::G<float>(obj + 0x24),
+                             kernel::G<float>(obj + 0x28), kernel::G<float>(obj + 0x2C));
+            }
+        }
+    }
 }
 
 namespace {
