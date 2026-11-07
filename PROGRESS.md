@@ -45,6 +45,10 @@ is written but not compiled yet. The Windows build stays green after each step.
   `GetAsyncKeyState`. Linux reads SDL's keyboard and mouse state through a VK to scancode table, because settings and
   key bindings stay stored as VK codes (`core/vk_codes.h`). On Linux the window thread passes controller plug/unplug
   events to input (`input::HandleSdlEvent`), and the steering wheel is stubbed out. Harness: stubs, `XBE_HEADLESS`.
+  Windows smoke test (`.local/rt_run2/kb_test.sh`, real keys sent through user32): Enter in the difficulty menu started
+  The Exchange, W walked forward, the mouse turned the view and S walked back.
+- Sound: `audio/sdl.cpp` implements `audio::StartOutput` with SDL3's `SDL_AudioStream`. It follows the XAudio2 version:
+  10 ms chunks, silence while paused, and a silent real-time pull when no device opens.
 
 ### 2026-11-07 - Water: Phoenix Base's pit found, modern water shader, on by default
 
