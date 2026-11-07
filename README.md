@@ -56,6 +56,8 @@ animations and a gun in hand.*
   and red only), plus modded presets.
 - **Snow:** falling snow that stays in the world as you turn, blown by gusts, kept out from under roofs, a blizzard
   setting, and footprints that the snow fills in again.
+- **Movies upscaled:** the 640x480 intro and story movies enlarged to the screen with edge-aware filtering and
+  sharpening instead of a plain stretch.
 - **Motion blur:** optional, subtle: a little blur as the camera turns and moves; the gun and HUD stay sharp.
 - **HDR tone mapping:** the effects drawn in 16 bit float, then AgX or ACES, with optional auto exposure: sunlit snow
   and lamps roll off instead of clipping to white.

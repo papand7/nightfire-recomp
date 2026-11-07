@@ -31,6 +31,16 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-07 - Movies upscaled (Vulkan)
+
+- New option movie_upscale (graphics.toml, on; F1 > Movies): each new frame of a movie (YUY2 640x480, decoded to BGRA
+  when uploaded) is enlarged on the GPU to the screen's height (1.5 to 4 times) before it is drawn. The first pass is
+  Lanczos 2, clamped to the nearest 2x2 texels so hard edges don't ring; the second sharpens like AMD's RCAS (0.8).
+  The bigger picture is bound in the frame's place: a linear texture's texel coordinates are divided by the guest
+  size (FillTexelConstants), so it fits.
+- Tested: the attract movie at 1920x1080 is upscaled to 1440x1080, runs at 60 fps with no errors, and looks clean
+  (`.local/vk/movie_test.sh`).
+
 ### 2026-11-07 - Daylight whiteout; README indoor pictures from Phoenix Fire
 
 - Remastered settings bleached daylight levels white (Chain Reaction 0700000C, Phoenix Fire 07000011). Switching
