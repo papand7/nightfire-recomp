@@ -3,6 +3,9 @@
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Status
+- Android (2026-11-08, branch `android`, SDK `android`): libraries, DXC for Android, the app and the package build;
+  in the emulator the game boots to its renderer, which needs VK_KHR_push_descriptor (the emulator has none): a real
+  phone test is next.
 - Linux (2026-11-08, branch `linux-port`, SDK `linux-port`): both exes build and play in WSL2 (llvmpipe), the Linux
   smoke test passes (SMOKE OK), the Linux launcher (AppImage) builds the game from GitHub; not yet on a real Linux GPU.
 - Latest validation (2026-11-07): both Windows executables build; Exchange geometry, two-copy co-op, localhost host
@@ -36,6 +39,55 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Data: `eurocom/filesys.d00`-`d10` and `eurocom/25_fps` (on foot), `driving/*.viv`, `.mus`, `.spe` (driving)
 
 ## Log
+
+### 2026-11-08 - Android phase 1: toolchain, the game as Android libraries, DXC for Android, the app, a package
+
+Game branch `android` (from main), SDK branch `android` (from 8f9b1e3, SDK main 9b7f2b5 merged). Sideload only: the
+APK has no game code or files; the player's PC builds a game package from their disc, the app imports it.
+
+- Toolchain (WSL Ubuntu 24.04, `/opt/android`, 7.4 GB with the emulator): command-line tools, NDK r27c
+  (27.2.12479018), platform 35, build-tools 35.0.0, platform-tools, OpenJDK 17, Gradle 8.11.1 (the project's wrapper
+  too), emulator + `system-images;android-34;google_apis;x86_64` (AVD `nf`). KVM works in WSL2.
+- SDK: on Android `add_xbe_image` makes `lib<exe>.so` (`libNightfire.so`, `libNightfireDriving.so`) with SDL3 linked
+  in (its JNI side exported: SDLActivity's natives, `SDL_main`); a cross build takes `xbe_recomp`/`fsr2_shaders` from
+  a host build (`XBE_HOST_TOOLS`). `main_sdl.cpp`: `SDL_main`, ExeDir = the loaded library's folder (logs, hdd,
+  settings, caches beside it), landscape, back gesture = Start; `kernel::Relaunch` on Android = `app::AndroidRelaunch`
+  -> `GameActivity.relaunch(lib, env)` (JNI): RestartActivity in the launcher's process waits for the game process
+  (`:game`) to end and starts it again with the other library and the XBE_/NF_ environment (`--env=` arguments). An
+  in-process library swap was ruled out: one process cannot hold two copies of the runtime (guest memory at a fixed
+  address, threads, SDL). Arm fixes: SSE state compare, cpuid, x86intrin behind guards; fibers: bionic has no
+  ucontext, so an asm register switch (aarch64, x86-64); `memfd_create` via syscall below API 30; log lines to logcat
+  (`adb logcat -s xbe`). Vulkan: surface remade after the app returns from the background (SDL lifecycle events),
+  identity transform, INHERIT alpha where OPAQUE is missing, a log line naming why each GPU is passed over.
+- Touch controls (`runtime/app/touch.cpp`, ImGui foreground drawing in the menu blues): a floating move stick on the
+  left, drag to look (right stick by drag speed; the Fire button drags too), buttons from `GameInfo::touch_buttons`
+  (NightFire: on foot Fire/Aim/Jump/Crouch/Use/Weapon/Gadget/Vision/Pause, driving Gas/Brake/Fire/Handbrake/Cam/
+  Gadget/Weapon/Pause; OK/Back in menus); hidden while a controller is connected (SDL gamepads). `XBE_TOUCH=1` tries
+  them on desktop.
+- Shaders: **DXC cross-compiled for Android** (`sdk/scripts/android/build_dxc.sh`: v1.8.2407, the desktop builds'
+  tag; host tablegens, then the NDK; about 12 minutes, first try, 26 MB stripped, arm64-v8a and x86_64). Chosen over
+  precompiling at package time (the HLSL is generated from the game's own shaders and state as it plays: no fixed
+  set) and over glslang's HLSL front end (different HLSL coverage and layout rules, no ray queries): the phone gets
+  the same compiler and SPIR-V as the PC. It ships in the package beside the libraries (could move into the APK).
+  `shadercache.bin` (SPIR-V keyed by HLSL hash) is portable: a later step can carry the PC's cache in the package.
+- Package (`sdk/scripts/android/package.sh -r REPO [-a ABI]`): host tools, the Android build, DXC, stripped libraries
+  (14 + 18 MB arm64), `assets/` stored, `package.json` (abi, sdl, main library, revisions) ->
+  `out/NightFire-android-package.zip` (2.2 GB here). Never committed or uploaded.
+- App (`android/`, AGP 8.7.3, minSdk 29, targetSdk 35, debug-signed): LauncherActivity (Play, Import package .zip or
+  folder with progress and a space check, Settings: render %, frame cap, FPS, intro), GameActivity (SDLActivity
+  loading the package library with `System.load` from `files/game`, process `:game`), PackageStore (checks ABI, SDL
+  version, libraries, assets; keeps settings.toml, hdd, logs, caches across imports). SDL's Java from SDL
+  release-3.4.16 source pinned by SHA-256 at build time. APK 186 KB.
+- Emulator (x86_64 libraries): the APK installs, the system picker imports the 2.2 GB zip (about 20 s), Play loads
+  `libNightfire.so`, SDL starts, the game is found (sha1), the kernel boots, then the Vulkan renderer stops: the
+  emulator's Vulkan (SwiftShader, and gfxstream over WSL's llvmpipe at 1.3) has **no VK_KHR_push_descriptor**, which
+  the renderer requires. No frame drawn in the emulator.
+- Windows: BUILD OK after each step. arm64 and x86_64 libraries build and link in WSL.
+- Next: a real phone (Vulkan 1.3 with VK_KHR_push_descriptor: recent Adreno and Mali drivers) via sideload: install the
+  APK, copy the arm64 package, import, Play; `adb logcat -s xbe SDL NightFire DEBUG`. Then: a push-descriptor fallback
+  (descriptor sets) for drivers without it, the relaunch into Driving on a phone, touch tuning, a release signing key
+  and a CI job for the APK, the launchers' "Android package" button calling package.sh, the PC's shader cache in the
+  package, Arm performance (`-march=armv8.2-a`, render scale).
 
 ### 2026-11-08 - Linux port phase 3: the game builds and plays on Linux (WSL2), smoke OK, a Linux launcher (AppImage)
 
