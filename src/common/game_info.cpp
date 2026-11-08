@@ -226,8 +226,7 @@ static std::vector<app::TouchButton> TouchButtons() {
     using namespace input;
     if (nf::kDriving)
         return {{kRT, "Gas", "OK", 0.17f, 0.30f, 0.11f},    {kLT, "Brake", nullptr, 0.40f, 0.14f, 0.08f},
-                {kA, "Fire", "OK", 0.17f, 0.60f, 0.075f},   {kB, "Hand
-brake", "Back", 0.38f, 0.36f, 0.06f},
+                {kA, "Fire", "OK", 0.17f, 0.60f, 0.075f},   {kB, "Handbrake", "Back", 0.38f, 0.36f, 0.06f},
                 {kY, "Cam", nullptr, 0.06f, 0.76f, 0.045f}, {kX, "Gadget", nullptr, 0.06f, 0.48f, 0.05f},
                 {kBlack, "Weapon", nullptr, 0.30f, 0.62f, 0.05f}, {kStart, "Pause", nullptr, 0.06f, 0.93f, 0.04f}};
     return {{kRT, "Fire", nullptr, 0.18f, 0.32f, 0.11f},   {kLT, "Aim", nullptr, 0.18f, 0.60f, 0.07f},

@@ -37,6 +37,27 @@ out/build/release/Nightfire
 The build compiles the recompiler for Linux and recompiles both xbes with it; the exes are `Nightfire` and
 `NightfireDriving` (the game starts the second one itself), with `libdxcompiler.so` and `libdxil.so` beside them.
 
+## Android (in progress)
+
+Sideloaded only. The app (`android/`, an APK with no game code or files) is a launcher and player; the game comes as a
+**game package** built on your PC from your own disc and copied to the phone, where the app imports it (a `.zip` or a
+folder) into its private storage. Never share the package: it is your game.
+
+**The package** (Linux or WSL; the Windows and Linux launchers will run this later): the Android NDK r27 or newer,
+clang, CMake 3.25+, Ninja, git, python3 and zip; with your game in `assets/` as above:
+```
+export ANDROID_HOME=/opt/android        # with ndk/<version> inside, or ANDROID_NDK_HOME=<the NDK>
+bash sdk/scripts/android/package.sh -r .                  # arm64-v8a (phones); -a x86_64 for the emulator
+```
+It builds `xbe_recomp` and `fsr2_shaders` for this machine (`out/build/android-host`), the game for Android
+(`out/build/android-arm64-v8a`: `libNightfire.so`, `libNightfireDriving.so`), DXC for Android once (about 20 minutes,
+kept in `~/.cache/xbe-android/dxc`, `sdk/scripts/android/build_dxc.sh`), and zips them with `assets/` and a
+`package.json` into `out/NightFire-android-package.zip`.
+
+**The app**: JDK 17 and the Android SDK (platform 35, build-tools 35.0.0); in `android/`: `./gradlew assembleRelease`
+(`app/build/outputs/apk/release/app-release.apk`, signed with the debug key for now). SDL's Java side is downloaded from
+SDL's source at the release the runtime uses (`gradle.properties`); the app refuses a package built with another SDL.
+
 ## The launcher
 
 To build the launcher: `launcher\electron\build_service.bat` (the builder service), then in `launcher\electron`
