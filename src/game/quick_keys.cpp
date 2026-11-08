@@ -198,13 +198,11 @@ void QuickFrame(X86Context& ctx) {
     } else {
         d = "In the menus";
     }
-#ifdef _WIN32
     // a driving mission's name for Driving.xbe's exe (its level id is set before the launch)
     if (const char* m = (level >> 24) == 0x09 ? MissionName(level) : nullptr; m && said != m) {
         said = m;
-        SetEnvironmentVariableA("NF_PRESENCE", m);
+        SetEnv("NF_PRESENCE", m);
     }
-#endif
     if (d != details || st != state) {
         if (d != details) start = int64_t(std::time(nullptr));
         details = d, state = st;

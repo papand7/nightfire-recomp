@@ -832,7 +832,7 @@ bool KeepCoop(X86Context& ctx, uint32_t player) {
     if (mode > 3 || (!want && !now) || (want && now && (mode == 2) == (netplay::Me() == 0))) return false;
     if (mode == 3) return true;  // the host chosen on Network: Join's page (JoinNetwork)
     std::string spec = mode == 2 ? "host" : "";
-    SetEnvironmentVariableA("XBE_NETPLAY", spec.empty() ? nullptr : spec.c_str());
+    nf::SetEnv("XBE_NETPLAY", spec.empty() ? nullptr : spec.c_str());
     LOGR("nightfire: Co-op: restarting %s", spec.empty() ? "without network play" : ("for network play: " + spec).c_str());
     kernel::Relaunch("Nightfire");
     return false;
@@ -905,7 +905,7 @@ void JoinNetwork(const std::string& spec) {
     }
     netplay::StopFindingHosts();
     g_join_open = false;
-    SetEnvironmentVariableA("XBE_NETPLAY", spec.c_str());
+    nf::SetEnv("XBE_NETPLAY", spec.c_str());
     LOGR("nightfire: Co-op: restarting for network play: %s", spec.c_str());
     kernel::Relaunch("Nightfire");
 }

@@ -35,6 +35,27 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-08 - Linux port phase 3: the game builds and plays on Linux (WSL2)
+
+Game branch `linux-port` (from `vulkan-renderer` bf0d7b2), its sdk pointer on the SDK's `linux-port`.
+
+- The game's CMakeLists builds both exes on Linux unchanged: `cmake -S . -B build/linux -G Ninja -DCMAKE_BUILD_TYPE=Release
+  -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++` (x86-64-v2 flags as the presets), then
+  `cmake --build build/linux --target Nightfire NightfireDriving`: xbe_recomp is built for Linux there and recompiles both xbes
+  into `generated/` of that checkout (never committed). In WSL2 (12 threads, clang 18) the whole build takes about 3 minutes.
+  Exes `Nightfire` and `NightfireDriving` (no .exe) with `libdxcompiler.so` / `libdxil.so` beside them.
+- src: `nf::SetEnv` (src/common/env.cpp: SetEnvironmentVariableA on Windows, setenv off it) for XBE_NETPLAY (co-op's
+  restart) and NF_PRESENCE (Discord's driving mission name, now handed to Driving.xbe's exe on Linux too). Nothing else
+  in src/ was Windows only.
+- SDK ba34499: the Linux relaunch (exec) closes the sockets first and marks every descriptor close-on-exec (the display
+  connection, sound and the GPU stayed open in the new image); a failed exec is logged and shown.
+- Run in WSL2 under WSLg (`.local/lx3/run_driving.sh`; llvmpipe, Vulkan 1.4, about 9 to 20 frames a second at 1280x720):
+  the movies, the title (DejaVu Sans for the modern menus), START with skip_paris (default.xbe relaunches itself into the
+  menus: main menu page 40000002) and with NF_SKIP_PARIS=0 into `NightfireDriving` (exec), which plays Paris: the van's
+  sniper tutorial drawn (shots `.local/lx3/s*.png`), RT presses from XBE_PAD_SCRIPT. No traps. Sound: SDL's PipeWire/Pulse
+  through WSLg (PipeWire's missing client.conf warns).
+- Windows: BUILD OK; a run in `.local/rt_run` reached the menus.
+
 ### 2026-11-08 - Linux port phase 2: the whole runtime compiles and links on Linux
 
 SDK branch `linux-port` (from `vulkan` 6fd2a81; this repo's sdk pointer is not moved until it is merged). The SDK now has

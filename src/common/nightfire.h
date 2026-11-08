@@ -157,5 +157,8 @@ void QueuePress(int control);           // a press of ours on controller 1 (Driv
 void QueuedPresses(input::Pad& p);      // MenuMouse: them played
 bool RestartChosen(X86Context& ctx, uint32_t list);  // A on the pause screen's RESTART: its question answered yes at once
 const char* MissionName(uint32_t level);  // src/common/achievement_set.cpp: "The Exchange", null for none
+// an environment variable of this process, which a relaunch (kernel::Relaunch) hands on; value null removes it
+// (src/common/env.cpp)
+void SetEnv(const char* name, const char* value);
 
 }  // namespace nf
