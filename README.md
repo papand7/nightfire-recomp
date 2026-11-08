@@ -2,7 +2,7 @@
 
 The original Xbox 007: NightFire, running natively on PC and remastered: ray traced lighting, sharper and richer
 graphics, HD textures, story co-op, LAN multiplayer, a modern menu and full mouse, keyboard, controller and steering
-wheel support. Everything is set from the game's own menus.
+wheel support. Everything is set from the game's own menus. For **Windows** and **Linux** (beta).
 
 ![The Exchange: Original, Enhanced with ray tracing, Toon and Noir](docs/images/exchange_looks.webp)
 
@@ -99,6 +99,12 @@ The **NightFire PC Launcher** sets everything up:
 - **Settings:** every option, also outside the game.
 - **HD Textures:** collect the textures as you play, then make your HD pack with one click.
 - **Your music:** a folder of your songs becomes the game's soundtrack.
+
+**Download** it from the [latest release](https://github.com/papand7/nightfire-recomp/releases/latest):
+- **Windows:** `NightFireLauncher.exe`. Just run it.
+- **Linux (beta):** `NightFireLauncher-x86_64.AppImage`. Make it executable (`chmod +x`) and run it. If your system
+  is missing something the game needs, the launcher tells you the one command to install it. It needs a graphics card
+  with Vulkan (Mesa or NVIDIA drivers). HD texture packs and DLSS are Windows-only for now.
 
 Building it yourself instead: see [BUILDING.md](BUILDING.md).
 
