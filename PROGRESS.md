@@ -35,6 +35,39 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-08 - Linux port phase 2: the whole runtime compiles and links on Linux
+
+SDK branch `linux-port` (from `vulkan` 6fd2a81; this repo's sdk pointer is not moved until it is merged). The SDK now has
+a Linux CI (`.github/workflows/linux.yml`, ubuntu-24.04 and 22.04, clang): it builds the headless harness and the
+whole runtime (SDL3 window and sound, the Vulkan renderer, ImGui, FSR 2) around a stub image, without game code or
+files (`sdk/tests/linux`: `make_stub.py` writes the stub from a generated folder, every host symbol absent). Also
+checked in WSL2 (Ubuntu 24.04, clang 18): both link.
+
+- CMake (`XbeRecomp.cmake`): `xbe_runtime_target()` split out of `add_xbe_image` (used by the CI target too). Off
+  Windows: no D3D12/11, XAudio2, DirectInput wheel or Win32 window sources; SDL3 headers for input, `main_sdl.cpp` and
+  `audio/sdl.cpp`; imgui's SDL3 backend (1.91.0 kept: built with `SDL_ENABLE_OLD_NAMES` for SDL_TRUE/FALSE);
+  `runtime/compat` on the include path; stb_image / stb_image_write (pinned commit) for `app/image.cpp`; DXC's Linux
+  release (`libdxcompiler.so`, `libdxil.so`, same v1.8.2407) copied beside the exe; FSR 2 built with `FFX_GCC` and
+  `tools/fsr2_shaders/posix_compat.h` (`_countof`, `wcscpy_s`). Windows builds as before.
+- Vulkan renderer: DXC moved behind `gpu/dxc.h` (its COM headers only in `gpu/dxc.cpp`; dlopen off Windows). Off
+  Windows the loader is SDL's (`app::VulkanGetInstanceProcAddr`, else `libvulkan.so.1`), the instance extensions and
+  surface come from `app::VulkanInstanceExtensions` / `CreateVulkanSurface`, the size from `WindowPixels`, ImGui from
+  `ImGui_ImplSDL3_NewFrame`; no HDR luminance query or refresh rate (not known there yet). `CreateBackend` off Windows
+  is Vulkan with no fallback.
+- `runtime/compat` (shared by harness and Linux build): `windows.h`, full `dxgiformat.h`, the D3D12 enums and sampler
+  description `d3d_common` names (`d3d12.h`, `d3dcommon.h` with a portable `ID3DBlob`, `d3dcompiler.h`'s
+  `D3DCreateBlob`), a small `wrl/client.h` ComPtr. `gpu/ext.h`'s D3D12 parts are Windows only.
+- App: `game_files.cpp` (SDL message boxes through the new `app::MessageBox`), `system_info.cpp` (os-release, cpuid,
+  sysconf, SDL displays, the environment), `overlay.cpp` (SDL's display modes, `input::KeyDown`), `image.cpp` (stb).
+  `core/netplay.cpp`: getifaddrs, gethostname, no wait box (log + Escape).
+- Harness: built again on Linux (smaa, upscalers, dxc left out; toml++ include via `CXXFLAGS`; `MixHitSound` stub).
+- Windows: BUILD OK after each step; a Vulkan run in `.local/rt_run` reached the menus at 60 frames a second.
+- WSLg: SDL video starts (display "rdp-0"), the missing-game message box shows; Vulkan there is llvmpipe only (no
+  D3D12-backed driver in Ubuntu's Mesa), so a real render test needs a Linux machine or a GPU passthrough driver.
+- Phase 3: the game target on Linux (the recompiled code built with `add_xbe_image` there, the player's own disc,
+  `src/` Win32 bits such as `GameInfo::message`), the launcher building on Linux, an AppImage, a refresh rate and HDR
+  query through SDL, and the smoke tests on a real Linux GPU.
+
 ### 2026-11-08 - Photo mode, screenshots, performance overlay, Discord, achievements page, quick restart
 
 - SDK (`vulkan` 6fd2a81): `gpu::RequestScreenshot` (the Vulkan present's XBE_PAD_CMD shot path, reported written),
