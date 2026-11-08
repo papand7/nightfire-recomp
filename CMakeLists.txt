@@ -52,7 +52,9 @@ add_xbe_image(NightfireDriving Driving.xbe driving.toml ${DRIVING_PARTITIONS} dr
 
 # launcher/icon.ico, when there is one: the game's icon too (resource 1, which the window class loads)
 if(WIN32 AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/launcher/icon.ico)
-    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/game_icon.rc "1 ICON \"${CMAKE_CURRENT_SOURCE_DIR}/launcher/icon.ico\"\n")
+    # written only when it changes: a new file each configure would link both exes again on every update
+    file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/game_icon.rc
+        CONTENT "1 ICON \"${CMAKE_CURRENT_SOURCE_DIR}/launcher/icon.ico\"\n" @ONLY)
     target_sources(Nightfire PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/game_icon.rc)
     target_sources(NightfireDriving PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/game_icon.rc)
 endif()

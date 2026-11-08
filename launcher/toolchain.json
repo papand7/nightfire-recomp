@@ -4,14 +4,10 @@
             "id": "llvm",
             "title": "Clang 19.1.7",
             "kind": "tar.xz",
-            "url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.7/clang%2Bllvm-19.1.7-x86_64-pc-windows-msvc.tar.xz",
-            "sha256": "b4557b4f012161f56a2f5d9e877ab9635cafd7a08f7affe14829bd60c9d357f0",
-            "size": 845236708,
-            "strip": 1,
-            "keep": ["bin/clang.exe", "bin/clang++.exe", "bin/clang-cl.exe", "bin/lld-link.exe", "bin/lld.exe",
-                     "bin/llvm-ar.exe", "bin/llvm-lib.exe", "bin/llvm-rc.exe", "bin/llvm-mt.exe", "bin/llvm-ranlib.exe",
-                     "bin/api-ms-win-*.dll", "bin/ucrtbase.dll", "bin/msvcp140*.dll", "bin/vcruntime140*.dll",
-                     "bin/concrt140.dll", "lib/clang/"]
+            "url": "https://github.com/papand7/nightfire-recomp/releases/download/tools-llvm-19.1.7-slim/clang%2Bllvm-19.1.7-x86_64-pc-windows-msvc-slim.tar.xz",
+            "sha256": "f0c0bc0ec0e196b17298baeba5193ec6c43f27e67ef68f87a50f6f205c1b7cc6",
+            "size": 38640936,
+            "strip": 1
         },
         {
             "id": "cmake",
