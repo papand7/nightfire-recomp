@@ -9,7 +9,9 @@
   "scripts": {
     "start": "electron .",
     "service": "cmd /c build_service.bat",
-    "dist": "electron-builder --win portable"
+    "service:linux": "bash build_service.sh",
+    "dist": "electron-builder --win portable",
+    "dist:linux": "electron-builder --linux AppImage"
   },
   "dependencies": {
     "smol-toml": "^1.3.1"
@@ -21,18 +23,52 @@
   "build": {
     "appId": "io.github.hk21x.nightfire.launcher",
     "productName": "NightFire Launcher",
-    "directories": { "output": "../../out/launcher-electron" },
-    "files": ["main.js", "preload.js", "ui/**/*", "package.json"],
-    "extraResources": [
-      { "from": "../../out/launcher-svc/NightFireLauncherService.exe", "to": "NightFireLauncherService.exe" }
+    "directories": {
+      "output": "../../out/launcher-electron"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "ui/**/*",
+      "package.json"
     ],
     "win": {
       "icon": "../icon.ico",
-      "target": ["portable"]
+      "target": [
+        "portable"
+      ],
+      "extraResources": [
+        {
+          "from": "../../out/launcher-svc/NightFireLauncherService.exe",
+          "to": "NightFireLauncherService.exe"
+        }
+      ]
     },
     "portable": {
       "artifactName": "NightFireLauncher.exe",
       "unpackDirName": "NightFireLauncher"
+    },
+    "linux": {
+      "icon": "../icon.png",
+      "target": [
+        "AppImage"
+      ],
+      "category": "Game",
+      "artifactName": "NightFireLauncher-x86_64.AppImage",
+      "extraResources": [
+        {
+          "from": "../../out/launcher-svc/NightFireLauncherService",
+          "to": "NightFireLauncherService"
+        },
+        {
+          "from": "../icon.png",
+          "to": "icon.png"
+        }
+      ]
     }
-  }
+  },
+  "author": {
+    "name": "NightFire PC port"
+  },
+  "homepage": "https://github.com/papand7/nightfire-recomp"
 }

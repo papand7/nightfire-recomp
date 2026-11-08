@@ -1,6 +1,7 @@
-// The NightFire launcher's window (Electron): the player's disc image found beside it, the game built on this PC by
-// NightFireLauncherService.exe (sdk/launcher/win/service.cpp: the same builder as the ImGui launcher, driven by JSON
-// lines), the game's settings.toml and graphics.toml edited without starting it, the HD texture pack made (hd_pack).
+// The NightFire launcher's window (Electron, Windows and Linux): the player's disc image found beside it, the game
+// built on this PC by NightFireLauncherService (sdk/launcher/service.cpp: the same builder as the ImGui launcher,
+// driven by JSON lines), the game's settings.toml and graphics.toml edited without starting it, the HD texture pack
+// made (hd_pack, Windows).
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const { spawn, execFile } = require('child_process');
 const fs = require('fs');
@@ -8,12 +9,18 @@ const path = require('path');
 const readline = require('readline');
 const TOML = require('smol-toml');
 
-// the folder the player put the launcher (and their .iso) in: a portable exe runs from a temporary copy
+const WINDOWS = process.platform === 'win32';
+const EXE = WINDOWS ? '.exe' : '';
+// the folder the player put the launcher (and their .iso) in: a portable exe runs from a temporary copy, an AppImage
+// from its mounted image (APPIMAGE is the file itself)
 const LAUNCHER_DIR = process.env.PORTABLE_EXECUTABLE_DIR ||
+    (process.env.APPIMAGE ? path.dirname(process.env.APPIMAGE) : null) ||
     (app.isPackaged ? path.dirname(app.getPath('exe')) : (process.env.NF_LAUNCHER_DIR || path.resolve(__dirname, '../../out/launcher-dev')));
 const ROOT = path.join(LAUNCHER_DIR, 'NightFire');
-const SERVICE = app.isPackaged ? path.join(process.resourcesPath, 'NightFireLauncherService.exe')
-                               : path.resolve(__dirname, '../../out/launcher-svc/NightFireLauncherService.exe');
+const SERVICE = app.isPackaged ? path.join(process.resourcesPath, 'NightFireLauncherService' + EXE)
+                               : path.resolve(__dirname, '../../out/launcher-svc/NightFireLauncherService' + EXE);
+// the game's executables (launcher/game.json's exes)
+const GAME_EXES = ['Nightfire', 'NightfireDriving'];
 
 let win = null;
 let svc = null;
@@ -62,7 +69,7 @@ function createWindow() {
         width: 1180, height: 760, minWidth: 960, minHeight: 640,
         frame: false, backgroundColor: '#07080b', show: false,
         title: '007: NightFire Launcher',
-        icon: path.resolve(__dirname, '../icon.ico'),
+        icon: path.resolve(__dirname, WINDOWS ? '../icon.ico' : '../icon.png'),
         webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
     win.removeMenu();
@@ -104,7 +111,22 @@ function writeToml(file, table, header) {
 
 // the game in this launcher's play folder running (another copy elsewhere writes its own files)
 function gameRunning() {
-    const script = "Get-CimInstance Win32_Process -Filter \"Name='Nightfire.exe' or Name='NightfireDriving.exe'\" | ForEach-Object { $_.ExecutablePath }";
+    if (!WINDOWS) {
+        // each process's executable, /proc/<pid>/exe (the player's own processes are readable)
+        const dir = path.resolve(playDir());
+        let found = false;
+        try {
+            for (const pid of fs.readdirSync('/proc')) {
+                if (!/^\d+$/.test(pid)) continue;
+                let exe;
+                try { exe = fs.readlinkSync(`/proc/${pid}/exe`); } catch { continue; }
+                if (GAME_EXES.includes(path.basename(exe)) && path.dirname(exe) === dir) { found = true; break; }
+            }
+        } catch { /* no /proc: not known, taken as not running */ }
+        return Promise.resolve(found);
+    }
+    const script = "Get-CimInstance Win32_Process -Filter \"" + GAME_EXES.map(n => `Name='${n}.exe'`).join(' or ') +
+        "\" | ForEach-Object { $_.ExecutablePath }";
     return new Promise(resolve => {
         execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true }, (err, out) => {
             if (err) return resolve(false);
@@ -150,15 +172,15 @@ ipcMain.handle('textures:info', async () => {
         dumped: countPng(path.join(tex, 'dump')),
         pack: countPng(tex, n => !/_(n|r)\.png$/i.test(n)),
         maps: countPng(tex, n => /_n\.png$/i.test(n)),
-        tool: fs.existsSync(path.join(dir, 'tools', 'hd_pack.exe')),
+        tool: fs.existsSync(path.join(dir, 'tools', 'hd_pack' + EXE)),
         folder: tex,
         running: !!pack,
     };
 });
 ipcMain.handle('textures:run', async (_, o) => {
     if (pack) return { ok: false, message: 'Already making the pack.' };
-    const dir = playDir(), exe = path.join(dir, 'tools', 'hd_pack.exe');
-    if (!fs.existsSync(exe)) return { ok: false, message: 'hd_pack is not there yet: build the game first.' };
+    const dir = playDir(), exe = path.join(dir, 'tools', 'hd_pack' + EXE);
+    if (!fs.existsSync(exe)) return { ok: false, message: WINDOWS ? 'hd_pack is not there yet: build the game first.' : 'The HD texture pack tool is Windows only so far.' };
     const args = ['--dir', dir, '--scale', String(o.scale === 2 ? 2 : 4), '--model', o.model === 'anime' ? 'anime' : 'x4plus'];
     if (o.pbr) args.push('--pbr');
     if (o.force) args.push('--force');
@@ -175,7 +197,7 @@ ipcMain.handle('textures:cancel', async () => { if (pack) pack.kill(); });
 // ---- the rest
 ipcMain.on('svc', (_, cmd) => command(cmd));
 ipcMain.handle('svc:state', () => state);
-ipcMain.handle('paths', () => ({ launcher: LAUNCHER_DIR, root: ROOT }));
+ipcMain.handle('paths', () => ({ launcher: LAUNCHER_DIR, root: ROOT, platform: process.platform }));
 ipcMain.on('win', (_, what) => {
     if (!win) return;
     if (what === 'min') win.minimize();

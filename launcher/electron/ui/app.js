@@ -83,7 +83,10 @@ function render() {
     const info = $('build-info');
     if (!S.built) {
         info.innerHTML = '';
-        info.append(`The game is built on this PC from your disc. The first time this downloads about 1.4 GB of build tools
+        info.append(S.os === 'linux'
+            ? `The game is built on this PC from your disc with your system's compilers (the launcher says which packages
+            to install if any are missing) and takes 10 to 60 minutes. Needs about 3 GB free; this drive has ${mb(S.free_bytes)}.`
+            : `The game is built on this PC from your disc. The first time this downloads about 1.4 GB of build tools
             (nothing is installed in Windows) and takes 30 to 90 minutes. Needs about 3 GB free; this drive has ${mb(S.free_bytes)}.`);
         info.className = 'muted';
     } else {
@@ -92,7 +95,7 @@ function render() {
         info.className = S.update ? '' : 'msg ok';
     }
     if (S.path_too_long) setMsg($('build-msg'), S.path_message, false);
-    $('license-row').hidden = S.built;
+    $('license-row').hidden = S.built || !S.license_url;  // Linux: nothing of Microsoft's is fetched
     $('license').checked = S.agreed || $('license').checked;
     $('license').disabled = busy;
     const canBuild = g.ok && (S.built || $('license').checked) && !S.path_too_long && !busy;
