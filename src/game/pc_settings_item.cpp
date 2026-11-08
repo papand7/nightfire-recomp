@@ -54,6 +54,7 @@ constexpr uint32_t kPausePage = 0x4000004B, kPauseItem = 0x10000028, kPauseChoic
 constexpr uint8_t kMsgAddText = 0x11;      // a list's entry: a text handle
 constexpr uint32_t kMsgRead = 0x34;        // the list's choice
 constexpr uint32_t kPauseLabel = 0x0200FC03;  // GetText answers it (src/game/pc_settings_page.cpp)
+constexpr uint32_t kPhotoLabel = 0x0200FC07;  // PHOTO MODE, the fifth (src/game/photo_mode.cpp)
 std::vector<uint8_t> g_av;                 // the front end's AV Options page records, for a level's file
 
 // bytes of each record by its opcode (the dword before the fields included); 0 ends the stream
@@ -110,9 +111,9 @@ bool AddToPause(std::vector<uint8_t>& b) {
             if (Get32(b, p + 4) == kPausePage) page = p;
         } else if (op == kOpWidget && page) {
             in_list = Get32(b, p + 4) == kPauseItem && b[p + 8] == 6 && Get32(b, p + 0x14) == kPauseChoices;
-            if (in_list) {  // room for four rows (three in 120): from 176 to 336, above the hint line at 341
-                Put16(b, p + 0xC, 176);
-                Put16(b, p + 0x10, 160);
+            if (in_list) {  // room for five rows (three in 120): from 140 to 340, above the hint line at 341
+                Put16(b, p + 0xC, 140);
+                Put16(b, p + 0x10, 200);
             }
         } else if (op == kOpAttr && in_list && b[p + 4] == kMsgAddText) {
             after = p + n;
@@ -120,11 +121,13 @@ bool AddToPause(std::vector<uint8_t>& b) {
         p += n;
     }
     if (!page || !after) return false;
-    std::vector<uint8_t> entry(13);
-    Put32(entry, 0, kOpAttr);
-    entry[4] = kMsgAddText;
-    Put32(entry, 5, kPauseLabel);
-    Put32(entry, 9, 0);
+    std::vector<uint8_t> entry(26);  // SETTINGS, PHOTO MODE
+    for (int i = 0; i < 2; i++) {
+        Put32(entry, 13 * i, kOpAttr);
+        entry[13 * i + 4] = kMsgAddText;
+        Put32(entry, 13 * i + 5, i ? kPhotoLabel : kPauseLabel);
+        Put32(entry, 13 * i + 9, 0);
+    }
     b.insert(b.begin() + after, entry.begin(), entry.end());
     Put32(b, page + 0x11, Get32(b, page + 0x11) + uint32_t(entry.size()));
     return true;
@@ -364,6 +367,17 @@ X86_FUNC(sub_0008E320) {
         if (!w || message != kActivate || R32(w + 0x18) != kPauseItem || R32(w + 0x20) != kPauseChoices) continue;
         uint32_t eax = ctx.eax, chosen = kernel::CallGuest(ctx, kSetWidget, {w, kMsgRead, 0, 0}) & 0xFF;
         ctx.eax = eax;
+        if (chosen == 1) {  // RESTART: its question answered at once (src/game/quick_keys.cpp)
+            __imp__sub_0008E320(ctx, base);
+            nf::RestartChosen(ctx);
+            return;
+        }
+        if (chosen == 4) {  // PHOTO MODE
+            nf::PhotoEnter(ctx);
+            ctx.eax = 1;
+            ctx.esp += 4;
+            return;
+        }
         if (chosen != 3) break;
         nf::OpenPcPage(ctx, R32(ctx.esp + 4) & 0xFF);
         LOGR("nightfire: Settings opened from the pause screen");

@@ -255,14 +255,23 @@ const app::GameInfo app::kGame = {
                 {"draw_distance", nullptr, &nf::draw_distance, "Draw distance (%)",
                  "100 to 300; 100 is the game's. Pushes each level's fog and far edge out (dense-fog levels stay)."},
                 {"fov_percent", nullptr, &nf::fov_percent, "Field of view (%)",
-                 "50 to 150; 100 is the game's. On foot, driving and in the engine's cutscenes; the scope zooms in proportion."}},
+                 "50 to 150; 100 is the game's. On foot, driving and in the engine's cutscenes; the scope zooms in proportion."},
+                {"perf_overlay", &nf::perf_overlay, nullptr, "Performance overlay",
+                 "A corner panel: frames a second, a frame time graph, the GPU's time and the render size."},
+                {"ads_zoom", nullptr, &nf::ads_zoom, "Aim zoom (%)",
+                 "100 to 200; how far aiming down the sights zooms in (130 the default; scopes keep their own)."},
+                {"screenshot_key", nullptr, &nf::screenshot_key, "Screenshot key",
+                 "A Windows virtual key code (123 is F12; 0 none). Pictures go to Screenshots beside the exe."},
+                {"photo_key", nullptr, &nf::photo_key, "Photo mode key", "A Windows virtual key code (121 is F10; 0 none)."},
+                {"restart_key", nullptr, &nf::restart_key, "Restart mission key",
+                 "A Windows virtual key code (0 none): the mission restarted at once."}},
     .load = LoadKeys,                     // Driving.xbe's keys apart (DrivingKeys)
     .save = SaveKeys,
     .init = Init,                         // after the settings load, before the window and boot
     .loaded = nullptr,                    // image in memory, before its entry point runs
     .window = nf::ModernMenuFonts,        // the game window is up: the modern menus' fonts
     .message = nullptr,                   // window messages first; true takes one
-    .ui = nf::ModernMenuUi,               // ImGui drawing each frame: the modern menus
+    .ui = nf::GameUi,                     // ImGui drawing each frame: the modern menus, screenshots, overlay
     .pad = nf::MenuMouse,                 // changes a polled pad: the mouse in the menus
     .rumble = nullptr,                    // changes a rumble before it is set
     .achievements = nf::AchievementSet(), // conditions on default.xbe's Results page (src/common/achievement_set.cpp)

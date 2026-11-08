@@ -267,6 +267,8 @@ void MenuMouse(int port, input::Pad& p) {
     constexpr int64_t kPress = 70, kGap = 70;  // ms
     constexpr uint16_t kMouseBits[3] = {0x01, 0x02, 0x04};  // VK_LBUTTON VK_RBUTTON VK_MBUTTON
     if (port != 0) return;
+    if (PhotoPad(p)) return;  // photo mode has the controller (src/game/photo_mode.cpp)
+    QueuedPresses(p);         // presses of ours (src/game/quick_keys.cpp: quick restart, photo mode's pause)
     RefreshButtons();  // the button pictures for the keyboard or the controller, as it changes
     static int pending = 0;  // notches to play, up positive
     static int64_t pulse = 0;

@@ -133,4 +133,29 @@ bool MenuKeys();  // the menu up shows Enter and Backspace for A and B (not a le
 // snow too (lights.cpp)
 void NoteWalker(uint32_t obj);
 
+// PC extras (src/common/pc_extras.cpp, both exes): the screenshot key and its note, the performance overlay; the keys'
+// Windows virtual key codes (0 none), settings
+extern bool perf_overlay;        // the corner panel: frames a second, frame time graph, GPU time, render size
+extern uint32_t screenshot_key;  // F12: a PNG of the frame in Screenshots beside the exe
+extern uint32_t photo_key;       // F10: photo mode (default.xbe)
+extern uint32_t restart_key;     // the mission restarted at once (default.xbe), none by default
+extern uint32_t ads_zoom;        // aim down sights' zoom, percent (130: the view's angle divided by 1.3; src/game/aim.cpp)
+std::string KeyName(uint32_t vk);  // "F12", "Mouse Left"; "-" for none
+void TakeScreenshot();             // the next frame, as shown
+void GameUi(double fps);           // GameInfo::ui: the modern menus, then the above
+// photo mode (src/game/photo_mode.cpp; Driving.xbe's do nothing)
+bool PhotoActive();
+bool PhotoPad(input::Pad& p);      // the pad hook: true when the pad was kept from the game
+void PhotoEnter(X86Context& ctx);  // the pause screen's PHOTO MODE
+void PhotoFrame(X86Context& ctx);  // the game's thread, each frame
+void PhotoBeforePass();            // around the frame's 3D and 2D pass (0xDAC20)
+void PhotoAfterPass();
+void PhotoUi();                    // its panel (GameInfo::ui)
+// the quick restart key and Discord's presence (src/game/quick_keys.cpp), the game's thread each frame
+void QuickFrame(X86Context& ctx);
+void QueuePress(int control);           // a press of ours on controller 1 (Driving.xbe's do nothing)
+void QueuedPresses(input::Pad& p);      // MenuMouse: them played
+bool RestartChosen(X86Context& ctx);  // A on the pause screen's RESTART: its question answered yes at once
+const char* MissionName(uint32_t level);  // src/common/achievement_set.cpp: "The Exchange", null for none
+
 }  // namespace nf

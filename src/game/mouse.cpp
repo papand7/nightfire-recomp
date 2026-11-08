@@ -169,7 +169,7 @@ bool ViewTurn(float& yaw, float& pitch, float& tan_half_fov) {
 // after 0xDE720 filled the controls: where the mouse does not turn the player itself, it plays the right stick
 // (style 0's: slot 0 and 3 its x, 4 and 5 its y, -1 to 1)
 void MouseAsStick() {
-    if (++g_direct <= 2 || MenuUp()) return;  // 0xA9CF0 turned player 1 a frame ago: the mouse aims directly
+    if (++g_direct <= 2 || MenuUp() || PhotoActive()) return;  // 0xA9CF0 turned player 1 a frame ago: the mouse aims directly
     float x, y;
     if (!Counts(x, y) || (x == 0 && y == 0)) return;
     float sx = std::clamp(x / kCountsFull, -1.0f, 1.0f), sy = std::clamp(y / kCountsFull, -1.0f, 1.0f);

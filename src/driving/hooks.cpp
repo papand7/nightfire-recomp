@@ -38,4 +38,10 @@ int GunStyle() {
     return int(kernel::R32(0x1E455C + 0xC) & 7);
 }
 void ModernMenuFrame(X86Context&) {}  // the modern menus are default.xbe's alone
+// photo mode is default.xbe's alone
+bool PhotoActive() { return false; }
+bool PhotoPad(input::Pad&) { return false; }
+void PhotoUi() {}
+void QueuePress(int) {}
+void QueuedPresses(input::Pad&) {}
 }  // namespace nf

@@ -576,6 +576,11 @@ X86_FUNC(sub_0006D460) {
         ctx.esp += 4;
         return;
     }
+    if (h == 0x0200FC07) {  // the pause screen's PHOTO MODE (src/game/pc_settings_item.cpp)
+        ctx.eax = Str("PHOTO MODE");
+        ctx.esp += 4;
+        return;
+    }
     if (h == kLabelHandle || h == kHelpHandle || h == kPauseLabel) {
         ctx.eax = Str(h == kLabelHandle ? "Settings" : h == kPauseLabel ? "SETTINGS" : "Picture, controls and more for this PC.");
         ctx.esp += 4;

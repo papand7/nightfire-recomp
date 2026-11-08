@@ -33,7 +33,7 @@ constexpr uint32_t kControls = 0x1FE6D0, kControlSize = 0x158, kAimSlot = 0x60, 
 constexpr uint32_t kWeapons = 0x18CFA0, kWeaponSize = 0x10C, kWeaponFlags = 0x68, kScoped = 0x40, kWeaponZoom = 0x88;
 constexpr uint32_t kActor = 0xBC, kWeaponState = 0xB8, kWeaponIndex = 0x52, kPlayerIndex = 0x8DE;
 constexpr uint32_t kZoomTarget = 0x864, kZoomMost = 0x868, kGun = 0x778, kGunPos = 0x24, kHud = 0x770;
-constexpr float kZoom = 1.3f;                          // the view's angle divided by this
+constexpr float kZoom = 1.3f;  // the view's angle divided by this (iron sights: nf::ads_zoom's percent in its place)
 // each weapon's sights brought to the middle of the view (its model's frame: +x left, +y up): the gun's place at the
 // hip (0xBCAA0) moved by its sight's place on screen there, at the model's depth. Each weapon its own: models that
 // shared one (the silenced pistols, 18 and 19) sat up to 100 px apart. Measured from aimed NF_ADS_CAL shots
@@ -176,7 +176,9 @@ X86_FUNC(sub_000B7190) {  // a player's zoom eased (cdecl: the object)
         Player& p = g_players[i];
         uint32_t actor = R32(obj + kActor);
         if (p.aiming) {
-            float zoom = SightOf(kernel::G<int8_t>(R32(obj + kWeaponState) + kWeaponIndex)).zoom;
+            const Sight sight = SightOf(kernel::G<int8_t>(R32(obj + kWeaponState) + kWeaponIndex));
+            // iron sights zoom by the setting (More Settings' Aim Zoom, nf::ads_zoom), an optic by its own amount
+            float zoom = sight.optic ? sight.zoom : std::clamp(float(nf::ads_zoom) / 100.0f, 1.0f, 3.0f);
             SetF(actor + kZoomMost, std::max(GetF(actor + kZoomMost), zoom));
             SetF(actor + kZoomTarget, zoom);
             if (!p.was) LOGR("nightfire: player %d aims down the sights", i + 1);

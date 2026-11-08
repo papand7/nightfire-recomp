@@ -15,13 +15,16 @@ void HitTest();  // hit_feedback.cpp
 X86_EXTERN_FUNC(__imp__sub_000DAC20);
 X86_FUNC(sub_000DAC20) {  // the frame's 2D pass
     nf::HitTest();
+    nf::PhotoBeforePass();  // photo mode's free camera for the pass (src/game/photo_mode.cpp)
     __imp__sub_000DAC20(ctx, base);
+    nf::PhotoAfterPass();
 }
 
 X86_EXTERN_FUNC(__imp__sub_000D9410);
 X86_FUNC(sub_000D9410) {
     // modern menus: the game's own widgets not drawn (theirs over the background movie)
-    if ((nf::hide_hud && !nf::MenuUp()) || nf::ModernHidesClassic()) {
+    // photo mode: none of it (the HUD, the pause screen's widgets)
+    if ((nf::hide_hud && !nf::MenuUp()) || nf::ModernHidesClassic() || nf::PhotoActive()) {
         ctx.esp += 4;  // cdecl: the return address only
         return;
     }

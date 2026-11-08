@@ -85,6 +85,13 @@ const char* EveryBest(int medal) {
 
 }  // namespace
 
+// a story mission's name by its level id (a level's variants, 0x0710.., as the mission's), else null
+const char* MissionName(uint32_t level) {
+    for (const Mission& m : kMissions)
+        if ((level & 0xFF0FFFFF) == m.level) return m.name;
+    return nullptr;
+}
+
 std::vector<achievements::Def> AchievementSet() {
     std::vector<achievements::Def> set;
     for (int i = 0; i < 12; i++) {
