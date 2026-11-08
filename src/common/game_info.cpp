@@ -219,6 +219,24 @@ bool TextureBound(uint32_t header, uint32_t palette) {
     return nf::ButtonPictures(header, palette);
 }
 
+// the on-screen touch buttons (Android): on foot the controls page's layout (A crouch, X action/reload, Y jump, B next
+// weapon, Black next gadget, L aim, R fire, Back vision), driving the car's (R gas, L brake, A fire, B handbrake, Y
+// camera, X gadget, Black next weapon); A and B select and go back in the menus
+static std::vector<app::TouchButton> TouchButtons() {
+    using namespace input;
+    if (nf::kDriving)
+        return {{kRT, "Gas", "OK", 0.17f, 0.30f, 0.11f},    {kLT, "Brake", nullptr, 0.40f, 0.14f, 0.08f},
+                {kA, "Fire", "OK", 0.17f, 0.60f, 0.075f},   {kB, "Hand
+brake", "Back", 0.38f, 0.36f, 0.06f},
+                {kY, "Cam", nullptr, 0.06f, 0.76f, 0.045f}, {kX, "Gadget", nullptr, 0.06f, 0.48f, 0.05f},
+                {kBlack, "Weapon", nullptr, 0.30f, 0.62f, 0.05f}, {kStart, "Pause", nullptr, 0.06f, 0.93f, 0.04f}};
+    return {{kRT, "Fire", nullptr, 0.18f, 0.32f, 0.11f},   {kLT, "Aim", nullptr, 0.18f, 0.60f, 0.07f},
+            {kY, "Jump", nullptr, 0.38f, 0.30f, 0.065f},   {kA, "Crouch", "OK", 0.38f, 0.10f, 0.065f},
+            {kX, "Use", nullptr, 0.06f, 0.50f, 0.055f},    {kB, "Weapon", "Back", 0.06f, 0.14f, 0.06f},
+            {kBlack, "Gadget", nullptr, 0.30f, 0.62f, 0.05f}, {kBack, "Vision", nullptr, 0.17f, 0.93f, 0.04f},
+            {kStart, "Pause", nullptr, 0.06f, 0.93f, 0.04f}};
+}
+
 // what the runtime asks of the game; strings must be set, hooks may stay null
 const app::GameInfo app::kGame = {
     .title = L"007: NightFire",          // window and splash
@@ -299,4 +317,5 @@ const app::GameInfo app::kGame = {
     .vulkan_only = true,                  // the styles and effects are Vulkan's: no Renderer choice
     .settings_window = false,             // no F1 window: the settings are in the game's menus and the launcher
     .view_turn = nf::ViewTurn,            // smooth turning's in-between frames (src/game/mouse.cpp)
+    .touch_buttons = TouchButtons(),      // Android's on-screen controls
 };

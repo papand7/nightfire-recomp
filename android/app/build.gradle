@@ -1,0 +1,91 @@
+// The Android app: a launcher and player for a game package built on the player's PC from their own disc (the SDK's
+// scripts/android/package.sh). It holds no game code or files: the package's libraries are loaded from the app's
+// private storage. SDL's Java side is taken from SDL's release source at build time (gradle.properties' sdlVersion).
+import java.security.MessageDigest
+
+plugins {
+    id 'com.android.application'
+}
+
+def sdlVersion = project.property('sdlVersion')
+def sdlSha256 = project.findProperty('sdlSha256') ?: ''
+def sdlJavaDir = layout.buildDirectory.dir('generated/sdl-java').get().asFile
+def iconResDir = layout.buildDirectory.dir('generated/icon-res').get().asFile
+
+def fetchSdlJava = tasks.register('fetchSdlJava') {
+    def tarball = layout.buildDirectory.file("sdl/SDL-release-${sdlVersion}.tar.gz").get().asFile
+    inputs.property('sdlVersion', sdlVersion)
+    outputs.dir(sdlJavaDir)
+    doLast {
+        if (!tarball.exists()) {
+            tarball.parentFile.mkdirs()
+            def url = new URL("https://github.com/libsdl-org/SDL/archive/refs/tags/release-${sdlVersion}.tar.gz")
+            logger.lifecycle("SDL ${sdlVersion}: ${url}")
+            url.withInputStream { i -> tarball.withOutputStream { o -> o << i } }
+        }
+        def digest = MessageDigest.getInstance('SHA-256').digest(tarball.bytes).encodeHex().toString()
+        if (sdlSha256 && digest != sdlSha256) {
+            tarball.delete()
+            throw new GradleException("SDL ${sdlVersion}: SHA-256 ${digest}, gradle.properties expects ${sdlSha256}")
+        }
+        if (!sdlSha256) logger.warn("SDL ${sdlVersion}: SHA-256 ${digest} (set sdlSha256 in gradle.properties to pin it)")
+        project.delete(sdlJavaDir)
+        project.copy {
+            from(tarTree(resources.gzip(tarball))) {
+                include '*/android-project/app/src/main/java/**'
+                eachFile { f -> f.path = f.path.replaceFirst('^[^/]+/android-project/app/src/main/java/', '') }
+                includeEmptyDirs = false
+            }
+            into sdlJavaDir
+        }
+    }
+}
+
+// the launcher's icon (launcher/icon.png) as the app's
+def copyIcon = tasks.register('copyIcon', Copy) {
+    from(rootProject.file('../launcher/icon.png'))
+    into(new File(iconResDir, 'drawable'))
+    rename { 'ic_launcher.png' }
+}
+
+android {
+    namespace 'io.github.papand7.nightfire'
+    compileSdk 35
+    buildToolsVersion '35.0.0'
+
+    defaultConfig {
+        applicationId 'io.github.papand7.nightfire'
+        minSdk 29
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0'
+        buildConfigField 'String', 'SDL_VERSION', "\"${sdlVersion}\""
+    }
+    buildFeatures {
+        buildConfig true
+    }
+    sourceSets {
+        main {
+            java.srcDirs += [sdlJavaDir]
+            res.srcDirs += [iconResDir]
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            // sideloaded: signed with the debug key until a release key is set up (GitHub's secret)
+            signingConfig signingConfigs.debug
+        }
+    }
+    lint {
+        abortOnError false
+    }
+}
+
+tasks.named('preBuild') {
+    dependsOn fetchSdlJava, copyIcon
+}

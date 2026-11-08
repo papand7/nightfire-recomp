@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Vulkan (the renderer), controllers and the touch screen: wanted, none required to install -->
+    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x401000" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.gamepad" android:required="false" />
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <application
+        android:label="NightFire"
+        android:icon="@drawable/ic_launcher"
+        android:allowBackup="false"
+        android:hardwareAccelerated="true"
+        android:isGame="true"
+        android:appCategory="game">
+
+        <!-- the launcher: Play, Import package, Settings -->
+        <activity
+            android:name=".LauncherActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.NoActionBar"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- the game (SDL's activity) in a process of its own: the package's library is loaded there; the game's
+             end or a crash leaves the launcher, and a switch to the other image restarts this process alone -->
+        <activity
+            android:name=".GameActivity"
+            android:process=":game"
+            android:exported="false"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+            android:screenOrientation="sensorLandscape"
+            android:launchMode="singleTask"
+            android:resizeableActivity="false"
+            android:preferMinimalPostProcessing="true"
+            android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation|density" />
+
+        <!-- the relaunch (kernel::Relaunch): waits for the game's process to end, starts it again with the library -->
+        <activity
+            android:name=".RestartActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true" />
+    </application>
+</manifest>
