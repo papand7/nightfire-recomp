@@ -57,7 +57,7 @@ nf.onService(ev => {
             else setMsg($('build-msg'), ev.message, false);
         } else if (ev.job === 'music') {
             setMsg($('music-msg'), ev.message, ev.ok);
-        } else if (ev.job === 'build' || ev.job === 'remove_build') {
+        } else if (ev.job === 'build' || ev.job === 'remove_build' || ev.job === 'start_over') {
             setMsg($('build-msg'), ev.message, ev.ok);
             if (ev.ok && ev.job === 'build') toast('The game is built. Press Play.');
         }
@@ -109,6 +109,7 @@ function render() {
     const clean = $('btn-clean');
     clean.hidden = !S.built || !S.build_bytes || busy;
     clean.textContent = `Remove build files (${mb(S.build_bytes)})`;
+    $('btn-startover').hidden = busy;
     $('btn-pick').disabled = $('btn-scan').disabled = busy;
 
     const play = $('btn-play');
@@ -144,6 +145,10 @@ $('license-link').onclick = e => { e.preventDefault(); nf.open(S ? S.license_url
 $('btn-build').onclick = build;
 $('btn-stop').onclick = () => nf.command({ cmd: 'cancel' });
 $('btn-clean').onclick = () => nf.command({ cmd: 'remove_build' });
+$('btn-startover').onclick = () => {
+    if (confirm('Start over? This removes the downloaded source and its build (not the build tools, your game or your saves). Then press Install.'))
+        nf.command({ cmd: 'start_over' });
+};
 $('btn-scan').onclick = () => nf.command({ cmd: 'scan' });
 $('btn-pick').onclick = async () => { const p = await nf.pick('iso'); if (p) nf.command({ cmd: 'set_game', path: p }); };
 $('btn-play').onclick = () => { if (S.built) { setMsg($('build-msg'), ''); nf.command({ cmd: 'play' }); } else build(); };
