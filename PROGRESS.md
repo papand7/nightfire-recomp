@@ -3,6 +3,8 @@
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Status
+- Linux (2026-11-08, branch `linux-port`, SDK `linux-port`): both exes build and play in WSL2 (llvmpipe), the Linux
+  smoke test passes (SMOKE OK), the Linux launcher (AppImage) builds the game from GitHub; not yet on a real Linux GPU.
 - Latest validation (2026-11-07): both Windows executables build; Exchange geometry, two-copy co-op, localhost host
   discovery, particle captures and wheel menu checks completed. Water is on by default: Phoenix Base's pit water
   is known by its texture keys (2026-11-07). SDK work is committed on `vulkan` at 291d356 (NVIDIA DLSS added 2026-11-08, tested on an RTX 5060); main updates still await the required Linux smoke
@@ -35,7 +37,7 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
-### 2026-11-08 - Linux port phase 3: the game builds and plays on Linux (WSL2)
+### 2026-11-08 - Linux port phase 3: the game builds and plays on Linux (WSL2), smoke OK, a Linux launcher (AppImage)
 
 Game branch `linux-port` (from `vulkan-renderer` bf0d7b2), its sdk pointer on the SDK's `linux-port`.
 
@@ -54,7 +56,37 @@ Game branch `linux-port` (from `vulkan-renderer` bf0d7b2), its sdk pointer on th
   menus: main menu page 40000002) and with NF_SKIP_PARIS=0 into `NightfireDriving` (exec), which plays Paris: the van's
   sniper tutorial drawn (shots `.local/lx3/s*.png`), RT presses from XBE_PAD_SCRIPT. No traps. Sound: SDL's PipeWire/Pulse
   through WSLg (PipeWire's missing client.conf warns).
-- Windows: BUILD OK; a run in `.local/rt_run` reached the menus.
+- Smoke test (`scripts/smoke.sh` in WSL2, the Linux-recompiled `generated/`): **SMOKE OK: menu 24 draws a frame,
+  relaunched into driving, which draws 445 a frame over the last 300 frames, no traps** (about 3 minutes). The harness
+  had not linked with this game's PC features: SDK e335d46 `harness/game_headless.cpp` stands in for what they call in
+  the files the harness leaves out (gpu/style.cpp, app/*, input.cpp, the wheel). Headless, a relaunch with no image
+  beside the harness is logged as info. The harness wants toml++'s headers: in WSL
+  `CXXFLAGS=-I<build>/_deps/tomlplusplus-src/include` (or Ubuntu's libtomlplusplus-dev).
+- Launcher (SDK b01a85b, 4f5e247): the builder service (`sdk/launcher/service.cpp`, moved from win/) builds and runs on
+  Linux (`posix/platform_posix.cpp`): toolchain.json's new `linux` section (LLVM 19.1.7, CMake 3.31.12 tar.gz,
+  Ninja 1.13.2, pinned by SHA-256; older launchers read only the top level) with `system` programs that stand in for
+  a download (the system's clang 14+, CMake 3.25+, Ninja), tar.gz unpacking, execute bits kept, `CheckSystem` (git, a
+  clang++/lld test program, X11 or Wayland and sound headers; the missing ones named with the apt/dnf/pacman/zypper
+  command), no Microsoft license on Linux, exes without suffix and `.so` files installed, the game started detached.
+  Electron (`launcher/electron`): the service without .exe, the AppImage's folder as the launcher's, running games
+  found through /proc (PowerShell on Windows only), `npm run dist:linux` makes `NightFireLauncher-x86_64.AppImage`;
+  `build_service.sh`; `launcher/icon.png`. CMakePresets work on any host. BUILDING.md: Linux.
+- Checked in WSL2: launcher_cli fetched and unpacked the three Linux tools runnable; the service (game.json on
+  linux-port) with the user's assets: the system's clang 18.1.3, CMake 3.28.3 and Ninja 1.11.1 used, the system check
+  passed, clone, configure and build in 316 s, both exes and the .so files in play/, Play started the game (menus
+  drawn). The AppImage (built in WSL, 117 MB) starts its window and its service under WSLg (Electron needs the
+  usual desktop libraries: libnss3, libgtk-3 ...); its home page shows the Linux text and no license row.
+- CI: SDK linux workflow run 42461415684 green (harness, runtime on 24.04 and 22.04, the new launcher job: service
+  state, Ninja/CMake fetched and run). This repo's release.yml has a linux-launcher job (Ubuntu 24.04: service,
+  AppImage, artifact `NightFireLauncher-Linux`; on a tag `gh release upload` after the Windows job made the
+  release): run 42461517649 (dispatched on linux-port) green, both jobs. A push to linux-port did not start it (only
+  the dispatch did).
+- Windows: BUILD OK after each step (game, launcher, service; the service answers with `"os":"windows"`); a run in
+  `.local/rt_run` reached the menus.
+- Left for a Linux release: a run on a real Linux GPU (Mesa RADV/ANV, NVIDIA) and its frame rate, controllers and
+  sound there; the AppImage on a desktop distribution (Ubuntu, Fedora, Arch, Steam Deck) including its system check
+  and the LLVM fallback; hd_pack (texture packs) and DLSS are Windows only; refresh rate and HDR through SDL; the SDK's
+  linux-port merged into its main (with the other games' smoke tests) and this branch into main.
 
 ### 2026-11-08 - Linux port phase 2: the whole runtime compiles and links on Linux
 
