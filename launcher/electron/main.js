@@ -33,7 +33,10 @@ function send(channel, data) {
 
 function startService() {
     fs.mkdirSync(ROOT, { recursive: true });
-    svc = spawn(SERVICE, ['--games', LAUNCHER_DIR, '--root', ROOT], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    // the game's source the launcher carries (git bundles of the game and its runtime): installs need no download of it
+    const bundles = app.isPackaged ? path.join(process.resourcesPath, 'source') : path.resolve(__dirname, '../../out/source-bundles');
+    svc = spawn(SERVICE, ['--games', LAUNCHER_DIR, '--root', ROOT],
+                { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, NF_SOURCE_BUNDLES: bundles } });
     readline.createInterface({ input: svc.stdout }).on('line', line => {
         let ev;
         try { ev = JSON.parse(line); } catch { return; }
