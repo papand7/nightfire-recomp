@@ -76,7 +76,15 @@ wheel support. Everything is set from the game's own menus.
 - **Modern menus:** every menu redrawn in the blues of the PS2 cover, made for the mouse. The classic menus are one
   setting away.
 - All settings in the game's own menus, under Settings in the main menu and the pause screen.
-- **Achievements:** 19, with pop-ups (see [ACHIEVEMENTS.md](ACHIEVEMENTS.md)).
+- **Achievements:** 19, with pop-ups and their own page in More Settings showing what you have unlocked and how
+  close you are to the medal ones (see [ACHIEVEMENTS.md](ACHIEVEMENTS.md)).
+- **Photo mode:** pause and pick Photo Mode (or press F10), then fly the camera anywhere nearby with the mouse and
+  WASD or a controller, change the field of view, exposure, depth of field and look, and take the shot without the HUD.
+- **Screenshots:** F12 saves a PNG in the Screenshots folder next to the game.
+- **Performance overlay:** FPS, a frame time graph, GPU time and the render resolution in a corner panel.
+- **Quick restart:** Restart on the pause screen restarts the mission at once, and you can bind a key for it.
+- **Discord status:** shows the mission you are playing (add your Discord application ID in the launcher).
+- Adjustable aim-down-sights zoom, and one button to reset every setting to its default (your keys and saves stay).
 - Characters' feet stand on slopes and steps; START at the title can go straight to the menus; Hide HUD for
   screenshots.
 - Both the European and US discs, on foot and the driving missions.

@@ -35,6 +35,43 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-08 - Photo mode, screenshots, performance overlay, Discord, achievements page, quick restart
+
+- SDK (`vulkan` 6fd2a81): `gpu::RequestScreenshot` (the Vulkan present's XBE_PAD_CMD shot path, reported written),
+  `gpu::LastFrameStats` (the last frame's GPU time from the frame timestamps, scene and output sizes, upscaler),
+  `app::HideOverlays`, `app::SetPresence` (app/discord.cpp: Discord's local RPC over `\\.\pipe\discord-ipc-N` or a
+  Unix socket, handshake then SET_ACTIVITY on a thread; settings `discord`, `discord_app_id`, empty id = off).
+- `src/common/pc_extras.cpp`: GameInfo::ui is nf::GameUi: the modern menus, the screenshot key (F12, Screenshots\
+  beside the exe, a "saved" note kept out of the next picture), the performance overlay (More Settings' Performance:
+  Off / FPS / Full; `perf_overlay`).
+- `src/game/photo_mode.cpp`: from the pause screen's fifth choice PHOTO MODE (GetText answers 0x0200FC07) or F10 (Start
+  pressed first). The game stays in its pause; camera 0's world matrix (+0x108, rows right, up, forward, position) and
+  field of view (+0x104, +0xF4 = 1) are replaced only around 0xDAC20 and put back after, the first person gun hidden
+  (+0xCC | 0x10) for the pass; every 0xD9410 list skipped; MenuUp false (the mouse looks, the modern menus go); the
+  pad kept from the game (PhotoPad) and after leaving until let go. +0x180 is neither a copy nor the inverse of +0x108
+  (logged) and was left alone: the view follows +0x108. Panel: field of view, exposure (Original drawn as a neutral
+  Enhanced for it), depth of field (Focus, strength), look (a preset's look over the current effects); restored on leaving.
+- `src/game/quick_keys.cpp`: RESTART's question ("RESTART: ARE YOU SURE?") is a second list widget of the same id
+  (0x10000028) made after A's handler returns: found among the page's shown lists each frame, its entries YES, NO
+  with NO shown, so Up then A, played on the pad (QueuedPresses, once the player's own buttons are let go). The
+  restart key (none by default) presses Start, Down, A first. Discord's presence ("Playing <mission>" + difficulty,
+  "Multiplayer: <map>" from 0x17C6A0 / 0x260040, "In the menus"); a driving mission's name reaches Driving.xbe's exe as
+  NF_PRESENCE.
+- `src/game/graphics_page.cpp`: More Settings is two sets (Next Page / First Page): Performance, Achievements (two sets of
+  the 19, the service ones' progress from the score records), aim down sights, Aim Zoom (`ads_zoom`, iron sights
+  only), weapon sway, Discord, Reset to Defaults (A twice; keeps keys, wheel, display, language, host, Discord id).
+  Key Bindings' second set: Screenshot, Photo Mode, Restart Mission (`screenshot_key`, `photo_key`, `restart_key`).
+  In-place set switches focus their first row two frames later: focusing inside A's handler from slot 13 overflowed
+  the guest stack (recursion 0x90921 / 0x728AB / 0x93775 ...).
+- Launcher: performance overlay, aim zoom, a Discord group (status, application ID), hotkeys.
+- Tested in `.local/rt_run3` (`.local/vk/feat_test*_f.sh`, `feat_menu_f.sh`, keys sent with `key.py` after bringing the
+  window to the front): F12 PNGs written; overlay; photo mode by the pause screen and by F10 (moved, looked, FOV and
+  exposure steps, Y's picture without the panel, back to the pause screen / to play); restart from the pause screen
+  and by key (Bond back at the start); both achievement sets, page 2, the reset. Discord against a stand-in client
+  (`.local/vk/fake_discord.py`): handshake, "In the menus", then "Playing The Exchange" / "Operative"; without a client
+  nothing but one log line. Not tested: a real Discord client and application id, the classic (non-modern) pause list
+  with five entries, photo mode in split screen (camera 0 only).
+
 ### 2026-11-08 - NVIDIA DLSS (Super Resolution and DLAA); XeSS choice removed
 
 DLSS is an upscaler beside FSR 2 on the Vulkan renderer (SDK `gpu/upscale_dlss.cpp`). Licence: NVIDIA's DLSS repo is
