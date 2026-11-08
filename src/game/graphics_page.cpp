@@ -161,7 +161,7 @@ const std::vector<MenuRow> kMore2Rows = {
     {kAds, nf::kMenuChoice, "Aim Down Sights", "L (right mouse) raises the gun and zooms in, not the red crosshair. Blur: the background too.", 0},
     {kAdsZoom, nf::kMenuChoice, "Aim Zoom", "How far aiming down the sights zooms in (scopes keep their own).", 1},
     {kMotion, nf::kMenuChoice, "Weapon Sway", "A very light head bob and weapon sway as you move and turn.", 2},
-    {kDiscord, nf::kMenuChoice, "Discord", "Your Discord status shows the mission you play. Needs the application id (discord_app_id) in settings.toml or the launcher.", 3},
+    {kDiscord, nf::kMenuChoice, "Discord", "Your Discord status shows the mission you play (with Discord running on this PC).", 3},
     {kReset, nf::kMenuChoice, "Reset to Defaults", "Graphics and game settings as they first were. Key bindings and codenames are kept.", 5},
     {kMoreBack, nf::kMenuChoice, "First Page", "Performance, HUD, keyboard and mouse, language and more.", 13},
 };

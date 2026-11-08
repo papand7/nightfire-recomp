@@ -62,6 +62,8 @@ float FovScale() {
 namespace {
 // after the settings load: the harness's environment overrides them; each setting in effect is logged
 void Init() {
+    // Discord Rich Presence: this game's application on Discord's developer portal (a setting of the same name overrides it)
+    if (app::Get().discord_app_id.empty()) app::Get().discord_app_id = "1568872521061765140";
     if (const char* e = std::getenv("NF_SKIP_INTRO"); e && *e) nf::skip_intro = *e == '1';
     if (const char* e = std::getenv("NF_SKIP_PARIS"); e && *e) nf::skip_paris = *e == '1';
     if (const char* e = std::getenv("NF_FOV"); e && *e) nf::fov_percent = uint32_t(std::atoi(e));

@@ -172,7 +172,7 @@ window.SCHEMA = [
             {
                 title: 'Discord', items: [
                     { f: 's', key: 'discord', label: 'Discord status', def: true, help: 'Shows the mission you play on your Discord profile while Discord runs.' },
-                    { f: 's', key: 'discord_app_id', label: 'Discord application ID', def: '', type: 'text', help: 'The Application ID from discord.com/developers (empty: off).' },
+                    { f: 's', key: 'discord_app_id', label: 'Discord application ID', def: '', type: 'text', help: "Leave empty for the game's own Discord application." },
                 ],
             },
         ],
