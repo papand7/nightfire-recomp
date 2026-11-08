@@ -33,6 +33,7 @@
 
 #include "app/app.h"
 #include "common/nightfire.h"
+#include "core/achievements.h"
 #include "core/input.h"
 #include "core/log.h"
 #include "game/menu_page.h"
@@ -54,7 +55,8 @@ using nf::MenuRow;
 constexpr uint32_t kGfxPage = 0x4000FC20, kStylePage = 0x4000FC30;
 constexpr uint32_t kEnhPage = 1, kToonPage = 2, kRetroPage = 3, kMorePage = 4, kNetPage = 5,
                    kEffectsPage = 6, kKeysPage = 7, kKeys2Page = 8, kCoopPage = 9,
-                   kWheelPage = 10, kWheel2Page = 11, kWheel3Page = 12;  // the shared page's rows
+                   kWheelPage = 10, kWheel2Page = 11, kWheel3Page = 12, kMore2Page = 13, kAchPage = 14,
+                   kAch2Page = 15;  // the shared page's rows
 // the Graphics page's rows
 constexpr uint32_t kQuality = 0x1000FC21, kStyle = 0x1000FC22, kStyleOptions = 0x1000FC23, kFilter = 0x1000FC24,
                    kAo = 0x1000FC25, kBloom = 0x1000FC26, kAa = 0x1000FC27, kSharpen = 0x1000FC28,
@@ -77,6 +79,9 @@ constexpr uint32_t kFps = 0x1000FC61, kPauseBg = 0x1000FC62, kHideHud = 0x1000FC
                    kStartMenus = 0x1000FC65, kKeyboard = 0x1000FC66, kMouseLook = 0x1000FC67, kLanguage = 0x1000FC68,
                    kKeys = 0x1000FC69, kMenuColors = 0x1000FC6A, kAds = 0x1000FC6B, kMotion = 0x1000FC6C, kCoop = 0x1000FC6D,
                    kWheel = 0x1000FC6E;
+// More Settings' second set: aiming, Discord, resetting
+constexpr uint32_t kAchievements = 0x1000FC6F, kMoreNext = 0x1000FC70, kAdsZoom = 0x1000FD31, kDiscord = 0x1000FD32,
+                   kReset = 0x1000FD33, kMoreBack = 0x1000FD34;
 
 const std::vector<MenuRow> kGfxRows = {
     {kQuality, nf::kMenuChoice, "Graphics Quality", "Low to Ultra set the rows below at once; changing one makes it Custom."},
@@ -137,7 +142,7 @@ const std::vector<MenuRow> kRetroRows = {
     {kTint, nf::kMenuChoice, "Colour Grading", "A warm, faded old screen.", 5},
 };
 const std::vector<MenuRow> kMoreRows = {
-    {kFps, nf::kMenuChoice, "Frame Counter", "Frames a second in the top corner.", 0},
+    {kFps, nf::kMenuChoice, "Performance", "FPS: frames a second in the corner. Full: a panel with the frame time graph, GPU time and render size.", 0},
     {kPauseBg, nf::kMenuChoice, "Pause in Background", "The game stands still and silent while its window is not in front.", 1},
     {kHideHud, nf::kMenuChoice, "Hide HUD", "For screenshots: no ammo, health or radar. The menus stay.", 2},
     {kButtonPics, nf::kMenuChoice, "Button Pictures", "The console's prompts, or today's pad's (LB, RB, Menu, View).", 3},
@@ -148,19 +153,43 @@ const std::vector<MenuRow> kMoreRows = {
     {kKeys, nf::kMenuChoice, "Key Bindings", "The keyboard and mouse keys for each action.", 8},
     {kWheel, nf::kMenuChoice, "Steering Wheel", "A wheel, pedals and shifter for the driving missions: bindings, rotation, force feedback.", 9},
     {kMenuColors, nf::kMenuChoice, "Menu Colours", "The menu backgrounds as the game has them, or blue as on the PC version. Text and Bond stay.", 10},
-    {kAds, nf::kMenuChoice, "Aim Down Sights", "L (right mouse) raises the gun and zooms in, not the red crosshair. Blur: the background too.", 11},
-    {kMotion, nf::kMenuChoice, "Weapon Sway", "A very light head bob and weapon sway as you move and turn.", 12},
-    {kCoop, nf::kMenuChoice, "Co-op", "A second player in the story missions: split screen, network, friendly fire.", 13},
+    {kCoop, nf::kMenuChoice, "Co-op", "A second player in the story missions: split screen, network, friendly fire.", 11},
+    {kAchievements, nf::kMenuChoice, "Achievements", "The 19 achievements: which are unlocked, and how far along the medal ones are.", 12},
+    {kMoreNext, nf::kMenuChoice, "Next Page", "Aiming, Discord, and settings back to their defaults.", 13},
 };
+const std::vector<MenuRow> kMore2Rows = {
+    {kAds, nf::kMenuChoice, "Aim Down Sights", "L (right mouse) raises the gun and zooms in, not the red crosshair. Blur: the background too.", 0},
+    {kAdsZoom, nf::kMenuChoice, "Aim Zoom", "How far aiming down the sights zooms in (scopes keep their own).", 1},
+    {kMotion, nf::kMenuChoice, "Weapon Sway", "A very light head bob and weapon sway as you move and turn.", 2},
+    {kDiscord, nf::kMenuChoice, "Discord", "Your Discord status shows the mission you play. Needs the application id (discord_app_id) in settings.toml or the launcher.", 3},
+    {kReset, nf::kMenuChoice, "Reset to Defaults", "Graphics and game settings as they first were. Key bindings and codenames are kept.", 5},
+    {kMoreBack, nf::kMenuChoice, "First Page", "Performance, HUD, keyboard and mouse, language and more.", 13},
+};
+// Achievements (More Settings' row): two sets, the missions' twelve and the other seven, each row an achievement, its
+// state shown (Unlocked, Locked, or how far along); its help the description, the points and when it was unlocked
+constexpr uint32_t kAch0 = 0x1000FD01, kAchMore = 0x1000FD20, kAchBack = 0x1000FD21;
+const std::vector<MenuRow>& AchRows(bool second) {
+    static std::vector<MenuRow> rows[2];
+    if (rows[0].empty()) {
+        const auto& defs = app::kGame.achievements;
+        for (size_t i = 0; i < defs.size() && i < 24; i++)
+            rows[i >= 12].push_back({kAch0 + uint32_t(i), nf::kMenuChoice, defs[i].title, defs[i].description, int(i % 12)});
+        rows[0].push_back({kAchMore, nf::kMenuChoice, "Medals and More", "Medals, difficulty and Bond Moves.", 13});
+        rows[1].push_back({kAchBack, nf::kMenuChoice, "Missions", "An achievement for each mission completed.", 13});
+    }
+    return rows[second];
+}
+bool AchSet(uint32_t set) { return set == kAchPage || set == kAch2Page; }
 // Key Bindings (More Settings' row), two sets of rows: each an action on foot, its two keys shown; A waits for the
 // next key or mouse button (app::BeginKeyCapture), which becomes its first key and the old first its second; Escape
 // clears them. Saved at once, as the settings window's Controls tab does (app::Settings::keys)
 struct KeyRow {
     uint32_t id;
-    int control;  // input::Control, -1 a button
+    int control;  // input::Control, -1 a button, -2 a key of its own (extra)
     const char* label;
     const char* help;
     int slot;
+    uint32_t* extra = nullptr;  // the screenshot, photo mode and restart keys (one key each, nf::KeyName)
 };
 constexpr uint32_t kKeysMore = 0x1000FCAC, kKeysBack = 0x1000FCBB, kKeysDefaults = 0x1000FCBA;
 const KeyRow kKeyRows[] = {
@@ -175,7 +204,7 @@ const KeyRow kKeyRows[] = {
     {0x1000FCA9, input::kLT, "Aim", "Aim down the sights, or the game's manual aim.", 8},
     {0x1000FCAA, input::kWhite, "Alt. Fire", "The weapon's other fire.", 9},
     {0x1000FCAB, input::kX, "Action / Reload", "Use what is in front of you, or reload.", 10},
-    {kKeysMore, -1, "More Keys", "Weapons, gadgets, vision and pause.", 11},
+    {kKeysMore, -1, "More Keys", "Weapons, gadgets, vision, pause, screenshot, photo mode and restart.", 11},
     {0x1000FCB1, input::kB, "Next Weapon", "The next weapon carried.", 0},
     {0x1000FCB2, input::kBlack, "Next Gadget", "The next gadget carried.", 1},
     {0x1000FCB3, input::kBack, "Vision Mode", "The gadget's vision mode.", 2},
@@ -184,8 +213,11 @@ const KeyRow kKeyRows[] = {
     {0x1000FCB6, input::kUp, "Gadget / Zoom In", "The gadget before, or zoom in through a scope.", 5},
     {0x1000FCB7, input::kDown, "Gadget / Zoom Out", "The gadget after, or zoom out through a scope.", 6},
     {0x1000FCB8, input::kStart, "Pause", "The pause screen.", 7},
-    {kKeysDefaults, -1, "Default Keys", "Every action's keys as they first were.", 9},
-    {kKeysBack, -1, "First Keys", "Movement, sprint, crouch, jump and fire.", 11},
+    {0x1000FCBC, -2, "Screenshot", "A picture of the screen in the Screenshots folder beside the game. Escape: no key.", 8, &nf::screenshot_key},
+    {0x1000FCBD, -2, "Photo Mode", "Pause and fly the camera for a picture (the pause screen has it too). Escape: no key.", 9, &nf::photo_key},
+    {0x1000FCBE, -2, "Restart Mission", "The mission started again at once, without a question. Escape: no key.", 10, &nf::restart_key},
+    {kKeysDefaults, -1, "Default Keys", "Every action's keys as they first were.", 12},
+    {kKeysBack, -1, "First Keys", "Movement, sprint, crouch, jump and fire.", 13},
 };
 std::vector<MenuRow> KeySetRows(bool second) {
     std::vector<MenuRow> v;
@@ -729,7 +761,7 @@ const char* LanguageName(uint32_t l) {
 }
 void EnterMore(X86Context& ctx, uint32_t player) {
     const app::Settings& s = app::Get();
-    ShowOptions(ctx, player, kFps, kOffOn, s.show_fps ? 1.0f : 0.0f);
+    Choice(ctx, player, kFps, {{"Off", 0}, {"FPS", 1}, {"Full", 2}}, nf::perf_overlay ? 2 : s.show_fps ? 1 : 0);
     ShowOptions(ctx, player, kPauseBg, kOffOn, s.pause_unfocused ? 1.0f : 0.0f);
     ShowOptions(ctx, player, kHideHud, kOffOn, nf::hide_hud ? 1.0f : 0.0f);
     Choice(ctx, player, kButtonPics, {{"Original", 0}, {"Modern", 1}}, nf::modern_buttons ? 1 : 0);
@@ -744,9 +776,9 @@ void EnterMore(X86Context& ctx, uint32_t player) {
     Choice(ctx, player, kKeys, {{"Open", 0}}, 0);
     Choice(ctx, player, kWheel, {{"Open", 0}}, 0);
     Choice(ctx, player, kMenuColors, {{"Original", 0}, {"PC Blue", 1}}, s.menu_colors ? 1 : 0);
-    Choice(ctx, player, kAds, {{"Off", 0}, {"On", 1}}, nf::aim_down_sights ? 1 : 0);
-    ShowOptions(ctx, player, kMotion, kOffOn, nf::view_motion ? 1.0f : 0.0f);
     Choice(ctx, player, kCoop, {{"Open", 0}}, 0);
+    Choice(ctx, player, kAchievements, {{"Open", 0}}, 0);
+    Choice(ctx, player, kMoreNext, {{"Open", 0}}, 0);
 }
 // Co-op
 // this PC's addresses for a host to give (netplay::LocalAddresses), "192.168.1.20:27015"; the help line says the rest
@@ -907,7 +939,7 @@ void KeepMore(X86Context& ctx, uint32_t player) {
     uint32_t colors = ChoiceValue(ctx, player, kMenuColors);
     std::lock_guard<std::recursive_mutex> lock(app::UiLock());
     app::Settings& s = app::Get();
-    s.show_fps = ReadOption(ctx, player, kFps, kOffOn) > 0;
+    if (uint32_t perf = ChoiceValue(ctx, player, kFps); perf <= 2) s.show_fps = perf == 1, nf::perf_overlay = perf == 2;
     s.pause_unfocused = ReadOption(ctx, player, kPauseBg, kOffOn) > 0;
     nf::hide_hud = ReadOption(ctx, player, kHideHud, kOffOn) > 0;
     nf::modern_buttons = ChoiceValue(ctx, player, kButtonPics) == 1;
@@ -915,16 +947,103 @@ void KeepMore(X86Context& ctx, uint32_t player) {
     if (kb <= 2) s.keyboard = kb != 2, s.keyboard_alone = kb == 1;
     s.mouse_look = ReadOption(ctx, player, kMouseLook, kOffOn) > 0;
     if (colors <= 1) s.menu_colors = colors;
-    uint32_t ads = ChoiceValue(ctx, player, kAds);
-    if (ads <= 1) nf::aim_down_sights = ads > 0;
-    nf::view_motion = ReadOption(ctx, player, kMotion, kOffOn) > 0;
     for (uint32_t l : app::kGame.languages)
         if (l == lang) s.language = l;
     app::Save();
-    LOGR("nightfire: More Settings kept: frame counter %d, pause in background %d, hide HUD %d, modern buttons %d, "
-         "start in menus %d, keyboard %d alone %d, mouse look %d, language %u, menu colours %u, aim down sights %d",
-         s.show_fps, s.pause_unfocused, nf::hide_hud, nf::modern_buttons, nf::skip_paris, s.keyboard,
-         s.keyboard_alone, s.mouse_look, s.language, s.menu_colors, nf::aim_down_sights);
+    LOGR("nightfire: More Settings kept: frame counter %d, performance overlay %d, pause in background %d, hide HUD %d, "
+         "modern buttons %d, start in menus %d, keyboard %d alone %d, mouse look %d, language %u, menu colours %u",
+         s.show_fps, nf::perf_overlay, s.pause_unfocused, nf::hide_hud, nf::modern_buttons, nf::skip_paris, s.keyboard,
+         s.keyboard_alone, s.mouse_look, s.language, s.menu_colors);
+}
+// the second set
+const Options kAdsZooms = {{"Off", 100}, {"110%", 110}, {"120%", 120}, {"130% (Default)", 130}, {"150%", 150},
+                           {"175%", 175}, {"200%", 200}};
+bool g_reset_armed = false;  // Reset to Defaults asked once: A again resets
+void EnterMore2(X86Context& ctx, uint32_t player) {
+    const app::Settings& s = app::Get();
+    g_reset_armed = false;
+    Choice(ctx, player, kAds, {{"Off", 0}, {"On", 1}}, nf::aim_down_sights ? 1 : 0);
+    ShowOptions(ctx, player, kAdsZoom, kAdsZooms, float(nf::ads_zoom));
+    ShowOptions(ctx, player, kMotion, kOffOn, nf::view_motion ? 1.0f : 0.0f);
+    Choice(ctx, player, kDiscord, {{"Off", 0}, {s.discord_app_id.empty() ? "On (No App Id Set)" : "On", 1}}, s.discord ? 1 : 0);
+    Choice(ctx, player, kReset, {{"Reset...", 0}}, 0);
+    Choice(ctx, player, kMoreBack, {{"Open", 0}}, 0);
+}
+void KeepMore2(X86Context& ctx, uint32_t player) {
+    uint32_t ads = ChoiceValue(ctx, player, kAds), discord = ChoiceValue(ctx, player, kDiscord);
+    std::lock_guard<std::recursive_mutex> lock(app::UiLock());
+    if (ads <= 1) nf::aim_down_sights = ads > 0;
+    nf::ads_zoom = uint32_t(ReadOption(ctx, player, kAdsZoom, kAdsZooms));
+    nf::view_motion = ReadOption(ctx, player, kMotion, kOffOn) > 0;
+    if (discord <= 1) app::Get().discord = discord == 1;
+    app::Save();
+    LOGR("nightfire: More Settings (page 2) kept: aim down sights %d, aim zoom %u%%, weapon sway %d, Discord %d",
+         nf::aim_down_sights, nf::ads_zoom, nf::view_motion, app::Get().discord);
+}
+// Reset to Defaults: the settings file's and the game's settings as they first were, and the graphics style; the
+// key bindings and the wheel's, the display (mode, size, monitor, renderer), the language, the host address and the
+// Discord id kept; the codenames are the game's saves, untouched
+void ResetAll() {
+    {
+        std::lock_guard<std::recursive_mutex> lock(app::UiLock());
+        app::Settings& s = app::Get();
+        app::Settings d;
+        d.display_mode = s.display_mode, d.width = s.width, d.height = s.height, d.monitor = s.monitor;
+        d.renderer = s.renderer, d.language = s.language, d.join_ip = s.join_ip;
+        d.keys = s.keys, d.pad_map = s.pad_map;
+        d.wheel_steer = s.wheel_steer, d.wheel_throttle = s.wheel_throttle, d.wheel_brake = s.wheel_brake;
+        d.wheel_clutch = s.wheel_clutch, d.wheel_buttons = s.wheel_buttons, d.wheel_gears = s.wheel_gears;
+        d.wheel_range = s.wheel_range, d.wheel_lock = s.wheel_lock, d.wheel_deadzone = s.wheel_deadzone;
+        d.ffb_strength = s.ffb_strength, d.ffb_road = s.ffb_road;
+        d.discord_app_id = s.discord_app_id;
+        s = d;
+        nf::skip_intro = false, nf::skip_paris = true, nf::hide_hud = false, nf::aim_down_sights = true;
+        nf::view_motion = true, nf::foot_ik = true, nf::coop = false, nf::coop_friendly_fire = false;
+        nf::coop_side = false, nf::coop_leash = true, nf::coop_respawn = true, nf::fov_percent = 100;
+        nf::draw_distance = 100, nf::modern_menus = true, nf::modern_buttons = true, nf::rounded_font = false;
+        nf::perf_overlay = false, nf::ads_zoom = 130;
+        app::Save();
+    }
+    gpu::GraphicsStyle st, cur = Current();
+    st.texture_pack = true;
+    st.dump_textures = cur.dump_textures;
+    st.quality = gpu::MatchQuality(st, app::Get().aniso, app::Get().fxaa, app::Get().smaa);
+    Request(st);
+    app::ApplyDisplay();
+    LOGR("nightfire: Reset to Defaults: graphics and game settings as they first were (keys, display and language kept)");
+}
+// ---- Achievements: the rows' states from achievements::List(); the medal ones' progress from the profile
+// (src/common/achievement_set.cpp: mission i's score record 0x3C bytes at 0x17F198 + 0x3C i, its best +0x30, the
+// gold and platinum targets +0xC and +0x10)
+std::string AchValue(const achievements::Status& a) {
+    if (a.unlocked) return "Unlocked";
+    const std::string id = a.def->id;
+    if (id == "golden_service" || id == "platinum_service") {
+        const uint32_t medal = id == "golden_service" ? 0xC : 0x10;
+        int n = 0;
+        for (uint32_t m = 0; m < 12; m++) {
+            const uint32_t rec = 0x17F198 + 0x3C * m, target = R32(rec + medal);
+            n += target && R32(rec + 0x30) >= target;
+        }
+        return std::to_string(n) + " of 12";
+    }
+    return "Locked";
+}
+std::string AchHelp(uint32_t id) {
+    const auto list = achievements::List();
+    if (id == kAchMore || id == kAchBack) {
+        size_t n = 0;
+        uint32_t points = 0, all = 0;
+        for (const auto& a : list) n += a.unlocked, points += a.unlocked ? a.def->points : 0, all += a.def->points;
+        return std::to_string(n) + " of " + std::to_string(list.size()) + " unlocked, " + std::to_string(points) + " of " +
+               std::to_string(all) + " points. " +
+               (id == kAchMore ? "A: medals, difficulty and Bond Moves." : "A: the missions.");
+    }
+    const size_t i = id - kAch0;
+    if (i >= list.size()) return "";
+    const auto& a = list[i];
+    return std::string(a.def->description) + " (" + std::to_string(a.def->points) + " points" +
+           (a.unlocked ? ", unlocked " + a.when : "") + ")";
 }
 
 void KeepStyle(X86Context& ctx, uint32_t player, uint32_t page) {
@@ -976,6 +1095,9 @@ const std::vector<MenuRow>& RowsOf(uint32_t page) {
            : page == kEnhPage  ? kEnhRows
            : page == kToonPage ? kToonRows
            : page == kMorePage ? kMoreRows
+           : page == kMore2Page ? kMore2Rows
+           : page == kAchPage ? AchRows(false)
+           : page == kAch2Page ? AchRows(true)
            : page == kNetPage  ? kNetRows
            : page == kEffectsPage ? kEffectsRows
            : page == kKeysPage ? kKeysRows
@@ -988,7 +1110,8 @@ const std::vector<MenuRow>& RowsOf(uint32_t page) {
                                : kRetroRows;
 }
 constexpr uint32_t kSharedSets[] = {kEnhPage, kToonPage, kRetroPage, kMorePage, kNetPage, kEffectsPage, kKeysPage,
-                                    kKeys2Page, kCoopPage, kWheelPage, kWheel2Page, kWheel3Page, kJoinNetPage};
+                                    kKeys2Page, kCoopPage, kWheelPage, kWheel2Page, kWheel3Page, kJoinNetPage,
+                                    kMore2Page, kAchPage, kAch2Page};
 uint32_t g_style_rows = kEnhPage;  // the set the shared page was opened for
 uint32_t Wid(uint32_t id) {
     for (uint32_t set : kSharedSets)
@@ -1007,11 +1130,11 @@ const MenuRow* SharedRow(uint32_t line) {
 // opens
 constexpr char kStyleTitle[] = "Style Options ", kMoreTitle[] = "More Settings ", kNetTitle[] = "Netplay       ",
                kEffectsTitle[] = "Effects       ", kKeysTitle[] = "Key Bindings  ", kCoopTitle[] = "Co-op         ",
-               kWheelTitle[] = "Steering Wheel", kJoinTitle[] = "Network: Join ";
+               kWheelTitle[] = "Steering Wheel", kJoinTitle[] = "Network: Join ", kAchTitle[] = "Achievements  ";
 static_assert(sizeof(kStyleTitle) == sizeof(kMoreTitle) && sizeof(kStyleTitle) == sizeof(kNetTitle) &&
               sizeof(kStyleTitle) == sizeof(kEffectsTitle) && sizeof(kStyleTitle) == sizeof(kKeysTitle) &&
               sizeof(kStyleTitle) == sizeof(kCoopTitle) && sizeof(kStyleTitle) == sizeof(kWheelTitle) &&
-              sizeof(kStyleTitle) == sizeof(kJoinTitle));
+              sizeof(kStyleTitle) == sizeof(kJoinTitle) && sizeof(kStyleTitle) == sizeof(kAchTitle));
 constexpr size_t kLabelBytes = 32;
 const char* SharedLabel(uint32_t line) {
     static std::string labels[kSharedRows];
@@ -1020,7 +1143,8 @@ const char* SharedLabel(uint32_t line) {
 }
 void SetSharedTexts(uint32_t set) {
     std::memcpy(kernel::HostPtr(nf::MenuString(kStyleTitle)),
-                set == kMorePage      ? kMoreTitle
+                set == kMorePage || set == kMore2Page ? kMoreTitle
+                : AchSet(set)         ? kAchTitle
                 : set == kNetPage     ? kNetTitle
                 : set == kEffectsPage ? kEffectsTitle
                 : set == kKeysPage || set == kKeys2Page ? kKeysTitle
@@ -1151,10 +1275,10 @@ std::string KeysText(int control) {
     return a.empty() ? "-" : b.empty() ? a : a + " / " + b;
 }
 void ShowKeyRow(X86Context& ctx, uint32_t player, const KeyRow& r) {
-    if (r.control >= 0) {
+    if (r.control >= 0 || r.extra) {
         // the guest strings are made once for each text (nf::MenuString): the texts kept as long as the game runs
         static std::vector<std::string>* texts = new std::vector<std::string>;
-        std::string t = KeysText(r.control);
+        std::string t = r.extra ? nf::KeyName(*r.extra) : KeysText(r.control);
         size_t i = std::find(texts->begin(), texts->end(), t) - texts->begin();
         if (i == texts->size()) texts->push_back(t);
         Choice(ctx, player, r.id, {{(*texts)[i].c_str(), 0}}, 0);
@@ -1196,6 +1320,7 @@ bool KeysActivate(X86Context& ctx, uint32_t player, uint32_t page_widget, uint32
             std::lock_guard<std::recursive_mutex> lock(app::UiLock());
             app::Settings& s = app::Get();
             for (int c = 0; c < input::kControls && c < int(s.keys.size()); c++) s.keys[c] = app::DefaultKeys(c);
+            nf::screenshot_key = 0x7B, nf::photo_key = 0x79, nf::restart_key = 0;
             app::Save();
         }
         EnterKeys(ctx, player);
@@ -1389,7 +1514,14 @@ const char* GraphicsMenuHelp(uint32_t page, uint32_t id) {
                 if (r.set == g_style_rows && kShared0 + uint32_t(r.slot) == id)
                     return g_wheel.row == &r ? "Waiting for the control. A again: unbound." : WheelHelp(r);
         }
-        if (const MenuRow* r = SharedRow(id - kShared0)) return r->help;
+        if (const MenuRow* r = SharedRow(id - kShared0)) {
+            if (AchSet(g_style_rows)) {
+                static std::string help;
+                help = AchHelp(r->id);
+                return help.c_str();
+            }
+            return r->help;
+        }
     }
     if (page == kGfxPage)
         for (const MenuRow& r : kGfxRows)
@@ -1448,6 +1580,39 @@ void WheelPageFrame(X86Context& ctx) {
     ctx.eax = eax;
 }
 
+void EnterAch(X86Context& ctx, uint32_t player) {
+    static std::vector<std::string>* texts = new std::vector<std::string>;  // the guest's copies stay (MenuString)
+    const auto list = achievements::List();
+    for (const MenuRow& r : RowsOf(g_style_rows)) {
+        const size_t i = r.id - kAch0;
+        std::string t = r.id == kAchMore || r.id == kAchBack ? "Open" : i < list.size() ? AchValue(list[i]) : "-";
+        size_t k = std::find(texts->begin(), texts->end(), t) - texts->begin();
+        if (k == texts->size()) texts->push_back(t);
+        Choice(ctx, player, r.id, {{(*texts)[k].c_str(), 0}}, 0);
+    }
+    size_t n = 0;
+    for (const auto& a : list) n += a.unlocked;
+    LOGR("nightfire: Achievements (%s): %zu of %zu unlocked", g_style_rows == kAchPage ? "missions" : "medals and more", n,
+         list.size());
+}
+struct FocusLater {
+    uint32_t page = 0, player = 0, row = 0;
+    int frames = 0;
+} g_focus_later;
+// another set of rows on the shared page: its texts, rows and values, the focus on its first row
+void SwitchSet(X86Context& ctx, uint32_t player, uint32_t page_widget, uint32_t set) {
+    SetSharedTexts(set);
+    ShowStyleRows(ctx, player);
+    if (set == kMorePage) EnterMore(ctx, player);
+    else if (set == kMore2Page) EnterMore2(ctx, player);
+    else EnterAch(ctx, player);
+    uint32_t first = kShared0;
+    for (uint32_t line = kSharedRows; line-- > 0;)
+        if (SharedRow(line)) first = kShared0 + line;
+    // focused a little later, as the wheel's sets are: the guest finishes the activating row's focus after its handler
+    g_focus_later = {page_widget, player, first, 2};
+}
+
 void OpenMorePage(X86Context& ctx, uint32_t player) {
     SetSharedTexts(kMorePage);
     MenuGoTo(ctx, player, kStylePage);
@@ -1473,7 +1638,10 @@ void KeysPageFrame(X86Context& ctx) {
     {
         std::lock_guard<std::recursive_mutex> lock(app::UiLock());
         app::Settings& s = app::Get();
-        if (r.control < int(s.keys.size())) {
+        if (r.extra) {
+            *r.extra = vk == 0x1B ? 0 : vk;  // Escape: none
+            app::Save();
+        } else if (r.control < int(s.keys.size())) {
             std::array<uint16_t, 2>& k = s.keys[size_t(r.control)];
             if (vk == 0x1B) k = {0, 0};  // Escape: none
             else if (k[0] != vk) k = {vk, k[0] ? k[0] : k[1]};
@@ -1486,11 +1654,16 @@ void KeysPageFrame(X86Context& ctx) {
     ShowKeyRow(ctx, player, r);
     nf::MenuHelp(ctx, player, r.help);
     ctx.eax = eax;
-    LOGR("nightfire: Key Bindings: %s is %s", r.label, KeysText(r.control).c_str());
+    LOGR("nightfire: Key Bindings: %s is %s", r.label, r.extra ? nf::KeyName(*r.extra).c_str() : KeysText(r.control).c_str());
 }
 
 // each frame (nf::LanFrame): the games found shown as they come and go, outside the menu's update
 void NetplayPageFrame(X86Context& ctx) {
+    if (g_focus_later.frames && --g_focus_later.frames == 0) {
+        const uint32_t eax = ctx.eax;
+        nf::MenuFocus(ctx, g_focus_later.player, g_focus_later.page, g_focus_later.row);
+        ctx.eax = eax;
+    }
     KeysPageFrame(ctx);
     WheelPageFrame(ctx);
     if (!g_net_open) return;
@@ -1507,7 +1680,7 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
     uint32_t id = R32(widget + 0x18);
     if (IsPage(id)) {
         if (msg == 0x4D && id == kStylePage && g_net_open) nf::NetSearch(false), g_net_open = false;
-        if (msg == 0x4D && id == kStylePage) EndCapture();
+        if (msg == 0x4D && id == kStylePage) EndCapture(), g_focus_later.frames = 0;
         if (msg == 0x4D && id == kStylePage) EndWheelWait(ctx, player, false), g_wheel.open = false;
         if (msg == 0x4C) {
             if (id == kGfxPage) {
@@ -1516,6 +1689,8 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
                 ShowStyleRows(ctx, player);
                 if (g_style_rows == kNetPage) EnterNet(ctx, player);
                 else if (g_style_rows == kMorePage) EnterMore(ctx, player);
+                else if (g_style_rows == kMore2Page) EnterMore2(ctx, player);
+                else if (AchSet(g_style_rows)) EnterAch(ctx, player);
                 else if (g_style_rows == kEffectsPage) EnterEffects(ctx, player);
                 else if (g_style_rows == kKeysPage || g_style_rows == kKeys2Page) EnterKeys(ctx, player);
                 else if (g_style_rows == kCoopPage) EnterCoop(ctx, player);
@@ -1566,6 +1741,34 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
             if (id == kStylePage && (g_style_rows == kKeysPage || g_style_rows == kKeys2Page))
                 return KeysActivate(ctx, player, widget, on);
             if (id == kStylePage && WheelSet(g_style_rows)) return WheelActivate(ctx, player, widget, on);
+            if (id == kStylePage && g_style_rows == kMorePage && (on == Wid(kMoreNext) || on == Wid(kAchievements))) {
+                KeepMore(ctx, player);
+                SwitchSet(ctx, player, widget, on == Wid(kMoreNext) ? kMore2Page : kAchPage);
+                return true;
+            }
+            if (id == kStylePage && g_style_rows == kMore2Page && on == Wid(kMoreBack)) {
+                KeepMore2(ctx, player);
+                SwitchSet(ctx, player, widget, kMorePage);
+                return true;
+            }
+            if (id == kStylePage && g_style_rows == kMore2Page && on == Wid(kReset)) {
+                if (!g_reset_armed) {
+                    g_reset_armed = true;
+                    Choice(ctx, player, kReset, {{"A Again to Reset", 0}}, 0);
+                    MenuHelp(ctx, player, "A again: graphics and game settings as they first were (keys and codenames "
+                                          "kept). Another row or B: nothing changes.");
+                    return true;
+                }
+                ResetAll();
+                SwitchSet(ctx, player, widget, kMore2Page);
+                MenuHelp(ctx, player, "Done: graphics and game settings are as they first were.");
+                return true;
+            }
+            if (id == kStylePage && AchSet(g_style_rows)) {
+                if (on == Wid(kAchMore) || on == Wid(kAchBack))
+                    SwitchSet(ctx, player, widget, on == Wid(kAchMore) ? kAch2Page : kAchPage);
+                return true;  // A on an achievement: nothing
+            }
             if (id == kStylePage && g_style_rows == kMorePage && on == Wid(kCoop)) {
                 KeepMore(ctx, player);
                 OpenCoopPage(ctx, player);
@@ -1589,6 +1792,7 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
             }
             if (id == kGfxPage) KeepGraphics(ctx, player);
             else if (g_style_rows == kMorePage) KeepMore(ctx, player);
+            else if (g_style_rows == kMore2Page) KeepMore2(ctx, player);
             else if (g_style_rows == kEffectsPage) KeepEffects(ctx, player);
             else if (g_style_rows == kCoopPage) KeepCoop(ctx, player);
             else KeepStyle(ctx, player, g_style_rows);
@@ -1604,7 +1808,12 @@ bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint
                         MenuHelp(ctx, player, g_wheel.row == &r ? "Waiting for the control. A again: unbound." : WheelHelp(r));
                 return false;
             }
-            if (const MenuRow* r = SharedRow(id - kShared0)) MenuHelp(ctx, player, r->help);
+            if (g_reset_armed && g_style_rows == kMore2Page && id != Wid(kReset)) {  // Reset's question let go
+                g_reset_armed = false;
+                Choice(ctx, player, kReset, {{"Reset...", 0}}, 0);
+            }
+            if (const MenuRow* r = SharedRow(id - kShared0))
+                MenuHelp(ctx, player, AchSet(g_style_rows) ? AchHelp(r->id).c_str() : r->help);
             return false;
         }
         for (const MenuRow& r : kGfxRows)

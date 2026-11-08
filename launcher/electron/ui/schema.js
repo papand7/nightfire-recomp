@@ -4,6 +4,7 @@
 // its default. Grouped as the game's F1 window.
 const onOff = null;  // a bool: a switch
 const pick = (...pairs) => pairs.map(([value, label]) => ({ value, label }));
+const KEYS = pick([0, 'None'], [112, 'F1'], [113, 'F2'], [114, 'F3'], [115, 'F4'], [116, 'F5'], [117, 'F6'], [118, 'F7'], [119, 'F8'], [120, 'F9'], [121, 'F10'], [122, 'F11'], [123, 'F12'], [44, 'Print Screen']);
 
 window.SCHEMA = [
     {
@@ -38,6 +39,7 @@ window.SCHEMA = [
             {
                 title: 'Screen', items: [
                     { f: 's', key: 'show_fps', label: 'Frame counter', def: false },
+                    { f: 's', key: 'perf_overlay', label: 'Performance overlay', def: false, help: 'A corner panel: FPS, a frame time graph, GPU time and the render size.' },
                     { f: 's', key: 'sharp_2d', label: 'Sharp text and HUD', def: true },
                     { f: 's', key: 'hit_feedback', label: 'Hit feedback', def: 2, options: pick([0, 'Off'], [1, 'Marker'], [2, 'Marker and sound']) },
                     { f: 's', key: 'menu_colors', label: 'Menu colours', def: 0, options: pick([0, 'Original'], [1, 'PC Blue']) },
@@ -161,9 +163,16 @@ window.SCHEMA = [
                     { f: 's', key: 'hide_hud', label: 'Hide the HUD', def: false },
                     { f: 's', key: 'view_motion', label: 'Weapon sway and head bob', def: true },
                     { f: 's', key: 'aim_down_sights', label: 'Aim down sights', def: true, help: 'Right mouse button or L.' },
+                    { f: 's', key: 'ads_zoom', label: 'Aim zoom', def: 130, type: 'range', min: 100, max: 200, step: 5, unit: '%', help: 'How far aiming down the sights zooms in. Scopes keep their own.' },
                     { f: 's', key: 'fov_percent', label: 'Field of view', def: 100, type: 'range', min: 50, max: 150, step: 5, unit: '%' },
                     { f: 's', key: 'modern_buttons', label: 'Modern button pictures', def: true },
                     { f: 's', key: 'rounded_font', label: 'Rounded font', def: false, restart: true },
+                ],
+            },
+            {
+                title: 'Discord', items: [
+                    { f: 's', key: 'discord', label: 'Discord status', def: true, help: 'Shows the mission you play on your Discord profile while Discord runs.' },
+                    { f: 's', key: 'discord_app_id', label: 'Discord application ID', def: '', type: 'text', help: 'The Application ID from discord.com/developers (empty: off).' },
                 ],
             },
         ],
@@ -177,6 +186,13 @@ window.SCHEMA = [
                     { f: 's', key: 'mouse_look', label: 'Mouse look', def: true },
                     { f: 's', key: 'mouse_sensitivity', label: 'Mouse sensitivity', def: 100, type: 'range', min: 10, max: 1000, step: 10, unit: '%' },
                     { f: 's', key: 'mouse_invert_y', label: 'Invert mouse Y', def: false },
+                ],
+            },
+            {
+                title: 'Hotkeys', items: [
+                    { f: 's', key: 'screenshot_key', label: 'Screenshot', def: 123, options: KEYS, help: 'A PNG in the Screenshots folder beside the game.' },
+                    { f: 's', key: 'photo_key', label: 'Photo mode', def: 121, options: KEYS },
+                    { f: 's', key: 'restart_key', label: 'Restart mission', def: 0, options: KEYS, help: 'Restarts the mission at once, no question.' },
                 ],
             },
             {

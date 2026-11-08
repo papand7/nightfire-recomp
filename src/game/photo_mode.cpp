@@ -331,6 +331,8 @@ void PhotoFrame(X86Context& ctx) {
     } else if (!MenuUp() && PlayerFree()) {  // in play: paused first (Start), then on
         g_state = kPausing, g_wait = 0;
         QueuePress(input::kStart);
+    } else {
+        LOGR("nightfire: photo mode: not here (a menu or Bond not the player's to move)");
     }
 }
 
@@ -447,7 +449,7 @@ void PhotoUi() {
     std::snprintf(v[2], 48, "%s", dofs[std::clamp(l.dof, 0, 4)]);
     std::snprintf(v[3], 48, "%s", style.c_str());
     const char* names[4] = {"Field of View", "Exposure", "Depth of Field", "Look"};
-    const float w = 860 * s, x0 = 30 * s;
+    const float x0 = 30 * s, w = std::min(860 * s, io.DisplaySize.x - 2 * x0);
     const std::string help1 = pad ? "Left stick: move   Right stick: look   LT / RT: down / up   LB / RB: slower / faster"
                                   : "Mouse: look   WASD: move   Q / E: down / up   Ctrl / Shift: slower / faster";
     const std::string help2 = pad ? "D-pad: choose and change   Y: picture   X: hide   B: back"

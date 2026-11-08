@@ -9,6 +9,7 @@
 // Discord (app::SetPresence, SDK app/discord.cpp): "Playing <mission>" with the difficulty, "Multiplayer: <map>",
 // or "In the menus", the elapsed time from when that began. A driving mission's name goes to Driving.xbe's exe in
 // the environment (NF_PRESENCE), which shows it from its start.
+#include <cctype>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -85,14 +86,43 @@ void QueuedPresses(input::Pad& p) {
 
 void QueuePress(int control) { Queue(control); }
 
-bool RestartChosen(X86Context&) {
-    // the question's own A (on its YES, the list's second entry too) comes here again: the game's alone
-    static int64_t answered = -100000;
-    const int64_t now = NowMs();
-    if (now - answered < 4000) return false;
-    answered = now;
-    Queue(input::kDown), Queue(input::kA);  // the question's YES
-    LOGR("nightfire: Restart: answered yes at once");
+// a list widget's entries (src/game/modern_menu_frame.cpp has the layout): the first the link at +0x270 less +0x27C
+// dwords, each entry's +0 the next, column 0's text at +8, +0x2C8 an entry the cursor skips, +0x560 the one shown
+std::string EntryText(uint32_t e) {
+    std::string t;
+    for (uint32_t i = 0; i < 40 && mem::IsCommitted(e + 8 + i); i++) {
+        char c = kernel::G<char>(e + 8 + i);
+        if (!c) break;
+        if (c != ' ') t += char(std::toupper(static_cast<unsigned char>(c)));
+    }
+    return t;
+}
+uint32_t g_question = 0;      // the pause list whose question is awaited (RestartChosen), and since when
+int64_t g_question_at = 0, g_answered = -100000;
+// the question up (its entries the list's now): steps from the one shown to YES, then A
+bool Answer(uint32_t w) {
+    const uint32_t link = R32(w + 0x270), shown = R32(w + 0x560);
+    int at = -1, yes = -1, k = 0;
+    std::string all;
+    for (uint32_t e = link ? link - R32(w + 0x27C) * 4 : 0; e && k < 16 && mem::IsCommitted(e + 0x2C8); e = R32(e)) {
+        if (kernel::G<uint8_t>(e + 0x2C8)) continue;
+        const std::string t = EntryText(e);
+        all += (all.empty() ? "" : ", ") + t;
+        if (e == shown) at = k;
+        if (t == "YES" || t == "OUI" || t == "JA" || t == "SI" || t == "S\xCD") yes = k;
+        k++;
+    }
+    if (at < 0 || yes < 0) return false;
+    g_answered = NowMs(), g_question = 0;
+    for (int i = 0; i < std::abs(yes - at) && i < 4; i++) Queue(yes > at ? input::kDown : input::kUp);
+    Queue(input::kA);
+    LOGR("nightfire: Restart: answered yes at once (%s; %d to %d)", all.c_str(), at, yes);
+    return true;
+}
+bool RestartChosen(X86Context&, uint32_t w) {
+    // the question's own A comes here again (its list is the same widget): the game's alone
+    if (NowMs() - g_answered < 4000 || g_question) return false;
+    g_question = w, g_question_at = NowMs();  // the game builds the question after this: answered from QuickFrame
     return true;
 }
 
@@ -120,6 +150,20 @@ void QuickFrame(X86Context& ctx) {
         }
     }
 
+    if (g_question) {
+        // the question is a list of its own beside the choices (same id, its own widget): the page's shown lists
+        const uint32_t pw = R32(kMenuContext + 0x1BC);
+        bool done = !Paused();
+        uint32_t w = pw ? R32(pw + 0x94) : 0;
+        if (w) w -= R32(pw + 0xA0) * 4;
+        for (int n = 0; !done && w && n < 400 && mem::IsCommitted(w + 0x80); w = R32(w), n++)
+            if (!(kernel::G<uint8_t>(w + 0x7A) & 1) && kernel::G<uint8_t>(w + 0x7B) == 6 && R32(w + 0x18) == R32(g_question + 0x18))
+                done = Answer(w);
+        if (done || NowMs() - g_question_at > 2000) {
+            if (!done) LOGR("nightfire: Restart: the question did not come; asked as the game does");
+            g_question = 0;
+        }
+    }
     // Discord's presence, twice a second
     static int frames = 0;
     if (++frames % 30) return;

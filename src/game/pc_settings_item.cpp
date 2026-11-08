@@ -369,7 +369,7 @@ X86_FUNC(sub_0008E320) {
         ctx.eax = eax;
         if (chosen == 1) {  // RESTART: its question answered at once (src/game/quick_keys.cpp)
             __imp__sub_0008E320(ctx, base);
-            nf::RestartChosen(ctx);
+            nf::RestartChosen(ctx, w);
             return;
         }
         if (chosen == 4) {  // PHOTO MODE

@@ -155,7 +155,7 @@ void PhotoUi();                    // its panel (GameInfo::ui)
 void QuickFrame(X86Context& ctx);
 void QueuePress(int control);           // a press of ours on controller 1 (Driving.xbe's do nothing)
 void QueuedPresses(input::Pad& p);      // MenuMouse: them played
-bool RestartChosen(X86Context& ctx);  // A on the pause screen's RESTART: its question answered yes at once
+bool RestartChosen(X86Context& ctx, uint32_t list);  // A on the pause screen's RESTART: its question answered yes at once
 const char* MissionName(uint32_t level);  // src/common/achievement_set.cpp: "The Exchange", null for none
 
 }  // namespace nf
