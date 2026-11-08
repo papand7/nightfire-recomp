@@ -1,11 +1,12 @@
-# <short>Launcher.exe, built on GitHub's Windows machines (it holds no game code: players build the game with it).
-# A push to main that touches the launcher builds it (an artifact); a tag v* builds it and publishes the release
-# with the exe and docs/releases/<tag>.md as its notes.
+# <short>Launcher.exe, built on GitHub's Windows machines, and the Linux launcher (Electron, an AppImage with the builder
+# service) on its Ubuntu machines; they hold no game code: players build the game with them. A push to main (or
+# linux-port) that touches the launcher builds both (artifacts); a tag v* builds them and publishes the release with
+# the exe, the AppImage and docs/releases/<tag>.md as its notes.
 name: Launcher
 
 on:
   push:
-    branches: [main]
+    branches: [main, linux-port]
     paths: ['launcher/**', 'sdk', '.github/workflows/release.yml']
     tags: ['v*']
   workflow_dispatch:
@@ -52,3 +53,42 @@ jobs:
           notes="docs/releases/${GITHUB_REF_NAME}.md"
           gh release create "$GITHUB_REF_NAME" "out/launcher/${GAME_SHORT}Launcher.exe" \
             --title "$GAME_TITLE PC port ${GITHUB_REF_NAME#v}" --notes-file "$notes"
+
+  linux-launcher:
+    runs-on: ubuntu-24.04
+    # on a tag, after the release exists (the Windows job makes it)
+    needs: launcher
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang lld cmake ninja-build
+
+      - name: Build the launcher service
+        run: bash launcher/electron/build_service.sh
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build the AppImage
+        working-directory: launcher/electron
+        run: |
+          npm ci
+          npm run dist:linux
+          ls -la ../../out/launcher-electron
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.GAME_SHORT }}Launcher-Linux
+          path: out/launcher-electron/${{ env.GAME_SHORT }}Launcher-x86_64.AppImage
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" "out/launcher-electron/${GAME_SHORT}Launcher-x86_64.AppImage" --clobber
