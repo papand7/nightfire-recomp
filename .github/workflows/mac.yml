@@ -1,0 +1,43 @@
+# The macOS port's check: the whole runtime (window, Vulkan renderer through MoltenVK, sound, ImGui) built and linked
+# around the SDK's stub image (sdk/tests/linux: no game code or files), on GitHub's Apple Silicon machines. Every
+# compile error is kept (-k 0) and listed at the end; the log is an artifact.
+name: macOS runtime
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['sdk', '.github/workflows/mac.yml']
+
+jobs:
+  runtime:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Packages
+        run: brew install ninja molten-vk vulkan-loader vulkan-headers
+
+      - name: Build the runtime around the stub image
+        run: |
+          set -o pipefail
+          cmake -S sdk/tests/linux -B "$RUNNER_TEMP/rt" -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ 2>&1 | tee "$RUNNER_TEMP/configure.log"
+          cmake --build "$RUNNER_TEMP/rt" -k 0 2>&1 | tee "$RUNNER_TEMP/build.log"
+
+      - name: The errors
+        if: always()
+        run: |
+          echo "== configure"; grep -E "CMake (Error|Warning)" -A4 "$RUNNER_TEMP/configure.log" | head -60 || true
+          echo "== compile and link errors (each once)"
+          grep -E "error:|ld: |Undefined symbols|FAILED:" "$RUNNER_TEMP/build.log" | sed -E 's|/Users/runner/work/[^ ]*/sdk/||' | sort | uniq -c | sort -rn | head -150 || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-runtime-logs
+          path: |
+            ${{ runner.temp }}/configure.log
+            ${{ runner.temp }}/build.log
