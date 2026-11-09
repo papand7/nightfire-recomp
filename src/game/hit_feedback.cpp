@@ -124,6 +124,13 @@ X86_FUNC(sub_0003D900) {
     app::HitMarker(x, y, kind);
 }
 
+namespace {
+uint32_t Env(const char* name, uint32_t fallback) {
+    const char* e = std::getenv(name);
+    return e && *e ? uint32_t(std::strtoul(e, nullptr, 0)) : fallback;
+}
+}  // namespace
+
 namespace nf {
 // Native sprite particles are depth-tested in the world and work in every renderer and split-screen view.
 void BloodHit(X86Context& ctx, uint32_t victim, uint32_t hit) {
@@ -156,11 +163,16 @@ void BloodHit(X86Context& ctx, uint32_t victim, uint32_t hit) {
             kernel::G<float>(scratch + 16 + k * 4) = normal[k] * (0.35f + random() * 0.7f) +
                 (random() - 0.5f) * 1.1f + (k == 1 ? 0.2f : 0);
         }
-        const float size = i < 3 ? 0.065f : 0.015f + random() * 0.025f;
-        // 0x200021D is the game's character-hit puff, tinted dark red, fading to transparent.
+        // NF_BLOOD_SPRITE / NF_BLOOD_MODE / NF_BLOOD_SCALE / NF_BLOOD_RGBA (diagnostic): another look to compare
+        // the game's smoke puff 0x200001F, alpha blended (its character-hit puff 0x200021D is additive: it glowed like
+        // sparks), dark red and opaque, fading out, three quarters of the old size
+        static const uint32_t spr = Env("NF_BLOOD_SPRITE", 0x200001F), mode = Env("NF_BLOOD_MODE", 0),
+                              rgba = Env("NF_BLOOD_RGBA", 0x8A0808FF);
+        static const float scale = float(Env("NF_BLOOD_SCALE", 75)) / 100.0f;
+        const float size = (i < 3 ? 0.065f : 0.015f + random() * 0.025f) * scale;
         const uint32_t sprite = kernel::CallGuest(ctx, 0xCD140, {room, scratch, 0, scratch + 16,
                 std::bit_cast<uint32_t>(size), std::bit_cast<uint32_t>(size * 0.55f),
-                0x200021D, 0, 0xA00909D0, 0x50030300, 18});
+                spr, mode, rgba, (rgba & 0xFFFFFF00u) >> 1 & 0x7F7F7F00u, 18});
         if (sprite) {
             made++;
             if (!visible) kernel::W32(sprite + 0xCC, R32(sprite + 0xCC) | 0x10);
