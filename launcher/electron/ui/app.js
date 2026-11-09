@@ -453,3 +453,16 @@ nf.onAndroid(ev => {
     }
 });
 $('btn-android-folder').onclick = () => nf.revealAndroid();
+// a newer launcher: a banner at the top (Download opens the release page); asked at start and every 6 hours
+async function checkLauncherUpdate() {
+    let u = null;
+    try { u = await nf.launcherUpdate(); } catch (e) { return; }
+    if (!u || localStorage.getItem('update-later') === u.version) return;
+    $('update-text').textContent = `NightFire Remastered ${u.version} is out (you have ${u.current}).`;
+    $('update-get').onclick = () => nf.open(u.url);
+    $('update-later').onclick = () => { localStorage.setItem('update-later', u.version); $('update-banner').hidden = true; };
+    $('update-banner').hidden = false;
+    toast(`Version ${u.version} is available`);
+}
+checkLauncherUpdate();
+setInterval(checkLauncherUpdate, 6 * 3600 * 1000);

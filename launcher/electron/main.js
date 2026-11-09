@@ -35,7 +35,10 @@ function send(channel, data) {
 
 function startService() {
     fs.mkdirSync(ROOT, { recursive: true });
-    svc = spawn(SERVICE, ['--games', LAUNCHER_DIR, '--root', ROOT], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    // the game's source the launcher carries (git bundles of the game and its runtime): installs need no download of it
+    const bundles = app.isPackaged ? path.join(process.resourcesPath, 'source') : path.resolve(__dirname, '../../out/source-bundles');
+    svc = spawn(SERVICE, ['--games', LAUNCHER_DIR, '--root', ROOT],
+                { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, NF_SOURCE_BUNDLES: bundles } });
     readline.createInterface({ input: svc.stdout }).on('line', line => {
         let ev;
         try { ev = JSON.parse(line); } catch { return; }
@@ -237,6 +240,34 @@ ipcMain.handle('android:reveal', () => { if (androidOutput) shell.showItemInFold
 ipcMain.on('svc', (_, cmd) => command(cmd));
 ipcMain.handle('svc:state', () => state);
 ipcMain.handle('paths', () => ({ launcher: LAUNCHER_DIR, root: ROOT, platform: process.platform }));
+
+// a newer launcher: the latest release on GitHub, else the mirror's latest.json; null when this one is the newest or
+// neither answers
+const RELEASES = 'https://github.com/papand7/nightfire-recomp/releases/latest';
+function newer(a, b) {  // a > b, versions like 1.5.1 (a leading v and a -suffix ignored)
+    const p = v => String(v).replace(/^v/, '').split('-')[0].split('.').map(n => parseInt(n, 10) || 0);
+    const x = p(a), y = p(b);
+    for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+    return false;
+}
+async function latestRelease() {
+    const tries = [
+        ['https://api.github.com/repos/papand7/nightfire-recomp/releases/latest', j => ({ version: j.tag_name, url: j.html_url })],
+        ['https://mirror.dankelsoft.dk/latest.json', j => ({ version: j.version, url: j.url || RELEASES })],
+    ];
+    for (const [url, pick] of tries) {
+        try {
+            const r = await fetch(url, { headers: { 'User-Agent': 'NightFireLauncher' }, signal: AbortSignal.timeout(8000) });
+            if (r.ok) return pick(await r.json());
+        } catch (e) { /* the next source */ }
+    }
+    return null;
+}
+ipcMain.handle('launcher:update', async () => {
+    const latest = await latestRelease();
+    if (!latest || !latest.version || !newer(latest.version, app.getVersion())) return null;
+    return { version: String(latest.version).replace(/^v/, ''), url: latest.url || RELEASES, current: app.getVersion() };
+});
 ipcMain.on('win', (_, what) => {
     if (!win) return;
     if (what === 'min') win.minimize();

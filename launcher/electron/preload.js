@@ -19,4 +19,5 @@ contextBridge.exposeInMainWorld('nf', {
     makeTextures: opts => ipcRenderer.invoke('textures:run', opts),
     stopTextures: () => ipcRenderer.invoke('textures:cancel'),
     onPack: fn => ipcRenderer.on('pack', (_, ev) => fn(ev)),
+    launcherUpdate: () => ipcRenderer.invoke('launcher:update'),
 });
