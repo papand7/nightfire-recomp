@@ -59,7 +59,7 @@ nf.onService(ev => {
             else setMsg($('build-msg'), ev.message, false);
         } else if (ev.job === 'music') {
             setMsg($('music-msg'), ev.message, ev.ok);
-        } else if (ev.job === 'build' || ev.job === 'remove_build' || ev.job === 'start_over') {
+        } else if (ev.job === 'build' || ev.job === 'remove_build' || ev.job === 'start_over' || ev.job === 'install_requirements') {
             setMsg($('build-msg'), ev.message, ev.ok);
             if (ev.ok && ev.job === 'build') toast('The game is built. Press Play.');
         }
@@ -113,6 +113,7 @@ function render() {
     clean.hidden = !S.built || !S.build_bytes || busy;
     clean.textContent = `Remove build files (${mb(S.build_bytes)})`;
     $('btn-startover').hidden = busy;
+    $('btn-reqs').hidden = busy || !S.install_command;  // Linux: the build packages it found missing
     $('btn-pick').disabled = $('btn-scan').disabled = busy;
 
     const play = $('btn-play');
@@ -148,6 +149,7 @@ $('license-link').onclick = e => { e.preventDefault(); nf.open(S ? S.license_url
 $('btn-build').onclick = build;
 $('btn-stop').onclick = () => nf.command({ cmd: 'cancel' });
 $('btn-clean').onclick = () => nf.command({ cmd: 'remove_build' });
+$('btn-reqs').onclick = () => nf.command({ cmd: 'install_requirements' });
 $('btn-startover').onclick = () => {
     if (confirm('Start over? This removes the installed game, the downloaded source and its build (not the build tools, your disc image, your saves, settings or HD textures). Then press Install.'))
         nf.command({ cmd: 'start_over' });
