@@ -120,14 +120,35 @@ jobs:
         with:
           node-version: 22
 
-      - name: Build the disk image
+      - name: Build the app
         working-directory: launcher/electron
         run: |
           # macOS wants a 512x512 icon at least: icon.png (256) scaled up
           sips -z 512 512 ../icon.png --out ../icon-512.png
           npm ci
-          npm run dist:mac
-          ls -la ../../out/launcher-electron
+          npm run dist:mac-app
+          ls -la ../../out/launcher-electron ../../out/launcher-electron/mac-arm64
+
+      # no certificate: signed ad hoc. electron-builder changes Electron after it was signed and skips signing, which
+      # leaves the signature broken and macOS says the app is "damaged"; an ad hoc signature is valid (the first
+      # start still asks for a right-click Open)
+      - name: Sign ad hoc and make the disk image
+        run: |
+          OUT=out/launcher-electron
+          APP="$OUT/mac-arm64/NightFire Launcher.app"
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          STAGE="$OUT/dmg-stage"
+          mkdir -p "$STAGE"
+          cp -R "$APP" "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname "NightFire Launcher" -srcfolder "$STAGE" -ov -format UDZO "$OUT/${GAME_SHORT}Launcher-macOS-arm64.dmg"
+          # the app inside the finished image: still validly signed, as a download will have it
+          hdiutil attach "$OUT/${GAME_SHORT}Launcher-macOS-arm64.dmg" -mountpoint /tmp/nfdmg -nobrowse -quiet
+          codesign --verify --deep --strict --verbose=2 "/tmp/nfdmg/NightFire Launcher.app"
+          codesign -dv "/tmp/nfdmg/NightFire Launcher.app" 2>&1 | head -6
+          hdiutil detach /tmp/nfdmg -quiet
+          ls -la "$OUT"
 
       - uses: actions/upload-artifact@v4
         with:

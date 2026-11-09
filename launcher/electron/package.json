@@ -13,7 +13,8 @@
     "bundles": "node source_bundles.js",
     "dist": "node source_bundles.js && electron-builder --win portable",
     "dist:linux": "node source_bundles.js && electron-builder --linux AppImage",
-    "dist:mac": "node source_bundles.js && electron-builder --mac dmg"
+    "dist:mac": "node source_bundles.js && electron-builder --mac dmg",
+    "dist:mac-app": "node source_bundles.js && electron-builder --mac dir"
   },
   "dependencies": {
     "smol-toml": "^1.3.1"
