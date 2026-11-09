@@ -149,7 +149,7 @@ $('btn-build').onclick = build;
 $('btn-stop').onclick = () => nf.command({ cmd: 'cancel' });
 $('btn-clean').onclick = () => nf.command({ cmd: 'remove_build' });
 $('btn-startover').onclick = () => {
-    if (confirm('Start over? This removes the downloaded source and its build (not the build tools, your game or your saves). Then press Install.'))
+    if (confirm('Start over? This removes the installed game, the downloaded source and its build (not the build tools, your disc image, your saves, settings or HD textures). Then press Install.'))
         nf.command({ cmd: 'start_over' });
 };
 $('btn-scan').onclick = () => nf.command({ cmd: 'scan' });
