@@ -25,7 +25,7 @@ jobs:
           set -o pipefail
           cmake -S sdk/tests/linux -B "$RUNNER_TEMP/rt" -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ 2>&1 | tee "$RUNNER_TEMP/configure.log"
-          cmake --build "$RUNNER_TEMP/rt" -k 0 2>&1 | tee "$RUNNER_TEMP/build.log"
+          cmake --build "$RUNNER_TEMP/rt" -- -k 0 2>&1 | tee "$RUNNER_TEMP/build.log"
 
       - name: The errors
         if: always()
