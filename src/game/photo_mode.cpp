@@ -193,6 +193,15 @@ void Step(int row, int d) {
 }
 
 // the free camera's movement, from the game's thread each frame while on
+// NF_PHOTO_TEST=<frames> (diagnostic): photo mode entered by itself, the view turned by a scripted mouse
+int TestFrames() {
+    static const int n = [] {
+        const char* e = std::getenv("NF_PHOTO_TEST");
+        return e ? std::atoi(e) : 0;
+    }();
+    return n;
+}
+
 void Fly(float dt) {
     if (!g_cam.set) return;
     input::Pad pad;
@@ -214,6 +223,22 @@ void Fly(float dt) {
     // the look: the mouse as mouse.cpp turns the view (0.0008 radians a count at 100%), the right stick 2 radians a second
     float mx = 0, my = 0;
     input::TakeMouse(mx, my);
+    // NF_PHOTO_TEST (diagnostic): the mouse turned right, then up, a picture before and after each (NF_PHOTO_SHOTS)
+    if (TestFrames()) {
+        static int f = 0;
+        f++;
+        auto shot = [](const char* name) {
+            if (const char* dir = std::getenv("NF_PHOTO_SHOTS"))
+                if (FILE* sf = std::fopen("shot", "w")) std::fprintf(sf, "%s\\%s.png\n", dir, name), std::fclose(sf);
+        };
+        if (f == 60) shot("photo_a");
+        if (f > 90 && f <= 120) mx += 0.5f;   // to the right
+        if (f == 180) shot("photo_b");
+        if (f > 210 && f <= 240) my += 0.5f;  // up
+        if (f == 300) shot("photo_c");
+        if (f == 60 || f == 180 || f == 300)
+            LOGR("nightfire: photo test %d: forward %.3f %.3f %.3f", f, g_cam.fwd.x, g_cam.fwd.y, g_cam.fwd.z);
+    }
     float fov = 60;
     {
         std::lock_guard lock(g_lock);
@@ -223,13 +248,16 @@ void Fly(float dt) {
     float yaw = mx * 2400 * dt * 0.0008f * zoom + Stick(pad.rx) * 2.0f * dt * zoom;
     float pitch = my * 2400 * dt * 0.0008f * zoom + Stick(pad.ry) * 1.5f * dt * zoom;
     const V3 up{0, 1, 0};
-    V3 right = Norm(Cross(up, g_cam.fwd)) * g_cam.right_sign;
+    // the screen's right: the game's camera row 0 (what right_sign matches, for the matrix written back) points to the
+    // screen's left, so turning and strafing go the other way from it (they were mirrored: the mouse turned the view
+    // left when moved right)
+    V3 right = Norm(Cross(up, g_cam.fwd)) * -g_cam.right_sign;
     V3 f = Norm(g_cam.fwd * std::cos(yaw) + right * std::sin(yaw));
     V3 cam_up = Norm(Cross(f, Norm(Cross(up, f))));
     V3 f2 = Norm(f * std::cos(pitch) + cam_up * std::sin(pitch));
     if (std::fabs(f2.y) < 0.97f) f = f2;
     g_cam.fwd = f;
-    right = Norm(Cross(up, f)) * g_cam.right_sign;
+    right = Norm(Cross(up, f)) * -g_cam.right_sign;
     V3 p = g_cam.pos + (f * fwd + right * side + up * rise) * (speed * dt);
     g_cam.pos = p;
     static uint32_t traced_frames = 0;
@@ -321,7 +349,9 @@ void PhotoFrame(X86Context& ctx) {
     last = now;
     static bool key_was = false;
     const bool key = photo_key && input::KeyHeld(int(photo_key)) && !app::KeyCaptureBusy();
-    const bool pressed = key && !key_was;
+    static int test_wait = 0;  // NF_PHOTO_TEST=<frames>: photo mode by itself after that many frames in play
+    const bool test_press = TestFrames() && g_state == kOff && !MenuUp() && PlayerFree() && ++test_wait == TestFrames();
+    const bool pressed = (key && !key_was) || test_press;
     key_was = key;
     if (g_state == kOn) {
         if (pressed) {
