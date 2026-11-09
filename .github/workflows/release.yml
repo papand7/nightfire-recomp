@@ -102,7 +102,7 @@ jobs:
         run: gh release upload "$TAG" "out/launcher-electron/${GAME_SHORT}Launcher-x86_64.AppImage" --clobber
 
   mac-launcher:
-    runs-on: macos-14
+    runs-on: macos-15
     # on a tag, after the release exists (the Windows job makes it)
     needs: launcher
     steps:
