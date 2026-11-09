@@ -206,7 +206,7 @@ ipcMain.handle('textures:cancel', async () => { if (pack) pack.kill(); if (colle
 // half a minute; nothing to play)
 ipcMain.handle('textures:collect', async () => {
     if (collect || pack) return { ok: false, message: 'Another texture job is running.' };
-    if (gameRunning()) return { ok: false, message: 'Close the game first.' };
+    if (await gameRunning()) return { ok: false, message: 'Close the game first.' };
     const dir = playDir(), exe = path.join(dir, WINDOWS ? 'Nightfire.exe' : 'Nightfire');
     if (!fs.existsSync(exe)) return { ok: false, message: 'Install the game first.' };
     collect = spawn(exe, [], { cwd: dir, env: { ...process.env, NF_COLLECT_TEXTURES: '1' }, windowsHide: false });
