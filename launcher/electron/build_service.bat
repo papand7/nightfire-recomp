@@ -11,7 +11,7 @@ if not defined VSDIR (
 )
 call "%VSDIR%\Common7\Tools\VsDevCmd.bat" -arch=amd64 -host_arch=amd64 >nul
 set "VSCMAKE=%VSDIR%\Common7\IDE\CommonExtensions\Microsoft\CMake"
-set "PATH=%VSCMAKE%\CMake\bin;%VSCMAKE%\Ninja;%VSDIR%\VC\Tools\Llvm\x64\bin;%PATH%"
+set "PATH=%VSCMAKE%\CMake\bin;%VSCMAKE%\Ninja;%VSDIR%\VC\Tools\Llvm\x64\bin;%ProgramFiles%\LLVM\bin;%PATH%"
 cmake -S sdk\launcher -B out\launcher-svc -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DLAUNCHER_GAME="%CD%\launcher" || exit /b 1
 cmake --build out\launcher-svc --target launcher_service || exit /b 1
 echo BUILD OK: out\launcher-svc\NightFireLauncherService.exe
