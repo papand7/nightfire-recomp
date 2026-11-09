@@ -56,7 +56,7 @@
       "unpackDirName": "NightFireLauncher"
     },
     "mac": {
-      "icon": "../icon.png",
+      "icon": "../icon-512.png",
       "category": "public.app-category.games",
       "target": [
         "dmg"

@@ -123,6 +123,8 @@ jobs:
       - name: Build the disk image
         working-directory: launcher/electron
         run: |
+          # macOS wants a 512x512 icon at least: icon.png (256) scaled up
+          sips -z 512 512 ../icon.png --out ../icon-512.png
           npm ci
           npm run dist:mac
           ls -la ../../out/launcher-electron
