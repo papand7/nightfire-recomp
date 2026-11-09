@@ -57,6 +57,7 @@
     },
     "mac": {
       "icon": "../icon-512.png",
+      "artifactName": "NightFireLauncher-macOS-arm64.dmg",
       "category": "public.app-category.games",
       "target": [
         "dmg"
