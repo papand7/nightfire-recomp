@@ -28,6 +28,7 @@ let state = null;
 let android = null;
 let androidOutput = null;
 let pack = null;  // the running hd_pack
+let collect = null;  // the game running to collect the textures from its files
 
 function send(channel, data) {
     if (win && !win.isDestroyed()) win.webContents.send(channel, data);
@@ -181,12 +182,14 @@ ipcMain.handle('textures:info', async () => {
         tool: fs.existsSync(path.join(dir, 'tools', 'hd_pack' + EXE)),
         folder: tex,
         running: !!pack,
+        collecting: !!collect,
+        game: fs.existsSync(path.join(dir, WINDOWS ? 'Nightfire.exe' : 'Nightfire')),
     };
 });
 ipcMain.handle('textures:run', async (_, o) => {
     if (pack) return { ok: false, message: 'Already making the pack.' };
     const dir = playDir(), exe = path.join(dir, 'tools', 'hd_pack' + EXE);
-    if (!fs.existsSync(exe)) return { ok: false, message: WINDOWS ? 'hd_pack is not there yet: build the game first.' : 'The HD texture pack tool is Windows only so far.' };
+    if (!fs.existsSync(exe)) return { ok: false, message: 'hd_pack is not there yet: build the game first.' };
     const args = ['--dir', dir, '--scale', String(o.scale === 2 ? 2 : 4), '--model', o.model === 'anime' ? 'anime' : 'x4plus'];
     if (o.pbr) args.push('--pbr');
     if (o.force) args.push('--force');
@@ -198,7 +201,19 @@ ipcMain.handle('textures:run', async (_, o) => {
     pack.on('error', e => { pack = null; send('pack', { done: true, code: -1, line: e.message }); });
     return { ok: true };
 });
-ipcMain.handle('textures:cancel', async () => { if (pack) pack.kill(); });
+ipcMain.handle('textures:cancel', async () => { if (pack) pack.kill(); if (collect) collect.kill(); });
+// the game started with NF_COLLECT_TEXTURES=1 reads its level files and saves every texture in them, then quits (about
+// half a minute; nothing to play)
+ipcMain.handle('textures:collect', async () => {
+    if (collect || pack) return { ok: false, message: 'Another texture job is running.' };
+    if (gameRunning()) return { ok: false, message: 'Close the game first.' };
+    const dir = playDir(), exe = path.join(dir, WINDOWS ? 'Nightfire.exe' : 'Nightfire');
+    if (!fs.existsSync(exe)) return { ok: false, message: 'Install the game first.' };
+    collect = spawn(exe, [], { cwd: dir, env: { ...process.env, NF_COLLECT_TEXTURES: '1' }, windowsHide: false });
+    collect.on('exit', code => { collect = null; send('collect', { done: true, code }); });
+    collect.on('error', e => { collect = null; send('collect', { done: true, code: -1, line: e.message }); });
+    return { ok: true };
+});
 
 // ---- Android package: the same Linux build on Linux and in Windows' WSL.
 ipcMain.handle('android:run', async (_, options = {}) => {

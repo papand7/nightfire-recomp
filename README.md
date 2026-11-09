@@ -101,19 +101,20 @@ The **NightFire PC Launcher** sets everything up:
 - **Mission:** choose your disc image and press **Install**: the launcher builds the game on your PC from your own
   disc. Then **Play**, and **Update** when a new version is out. Nothing is installed in Windows.
 - **Settings:** every option, also outside the game.
-- **HD Textures:** collect the textures as you play, then make your HD pack with one click.
+- **HD Textures:** collect every texture with one button (no playing needed), or as you play, then make your HD pack
+  with one click.
 - **Your music:** a folder of your songs becomes the game's soundtrack.
 
 **Download** it from the [latest release](https://github.com/papand7/nightfire-recomp/releases/latest):
 - **Windows:** `NightFireLauncher.exe`. Just run it.
 - **Linux (beta):** `NightFireLauncher-x86_64.AppImage`. Make it executable (`chmod +x`) and run it. If your system
   is missing something the game needs, the launcher tells you the one command to install it. It needs a graphics card
-  with Vulkan (Mesa or NVIDIA drivers). HD texture packs and DLSS are Windows-only for now.
+  with Vulkan (Mesa or NVIDIA drivers). HD texture packs work; DLSS is Windows-only for now.
 - **macOS (beta, Apple Silicon only):** `NightFireLauncher-macOS-arm64.dmg`. Open it and drag the launcher to
   Applications. It is not signed, so the first time right-click it and choose **Open**. This is the first macOS
   build: the launcher builds and packages, but the game itself has not been run on a Mac yet. The game draws with
   Vulkan, which macOS only has through MoltenVK, and that path is untested, so expect problems and please report
-  them. HD texture packs and DLSS are Windows-only for now.
+  them. The HD texture pack tool is built for the Mac too, but untested; DLSS is Windows-only for now.
 
 Building it yourself instead: see [BUILDING.md](BUILDING.md).
 

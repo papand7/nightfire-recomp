@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('nf', {
     textureInfo: () => ipcRenderer.invoke('textures:info'),
     makeTextures: opts => ipcRenderer.invoke('textures:run', opts),
     stopTextures: () => ipcRenderer.invoke('textures:cancel'),
+    collectTextures: () => ipcRenderer.invoke('textures:collect'),
+    onCollect: fn => ipcRenderer.on('collect', (_, ev) => fn(ev)),
     onPack: fn => ipcRenderer.on('pack', (_, ev) => fn(ev)),
     launcherUpdate: () => ipcRenderer.invoke('launcher:update'),
 });

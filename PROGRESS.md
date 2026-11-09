@@ -2,6 +2,25 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-09: HD textures without playing; hd_pack on Linux and macOS
+
+- Level files hold the game's textures in records: "KXT" at +0, +8 size, +12 width, +16 height, +20 format code
+  (0 DXT1 0x0C, 4 DXT5 0x0F, 8 swizzled A8R8G8B8 0x06; 1 = palette, skipped), +24 mips, +52 name[36], +88 pixels. The
+  renderer's key (a hash of level 0's bytes, format and size) is reproduced from them: 158 of the 163 real pictures
+  the game itself dumped in The Exchange; the other 5 are menu and render pictures. `.local/tex_scan.py` is the
+  Python prototype (its hash port matches gpu/shaders.cpp's Hash); `XBE_TEXTURE_TRACE=1|2` logs (and with 2 dumps raw)
+  every picture the renderer dumps, `.local/tex_trace_run.py` drives it.
+- `NF_COLLECT_TEXTURES=1` (src/game/texture_collect.cpp, called from the pads' frame hook): after 600 frames the game
+  reads each of the 30 level files through its own archive (0xE2D50, 0xE3280, 0xE2D90 as mp_anims.cpp does), finds
+  the records and dumps them (`gpu::TexturePackCollect`, sdk gpu/texture_pack.cpp), then quits. 14 s on this PC:
+  3131 pictures (the game dumped 388 playing); 354 of those 388 are in it, the PNGs byte-identical.
+- Launcher: HD Textures > "Collect all textures now" starts the game with that variable (main.js textures:collect).
+- hd_pack is portable: pictures through app::DecodeImage/EncodePng (WIC on Windows, stb elsewhere), posix_spawn off
+  Windows, the upscaler per OS (Real-ESRGAN v0.2.5.0 windows/ubuntu/macos zips, hashes in XbeRecomp.cmake) copied to
+  tools/ with its execute bit. Checked: Windows with the real upscaler (3 of 3 with PBR maps); Linux (WSL, software
+  Vulkan, 1 min for 3) the same; the collector on Linux gives the same 3131 keys and pixel-identical pictures.
+  macOS: configured only, never built or run. Driving.xbe's own files are not collected yet.
+
 ## 2026-11-09: Tighter Movement also quickens grenades (and their fall)
 
 - Grenades (weapons 52-55) leave through the round spawner 0x211F0 like shots (fired from 0xBAE50 with the weapon's

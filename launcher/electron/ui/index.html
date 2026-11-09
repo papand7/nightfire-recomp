@@ -123,6 +123,11 @@
           <div class="card-body">
             <p class="muted">The game saves each texture it draws while this is on. Play the levels you want in HD, then
               turn it off.</p>
+            <p class="muted">Or collect them all at once: the game starts, reads every mission and multiplayer map
+              from your disc, saves their textures and closes by itself (about half a minute). Leave its window alone
+              until it closes.</p>
+            <div id="collect-msg" class="msg"></div>
+            <div class="row"><button class="btn" id="btn-collect">Collect all textures now</button></div>
             <label class="switch-row"><span>Save the game's textures while playing</span><input type="checkbox" class="switch" id="dump"></label>
             <div class="stats">
               <div><b id="n-dumped">0</b><span>collected</span></div>
