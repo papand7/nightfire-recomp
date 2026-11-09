@@ -47,6 +47,10 @@
           "to": "NightFireLauncherService.exe"
         },
         {
+          "from": "../icon.ico",
+          "to": "icon.ico"
+        },
+        {
           "from": "../../out/source-bundles",
           "to": "source"
         }
