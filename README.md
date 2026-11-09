@@ -2,7 +2,7 @@
 
 The original Xbox 007: NightFire, running natively on PC and remastered: ray traced lighting, sharper and richer
 graphics, HD textures, story co-op, LAN multiplayer, a modern menu and full mouse, keyboard, controller and steering
-wheel support. Everything is set from the game's own menus. For **Windows** and **Linux** (beta).
+wheel support. Everything is set from the game's own menus. For **Windows**, with **Linux** and **macOS** in beta.
 
 ![The Exchange: Original, Enhanced with ray tracing, Toon and Noir](docs/images/exchange_looks.webp)
 
@@ -109,6 +109,11 @@ The **NightFire PC Launcher** sets everything up:
 - **Linux (beta):** `NightFireLauncher-x86_64.AppImage`. Make it executable (`chmod +x`) and run it. If your system
   is missing something the game needs, the launcher tells you the one command to install it. It needs a graphics card
   with Vulkan (Mesa or NVIDIA drivers). HD texture packs and DLSS are Windows-only for now.
+- **macOS (beta, Apple Silicon only):** `NightFireLauncher-macOS-arm64.dmg`. Open it and drag the launcher to
+  Applications. It is not signed, so the first time right-click it and choose **Open**. This is the first macOS
+  build: the launcher builds and packages, but the game itself has not been run on a Mac yet. The game draws with
+  Vulkan, which macOS only has through MoltenVK, and that path is untested, so expect problems and please report
+  them. HD texture packs and DLSS are Windows-only for now.
 
 Building it yourself instead: see [BUILDING.md](BUILDING.md).
 
