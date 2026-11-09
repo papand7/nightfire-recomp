@@ -2,6 +2,21 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-09: driving visibility-query freeze (1.5.6)
+
+A live frozen Driving.xbe instance spun at 0x9E540 -> 0xE7CA0 -> 0x165FD0. Two thread dumps sampled
+that loop and GetVisibilityTestResult, while the last rendered frame stayed unchanged. This XDK function only
+reads the GPU report; unlike the newer implementation it does not submit pending work. Naming
+D3DDevice_GetVisibilityTestResult = 0x165FD0 in config/driving.toml enables the SDK's existing push-buffer
+walk and render-thread Kick hook. The generated function keeps its original report reading and ret 0xC.
+
+Windows and Linux driving builds pass. A mission-menu-verified Enemies Vanquished test switches to cockpit
+view, drives and fires; the fixed build presents hundreds of 3D draws per frame through 153 seconds without
+hanging. Automated driving can fail/retry the mission; this does not establish that the exact photographed
+3:39 roadside position was driven successfully. The original supplied minidump was a separate settings stack
+failure. Diagnostic scripts must close child Driving processes explicitly; PowerShell execution policy can
+reject a cleanup .ps1 when invoked with -File.
+
 ## 2026-11-09: 1.5.5 release preparation and in-game light shafts
 
 Graphics > Effects now exposes Light Shafts (Off, 0.1 through 3). Blood remains on Gameplay & More.

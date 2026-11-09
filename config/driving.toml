@@ -16,6 +16,9 @@ IDirectSoundBuffer_SetFilter = 0x17B5E0  # -> 0x17B4B3 -> 0x17B05C: forwards the
 D3DDevice_SetPixelShaderConstant = 0x16B160  # ret 0xC (0x16B424); its opening reads the current pixel shader's definition
                                     # ([[pDevice]+0x370]+8, 0x16B16C) as PGR2's 0x1C27C0 does, instruction for instruction;
                                     # the game 0xF44AF calls it (default.xbe does not link it)
+D3DDevice_GetVisibilityTestResult = 0x165FD0  # (index, pixels, timestamp) ret 0xC; reads the visibility report without
+                                    # submitting pending GPU work. The driving renderer (0x9E540 -> 0xE7CA0) polls
+                                    # until it completes; the SDK hook kicks the report to prevent an endless wait.
 D3DDevice_Reset         = 0x166230  # PGR2's 0x1C38D0 at 0.96 (instructions, numbers masked), ret 4: its frame buffer
                                     # teardown 0x16D180 released the host's own back and depth buffers, and the game's
                                     # last release of the depth buffer at a mission's end (0xE8692) freed a host header
