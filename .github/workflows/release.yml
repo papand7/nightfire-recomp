@@ -1,7 +1,7 @@
-# <short>Launcher.exe, built on GitHub's Windows machines, and the Linux launcher (Electron, an AppImage with the builder
-# service) on its Ubuntu machines; they hold no game code: players build the game with them. A push to main (or
-# linux-port) that touches the launcher builds both (artifacts); a tag v* builds them and publishes the release with
-# the exe, the AppImage and docs/releases/<tag>.md as its notes.
+# <short>Launcher.exe, built on GitHub's Windows machines; the Linux launcher (Electron, an AppImage with the builder
+# service) on its Ubuntu machines; and the macOS launcher (a .dmg) on macOS. They hold no game code: players build the
+# game with them. A push to main (or linux-port) that touches the launcher builds them (artifacts); a tag v* builds them
+# and publishes the release with the exe, the AppImage, the dmg and docs/releases/<tag>.md as its notes.
 name: Launcher
 
 on:
@@ -100,3 +100,41 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
         run: gh release upload "$TAG" "out/launcher-electron/${GAME_SHORT}Launcher-x86_64.AppImage" --clobber
+
+  mac-launcher:
+    runs-on: macos-14
+    # on a tag, after the release exists (the Windows job makes it)
+    needs: launcher
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Packages
+        run: brew install ninja
+
+      - name: Build the launcher service
+        run: bash launcher/electron/build_service.sh
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build the disk image
+        working-directory: launcher/electron
+        run: |
+          npm ci
+          npm run dist:mac
+          ls -la ../../out/launcher-electron
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.GAME_SHORT }}Launcher-macOS
+          path: out/launcher-electron/${{ env.GAME_SHORT }}Launcher-*.dmg
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
+        run: gh release upload "$TAG" out/launcher-electron/${GAME_SHORT}Launcher-*.dmg --clobber
