@@ -14,6 +14,7 @@ struct X86Context;
 namespace nf {
 extern const bool kDriving;  // Driving.xbe's exe (src/driving/hooks.cpp), default.xbe's false (src/game/hooks.cpp)
 extern bool skip_intro;
+extern uint32_t controller_scheme;  // original on-foot layout, 0 NightFire through 7 Classic Bond
 extern bool rounded_font;  // the fonts drawn from Sour Gummy Black, not the game's letters (src/common/fonts.cpp)
 // modern menus (src/common/modern_menu.cpp draws them, src/game/modern_menu_frame.cpp reads the game's page): the
 // game's menu pages drawn anew over its background movie
@@ -60,6 +61,11 @@ void ModernMenuFrame(X86Context& ctx);           // default.xbe's game thread (D
 void ModernListSeen(uint32_t widget, uint32_t table);  // a table list drawn (0x7F680): its entries readable
 extern bool skip_paris;  // a new game's START goes to the menus, not into Paris (src/game/start.cpp)
 extern bool hide_hud;  // no HUD, for screenshots (src/game/hud.cpp, src/driving/hud.cpp)
+extern bool tight_movement;  // optional firmer on-foot movement, original by default
+bool TightMovement();       // effective host rule while networked
+bool CanChangeMovement();
+bool NetGuest();
+bool NetMovement(bool& enabled);  // true when a LAN client follows the host
 extern bool foot_ik;         // the characters' feet on the ground on slopes and steps (src/game/foot_ik.cpp)
 extern bool coop;            // story co-op: a second player on controller 2, split screen (src/game/coop_test.cpp)
 extern bool coop_side;      // story co-op: the views side by side (else one above the other)
@@ -117,6 +123,7 @@ bool NetOn();
 void LanFrame(X86Context& ctx);  // default.xbe: each frame, this copy's players for LAN play (src/game/lan_play.cpp)
 bool LanPuppet(uint32_t obj);
 int LanDamage(uint32_t pair, uint32_t hit);  // before 0x3D900: 0 the game's, 1 refused
+void BloodHit(X86Context& ctx, uint32_t victim, uint32_t hit);
 void LanHitMark(int player, bool head);      // src/game/hit_feedback.cpp  // a character another copy's player drives (src/game/lan_play.cpp)
 // LAN play's check that the copies compute the same game (core/netplay.h): default.xbe's players (src/game/netplay.cpp)
 uint64_t NetStateHash();
@@ -148,7 +155,7 @@ bool PhotoActive();
 bool PhotoPad(input::Pad& p);      // the pad hook: true when the pad was kept from the game
 void PhotoEnter(X86Context& ctx);  // the pause screen's PHOTO MODE
 void PhotoFrame(X86Context& ctx);  // the game's thread, each frame
-void PhotoBeforePass();            // around the frame's 3D and 2D pass (0xDAC20)
+void PhotoBeforePass(X86Context& ctx);            // around the frame's 3D and 2D pass (0xDAC20)
 void PhotoAfterPass();
 void PhotoUi();                    // its panel (GameInfo::ui)
 // the quick restart key and Discord's presence (src/game/quick_keys.cpp), the game's thread each frame

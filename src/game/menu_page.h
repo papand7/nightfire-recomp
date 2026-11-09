@@ -41,6 +41,8 @@ void MenuBack(X86Context& ctx, uint32_t player);
 // before had
 void MenuFocus(X86Context& ctx, uint32_t player, uint32_t page, uint32_t id);
 
+void ApplyPcSettings(X86Context& ctx, uint32_t player);  // apply current Settings widget values
+
 // the Graphics page and its style pages (src/game/graphics_page.cpp)
 std::vector<std::vector<uint8_t>> GraphicsPages(const std::vector<uint8_t>& av, uint32_t (*record_size)(uint32_t));
 bool GraphicsPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint32_t msg, uint32_t arg);

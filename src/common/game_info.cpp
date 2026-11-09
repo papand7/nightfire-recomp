@@ -23,12 +23,14 @@ bool skip_paris = true;
 bool hide_hud = false;
 bool aim_down_sights = true;
 bool view_motion = true;
+bool tight_movement = false;
 bool foot_ik = true;
 bool coop = false;
 bool coop_friendly_fire = false;
 bool coop_side = false;
 bool coop_leash = true;
 bool coop_respawn = true;
+uint32_t controller_scheme = 0;
 uint32_t fov_percent = 100;
 uint32_t draw_distance = 100;
 extern bool modern_buttons;  // src/common/buttons.cpp
@@ -78,6 +80,8 @@ void Init() {
         if (std::string e = achievements::Check(d.condition); !e.empty())
             LOGE("nightfire: achievement %s: %s", d.id, e.c_str());
     netplay::SetStateHash(nf::NetStateHash);
+    if (const char* e = std::getenv("NF_TIGHT_MOVEMENT"); e && *e) nf::tight_movement = *e == '1';
+    netplay::SetSessionRules(nf::tight_movement ? 1u : 0u);
     // the water shader's surfaces (texture pack keys; found with XBE_WATER_TEST): Phoenix Base's pit, a 64x64 grey
     // ripple animated through 12 pictures (more frames are followed as they change in place)
     static constexpr uint64_t kWater[] = {
@@ -247,7 +251,11 @@ const app::GameInfo app::kGame = {
     .missing = L"Put the game in the assets folder: its disc image (.iso), or default.xbe and Driving.xbe with their folders beside them.",
     .images = {{"default.xbe", "Nightfire"}, {"driving.xbe", "NightfireDriving"}},
                                           // each recompiled xbe and its exe, for title launches
-    .options = {{"skip_intro", &nf::skip_intro, nullptr, "Skip intro movies",
+    .options = {{"tight_movement", &nf::tight_movement, nullptr, "Tighter movement",
+                 "Quicker starts and direction changes, less floaty jumps. Original jump height. Applies in single-player; the multiplayer host decides for everyone."},
+                {"controller_scheme", nullptr, &nf::controller_scheme, "Controller scheme",
+                 "Original on-foot layout: 0 NightFire (default), 1 Moonraker, 2 Octopussy, 3 Goldfinger, 4 Dr. No, 5 Thunderball, 6 GoldenEye, 7 Classic Bond."},
+                {"skip_intro", &nf::skip_intro, nullptr, "Skip intro movies",
                  "Starts without the EA and MGM logo movies"},
                 {"skip_paris", &nf::skip_paris, nullptr, "Menus at start, not Paris",
                  "START at the title opens the menus; Paris is then started from the single player missions."},

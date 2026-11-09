@@ -2,6 +2,114 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-09: blood at character impacts and visible gameplay toggles
+
+Blood now emits native depth-tested red particles at the actual character hit position after damage, in place
+of the old crosshair-centred spray. The native character-puff texture 0x200021D works in every renderer and
+split-screen view. LAN puppet hits also emit at their world impact. The screen-edge hurt effect remains.
+Blood defaults on for fresh settings; explicit saved off values are respected. Lockstep co-op always creates
+the same particles/RNG calls on each copy, hiding rendering locally when Blood is off.
+
+Both Blood and Tighter Movement are grouped under launcher Controls > Gameplay. In-game More Settings now
+labels its second page Gameplay & More, which contains both toggles. Polling live menu values preserves the
+entire guest CPU context (CallGuest preserves integer registers but not flags/x87), preventing unintended
+navigation when a setting changes.
+
+Validation: Windows and Linux executables build. A paused Exchange test finds Blood using the joypad, changes
+it live from off to on and confirms graphics.toml after its one-second save delay. The world diagnostic creates
+12 sprites per burst, and screenshots visibly show the red mist in the 3D scene. Test game closed and settings
+restored. The Windows portable launcher was rebuilt as out/launcher-electron/NightFireLauncher.exe; its packaged
+app.asar was checked for both Gameplay toggles. Schema syntax and Git whitespace checks pass.
+
+## 2026-11-09: apply pause-menu settings as they change
+
+The Settings/Graphics pages previously applied their values only on A/Confirm; B silently discarded them.
+Their visible choice and slider values are now compared once per menu frame, with a baseline on each page/set
+entry. Actual edits apply and save immediately, using the same path for classic and modern menus. Back keeps
+those changes. Graphics presets refresh their dependent rows after applying; focus changes alone do not save.
+FOV and mouse slider baselines advance after edits so moving back to the entry value really restores it.
+Co-op choices apply their safe options live, while network restarts/joins still require explicit activation.
+
+Validation: both Windows and Linux executables build. In a paused Exchange mission, FOV changed 100 -> 105 -> 100,
+tighter movement changed on/off/on, and shader style changed Original -> Enhanced -> Original, with values checked
+while their menus stayed open. Back retained the edits and movement applied on resuming. The game was closed
+and its settings restored. Launcher schema syntax and Git whitespace checks pass.
+
+## 2026-11-08: optional tighter movement, including multiplayer host rules
+
+Added `tight_movement` (off by default) to Settings > More Settings > Next Page, the F1 game options, and the
+launcher's Controls page. On foot it increases the native forward/strafe smoothing coefficient from 0.2 to 0.5,
+scopes gravity to 1.6x during the player's physics update, and boosts only a newly started jump by sqrt(1.6).
+Top speed, collision handling, ladders and swimming retain their native paths. All local players use the same rule.
+
+LAN multiplayer appends the host's movement rule after the existing lobby packet's names. Clients follow it
+without overwriting their saved preference; the menu displays a read-only host value. The lockstep network-co-op
+handshake carries the host's session rules before gameplay starts, fixed for that session. Legacy hosts without
+the optional tail mean original movement. The state hash includes the effective movement rule.
+
+Validation: Windows and Linux builds pass. Three stationary Exchange jumps per mode measured 0.783 s / 0.751 m
+original and 0.617 s / 0.743 m tighter (21% shorter airtime, height within 1 cm). UDP integration checks passed
+both on/off host advertisements and clients with opposite local preferences, for LAN and lockstep co-op.
+Linux title-to-Paris/driving headless smoke passes (369 draws/frame, no traps). The in-game option was navigated
+with a joypad, confirmed, checked in settings.toml and verified to apply to the next movement/jump immediately.
+Test games closed and settings restored.
+
+## 2026-11-08: pause Controls joystick layouts
+
+Restored the original eight-layout selector inside the modern pause menu's Controls tab. Its one-column native
+list shares id 0x10000028 with the tabs and binding table; it now becomes a separate Joystick Layout choice.
+Mouse arrows send the native up/down layout input, while left/right still switch tabs. Native bindings update
+with the selected layout. Keyboard decoding now restores the joystick layout immediately, allowing menu reads,
+profile saves and switches back to NightFire (zero) to retain the actual selection.
+
+Validation: Windows and Linux builds pass. In Exchange, controller down switches Classic Bond to NightFire,
+up returns to Classic Bond, and closing/reopening pause retains the selection. A second run with keyboard enabled
+cycles all eight layouts and asserts each saved controller_scheme value, including zero. Linux headless smoke
+passes title through Paris/driving (392 draws/frame, no traps). Test games closed and settings restored.
+
+## 2026-11-08: light shafts cost and appearance
+
+The screen-space Light shafts slider now integrates scattering at quarter resolution and reconstructs it with
+four depth-weighted samples. Local brightness contrast rejects broad pale surfaces as light sources; a local
+centroid steadies each source, fixed jitter avoids animated grain, and short-range falloff keeps the effect near
+lights. Nearby geometry receives less scattering so the weapon is not washed out. Fog-only frames skip source
+extraction and its downsampling chain. Atmosphere images are now freed with the scene target.
+
+Validation: both Windows and Linux executables build; the scattering and composite shaders compile, and matched
+1920x1080 Exchange captures at strengths 0, 1 and 3 show reduced haze. In each run the stationary scene was measured
+with shafts off and on: atmosphere 0.19 -> 1.30 ms before, 0.21 -> 0.33 ms after; GPU frame 0.82 -> 1.92 ms before,
+0.84 -> 0.95 ms after. No shader failures were logged. The test game was closed and its settings restored.
+This changes the screen-space atmosphere effect, not the separate ray-traced volumetric lighting effect.
+
+## 2026-11-08: responsive Android launcher
+
+Replaced the launcher's fixed-width, landscape-only screen with native responsive cards: stacked on narrow
+windows, two columns when width and text size allow, with bounded tablet content width and system-bar/cutout
+insets. Buttons grow with their labels; Settings and dropdown choices wrap and scroll. The first action imports
+a package when none is installed and plays when ready. Import work uses the application context and reconnects
+to recreated launcher views; compressed ZIP imports show copied bytes rather than a misleading percentage.
+
+Debug and release APK builds pass. The release APK is copied to out/android/NightFire-Android.apk. Android lint
+still reports existing errors in generated SDL Bluetooth code; no errors point to LauncherActivity. Attempted
+phone/tablet/large-text visual checks are not validated: this CPU-only emulator's System UI repeatedly hangs and
+blocks its screen/accessibility tree. A responsive emulator or real-device visual check remains necessary.
+
+## 2026-11-08: photo mode noclip and the single-player body
+
+Photo mode removes its former 40-unit travel sphere. During rendering the camera's room is looked up at its free
+position (0x20C30), with the engine's all-rooms path only when outside every room; the original room and draw flag
+are restored after the pass. No player position, collision or trigger state is moved. The initial camera frames
+Bond from behind, and Player Character defaults to Show with a Show/Hide row.
+
+The local body's camera mask is temporarily enabled. Its model draw (0x16C20) rejects poses older than one render
+frame, so the paused body's instance timestamp at +0xA4 is refreshed for the draw only; its timestamp and render
+flags are restored afterwards. The first-person gun's child objects are hidden too (model child list inst+0xA0,
+count [inst+0x74]+0x29); otherwise paused magazines and suppressors float in the shot.
+
+Validation: both Windows and Linux targets build. Exchange tests flew 160.3 units through geometry, visually
+confirmed Bond, the Show/Hide row, and clean weapon-part hiding, then returned to the original first-person
+camera and weapon. Test settings were restored and the test game closed. Captures: .local/rt_run/shots/photo_final_*.
+
 ## Status
 - Android (2026-11-08, branch `android`, SDK `android`): libraries, DXC for Android, the app and the package build;
   in the emulator the game boots to its renderer, which needs VK_KHR_push_descriptor (the emulator has none): a real

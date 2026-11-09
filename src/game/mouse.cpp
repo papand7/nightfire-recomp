@@ -115,7 +115,14 @@ X86_FUNC(sub_000A9CF0) {
     float& speed = kernel::G<float>(ctx.esp + 12);
     float speed_was = speed, sprint = actor ? nf::SprintFactor(kernel::G<int8_t>(actor + kPlayerIndex)) : 1.0f;
     speed = speed_was * sprint;
+    // This coefficient only filters forward/strafe acceleration in this call. Keep top speed and turning.
+    float& smoothing = kernel::G<float>(0x15D364);
+    const float old_smoothing = smoothing;
+    const uint32_t obj = kernel::R32(ctx.esp + 8);
+    const int posture = obj ? kernel::G<int16_t>(obj + 0xD2) : -1;
+    if (nf::TightMovement() && (posture == 0 || posture == 4)) smoothing = 0.5f;
     __imp__sub_000A9CF0(ctx, base);
+    smoothing = old_smoothing;
     speed = speed_was;
     if (!mine) return;
     WheelZoom(actor);

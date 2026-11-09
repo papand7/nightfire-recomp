@@ -8,13 +8,17 @@
 // (gpu::GraphicsStyle::blood) it sprays there too, and a player hit bleeds at the edges of their view.
 #include <algorithm>
 #include <cmath>
+#include <bit>
 #include <cstdint>
 #include <cstdlib>
 
 #include "app/app.h"
 #include "common/nightfire.h"
 #include "core/log.h"
+#include "core/netplay.h"
 #include "kernel/kernel.h"
+#include "kernel/memory.h"
+#include "gpu/style.h"
 #include "xdk/hle.h"
 
 namespace {
@@ -104,6 +108,7 @@ X86_FUNC(sub_0003D900) {
                                  PlayerOf(ow ? R32(ow + 0x24) : 0) + 1, before, after);
         }
     }
+    if (R32(hit + 0x4C)) nf::BloodHit(ctx, R32(who), hit);
     uint32_t proj = R32(hit + 0x4C), owner = proj ? R32(proj + 0xBC) : 0;
     int player = PlayerOf(owner ? R32(owner + 0x24) : 0);
     if (player < 0 || PlayerOf(R32(who)) == player) return;  // not a player's shot, or their own
@@ -116,8 +121,55 @@ X86_FUNC(sub_0003D900) {
         LOGR("hit feedback: player %d hit (%s), health %.1f -> %.1f, mark at %.2f %.2f", player + 1,
              kind == 2 ? "kill" : kind == 1 ? "head" : "body", before, after, x, y);
     }
-    app::BloodSpray(x, y, kind == 2 ? 1.0f : kind == 1 ? 0.8f : 0.45f);
     app::HitMarker(x, y, kind);
+}
+
+namespace nf {
+// Native sprite particles are depth-tested in the world and work in every renderer and split-screen view.
+void BloodHit(X86Context& ctx, uint32_t victim, uint32_t hit) {
+    const bool visible = gpu::Style().blood;
+    // Lockstep copies must allocate the same native objects and consume the same game RNG,
+    // even when one player hides blood locally. Hide rendering only after creation.
+    if ((!visible && !netplay::Active()) || !victim || !hit) return;
+    const uint32_t room = R32(victim + 0x20);
+    if (!room || !mem::IsCommitted(room + 0x90) || !mem::IsCommitted(hit + 0x43)) return;
+    float pos[3], normal[3];
+    float length = 0;
+    for (int k = 0; k < 3; k++) {
+        pos[k] = F32(hit + 0x38 + k * 4);
+        normal[k] = F32(hit + 0x10 + k * 4);
+        if (!std::isfinite(pos[k]) || std::abs(pos[k]) > 100000) return;
+        if (!std::isfinite(normal[k])) normal[k] = 0;
+        length += normal[k] * normal[k];
+    }
+    if (length > 0.0001f && std::isfinite(length)) {
+        for (float& n : normal) n /= std::sqrt(length);
+    } else normal[0] = normal[2] = 0, normal[1] = 1;
+    static const uint32_t scratch = mem::AllocHostContiguous(32, 16);
+    static uint32_t seed = 0xB100D;
+    auto random = [&] { seed = seed * 1664525u + 1013904223u; return float(seed >> 8) / 16777216.0f; };
+    const X86Context saved = ctx;
+    int made = 0;
+    for (int i = 0; i < 12; i++) {
+        for (int k = 0; k < 3; k++) {
+            kernel::G<float>(scratch + k * 4) = pos[k] + normal[k] * 0.025f;
+            kernel::G<float>(scratch + 16 + k * 4) = normal[k] * (0.35f + random() * 0.7f) +
+                (random() - 0.5f) * 1.1f + (k == 1 ? 0.2f : 0);
+        }
+        const float size = i < 3 ? 0.065f : 0.015f + random() * 0.025f;
+        // 0x200021D is the game's character-hit puff, tinted dark red, fading to transparent.
+        const uint32_t sprite = kernel::CallGuest(ctx, 0xCD140, {room, scratch, 0, scratch + 16,
+                std::bit_cast<uint32_t>(size), std::bit_cast<uint32_t>(size * 0.55f),
+                0x200021D, 0, 0xA00909D0, 0x50030300, 18});
+        if (sprite) {
+            made++;
+            if (!visible) kernel::W32(sprite + 0xCC, R32(sprite + 0xCC) | 0x10);
+        }
+    }
+    ctx = saved;
+    static unsigned logged = 0;
+    if (logged++ < 6) LOGR("blood: impact at %.2f %.2f %.2f, %d world particles", pos[0], pos[1], pos[2], made);
+}
 }
 
 namespace nf {
@@ -125,7 +177,6 @@ namespace nf {
 void LanHitMark(int player, bool head) {
     float x, y;
     ViewCentre(player, x, y);
-    app::BloodSpray(x, y, head ? 0.8f : 0.45f);
     app::HitMarker(x, y, head ? 1 : 0);
 }
 }  // namespace nf
@@ -133,13 +184,27 @@ void LanHitMark(int player, bool head) {
 // NF_HIT_TEST=1: each player view's mark (hit, head, kill in turn) every second, from the HUD pass (0xDAC20), to
 // see and hear the feedback without a hit (and with blood on, its spray and the view bleeding)
 namespace nf {
-void HitTest() {
+void HitTest(X86Context& ctx) {
     static const bool on = [] {
         const char* e = std::getenv("NF_HIT_TEST");
-        return e && *e == '1';
+        return e && (*e == '1' || *e == 'w');
     }();
     static uint32_t frame = 0;
     if (!on || ++frame % 60) return;
+    const char* mode = std::getenv("NF_HIT_TEST");
+    if (mode && *mode == 'w') {  // world-space effect diagnostic, no damage or screen overlay
+        if (MenuUp()) return;
+        const uint32_t cam = R32(kCameras), obj = cam ? R32(cam + kFollowed) : 0;
+        if (!obj) return;
+        static const uint32_t hit = mem::AllocHostContiguous(0x50, 16);
+        for (int k = 0; k < 3; k++) {
+            const float forward = F32(cam + 0x128 + k * 4);
+            kernel::G<float>(hit + 0x38 + k * 4) = F32(cam + 0x138 + k * 4) + forward * 2;
+            kernel::G<float>(hit + 0x10 + k * 4) = -forward;
+        }
+        BloodHit(ctx, obj, hit);
+        return;
+    }
     int players = 0;
     for (int p = 0; p < 4; p++)
         if (uint32_t cam = R32(kCameras + 4 * p); cam && R32(cam + kFollowed)) players = p + 1;

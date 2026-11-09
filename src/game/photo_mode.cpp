@@ -1,7 +1,7 @@
 // Photo mode (default.xbe, on foot): the pause screen's PHOTO MODE (or its key, F10 by default, which pauses first)
 // keeps the game paused, hides the HUD and the menus, and frees player 1's camera: the mouse or the right stick look,
 // WASD or the left stick move, Q / E or the triggers go down and up, Shift or RB faster, Ctrl or LB slower. A panel
-// sets the field of view, the exposure, depth of field and the look (a style preset); the screenshot key (F12) or Y
+// sets the field of view, the exposure, depth of field, the look and player visibility; the screenshot key (F12) or Y
 // takes the picture without the panel. Esc, B or Start leave it: the pause screen as it was (from the key, the game
 // goes on).
 //
@@ -18,9 +18,11 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <vector>
 
 #ifndef XBE_HEADLESS
 #include <imgui.h>
@@ -41,7 +43,7 @@ constexpr uint32_t kCameras = 0x1F661C, kWorld = 0x108, kWorld2 = 0x180, kFov = 
 constexpr uint32_t kActors = 0x2774B8, kGun = 0x778, kFlags = 0xCC, kHidden = 0x10;
 constexpr uint32_t kMenuContext = 0x25F1D0, kPausePage = 0x4000004B;
 constexpr float kPi = 3.14159265f;
-constexpr float kReach = 40.0f;  // world units from where it started (the level's rooms are drawn from the player's)
+constexpr uint32_t kPlayers = 0x1F6654, kWorldScene = 0x1F6674, kDrawAllRooms = 0x1DFA18;
 
 struct V3 {
     float x = 0, y = 0, z = 0;
@@ -70,7 +72,7 @@ int g_wait = 0;             // frames waited for the pause screen (kPausing)
 bool g_release = false;     // the pad kept from the game until let go (leaving)
 bool g_resume = false;      // then Start: the pause screen's Continue
 
-// the free camera (the game's thread)
+// The free camera has no collision or travel-radius limit (the game's thread).
 struct Cam {
     bool set = false;       // taken from the game's camera
     V3 pos, fwd, start;
@@ -79,11 +81,12 @@ struct Cam {
 } g_cam;
 
 // the look (the panel's rows)
-enum Row { kRowFov, kRowExposure, kRowDof, kRowStyle, kRows };
+enum Row { kRowFov, kRowExposure, kRowDof, kRowStyle, kRowPlayer, kRows };
 struct Look {
     float fov_deg = 60;
     float exposure = 1.0f;
     int dof = 0;   // 0 off, 1-4 stronger
+    bool show_player = true;
     int style = -1;  // -1 as it was, else gpu::StylePresets()'s
 };
 std::mutex g_lock;  // g_look, g_row, g_panel, g_style_name for the panel (the render thread)
@@ -97,6 +100,11 @@ bool g_saved_set = false;
 // the pad as polled (PhotoPad), for its sticks and triggers
 std::mutex g_pad_lock;
 input::Pad g_pad;
+
+bool Trace() {
+    static const bool enabled = std::getenv("NF_PHOTO_TRACE") != nullptr;
+    return enabled;
+}
 
 float Stick(int16_t v) {
     float f = std::clamp(float(v) / 32767.0f, -1.0f, 1.0f);
@@ -176,6 +184,7 @@ void Step(int row, int d) {
     if (row == kRowFov) l.fov_deg = std::clamp(l.fov_deg + 5.0f * float(d), 20.0f, 110.0f);
     if (row == kRowExposure) l.exposure = std::clamp(std::round((l.exposure + 0.1f * float(d)) * 10) / 10, 0.3f, 3.0f);
     if (row == kRowDof) l.dof = std::clamp(l.dof + d, 0, 4);
+    if (row == kRowPlayer) l.show_player = !l.show_player;
     if (row == kRowStyle) {
         const int n = int(gpu::StylePresets().size());
         l.style = l.style + d < -1 ? n - 1 : l.style + d >= n ? -1 : l.style + d;
@@ -222,9 +231,12 @@ void Fly(float dt) {
     g_cam.fwd = f;
     right = Norm(Cross(up, f)) * g_cam.right_sign;
     V3 p = g_cam.pos + (f * fwd + right * side + up * rise) * (speed * dt);
-    V3 d = p - g_cam.start;
-    if (Dot(d, d) > kReach * kReach) p = g_cam.start + Norm(d) * kReach;
     g_cam.pos = p;
+    static uint32_t traced_frames = 0;
+    if (Trace() && ++traced_frames % 120 == 0) {
+        V3 distance = g_cam.pos - g_cam.start;
+        LOGR("nightfire: photo trace: camera %.2f %.2f %.2f, distance %.2f", p.x, p.y, p.z, std::sqrt(Dot(distance, distance)));
+    }
 }
 
 // the panel's keys and buttons (edges), from the game's thread
@@ -260,7 +272,7 @@ void Controls() {
     int d = (kp[3] || bit(input::kRight) ? 1 : 0) - (kp[2] || bit(input::kLeft) ? 1 : 0);
     if (d) {
         Step(row, d);
-        if (row != kRowFov) ApplyLook();
+        if (row != kRowFov && row != kRowPlayer) ApplyLook();
     }
 }
 }  // namespace
@@ -339,20 +351,45 @@ void PhotoFrame(X86Context& ctx) {
 // around the frame's 3D and 2D pass (src/game/hud.cpp): the free camera put in, then the game's put back
 namespace {
 uint8_t g_kept[0x40 * 2 + 8];
-uint32_t g_kept_cam = 0, g_kept_gun = 0, g_gun_flags = 0;
+uint32_t g_kept_cam = 0;
+uint32_t g_kept_player = 0, g_player_flags = 0, g_camera_zone = 0, g_all_rooms = 0;
+uint16_t g_player_mask = 0;
+uint32_t g_kept_instance = 0, g_instance_frame = 0, g_instance_flags = 0;
+std::vector<std::pair<uint32_t, uint32_t>> g_hidden_gun;
+
+void HideGun(uint32_t obj) {
+    if (!obj || !mem::IsCommitted(obj + 0xD6) || g_hidden_gun.size() >= 128 ||
+        std::any_of(g_hidden_gun.begin(), g_hidden_gun.end(), [&](const auto& entry) { return entry.first == obj; })) return;
+    uint32_t flags = R32(obj + kFlags);
+    g_hidden_gun.emplace_back(obj, flags);
+    kernel::W32(obj + kFlags, flags | kHidden);
+    // Reload magazines, suppressors and other first-person parts are separate objects. Their inherited flags
+    // normally update in the animation think (0x18690), which is paused: hide the hierarchy for the draw alone.
+    uint32_t instance = R32(obj + 0xB8);
+    if (!instance || !mem::IsCommitted(instance + 0xA8)) return;
+    uint32_t definition = R32(instance + 0x74), children = R32(instance + 0xA0);
+    if (!definition || !mem::IsCommitted(definition + 0x29) || !children) return;
+    uint32_t n = kernel::G<uint8_t>(definition + 0x29);
+    for (uint32_t i = 0; i < n && i < 128 && mem::IsCommitted(children + 4 * i); i++) HideGun(R32(children + 4 * i));
+}
 }  // namespace
-void PhotoBeforePass() {
+void PhotoBeforePass(X86Context& ctx) {
     g_kept_cam = 0;
     if (g_state != kOn) return;
     const uint32_t cam = R32(kCameras);
     if (!cam || !mem::IsCommitted(cam + 0x1C0)) return;
+    const bool first = !g_cam.set;
     if (!g_cam.set) {
-        // the game's camera as it is: the free one starts there
+        // Keep the player's camera as the reference for the initial framing.
         V3 r0 = Row(cam + kWorld), r1 = Row(cam + kWorld + 0x10), r2 = Row(cam + kWorld + 0x20);
         g_cam.fwd = Norm(r2);
         g_cam.pos = g_cam.start = Row(cam + kWorld + 0x30);
         const V3 up{0, 1, 0};
-        g_cam.right_sign = Dot(r0, Cross(up, g_cam.fwd)) < 0 ? -1.0f : 1.0f;
+        // Start behind Bond, looking at his upper body, rather than inside his head.
+        V3 back = Norm(V3{g_cam.fwd.x, 0, g_cam.fwd.z});
+        g_cam.pos = g_cam.start - back * 3.0f + up * 0.4f;
+        g_cam.fwd = Norm(g_cam.start - up * 0.6f - g_cam.pos);
+        g_cam.right_sign = Dot(r0, Cross(up, Norm(r2))) < 0 ? -1.0f : 1.0f;
         V3 right = Norm(Cross(up, g_cam.fwd)) * g_cam.right_sign;
         g_cam.up_sign = Dot(r1, Cross(g_cam.fwd, right)) < 0 ? -1.0f : 1.0f;
         // +0x180: the same matrix, its inverse, or something else (left alone)
@@ -371,6 +408,8 @@ void PhotoBeforePass() {
              b[12], b[13], b[14]);
     }
     g_kept_cam = cam;
+    g_camera_zone = R32(cam + 4);
+    g_all_rooms = R32(kDrawAllRooms);
     std::memcpy(g_kept, kernel::HostPtr(cam + kWorld), 0x40);
     std::memcpy(g_kept + 0x40, kernel::HostPtr(cam + kWorld2), 0x40);
     std::memcpy(g_kept + 0x80, kernel::HostPtr(cam + kZoom), 4);
@@ -395,14 +434,47 @@ void PhotoBeforePass() {
         fov = g_look.fov_deg;
     }
     SetF(cam + kFov, fov * kPi / 180), SetF(cam + kZoom, 1.0f);
+    // Room/portal visibility must start at the free camera, not at the stationary player. This is a lookup only:
+    // no player movement, collision query, trigger update or zone relinking. Outside all rooms, use the engine's
+    // all-rooms path so the level can still be photographed from beyond its walls.
+    X86Context saved = ctx;
+    uint32_t zone = kernel::CallGuest(ctx, 0x20C30, {cam + kWorld + 0x30, R32(kWorldScene)});
+    ctx = saved;
+    if (zone) kernel::W32(cam + 4, zone);
+    else kernel::W32(kDrawAllRooms, 1);
+    // The original hides the local player's body from its own view with the object's camera mask.
+    g_kept_player = 0;
+    g_kept_instance = 0;
+    const uint32_t player = R32(kPlayers);
+    if (player && mem::IsCommitted(player + 0xD6)) {
+        g_kept_player = player;
+        g_player_mask = kernel::G<uint16_t>(player + 0xD4);
+        g_player_flags = R32(player + kFlags);
+        bool show;
+        { std::lock_guard lock(g_lock); show = g_look.show_player; }
+        kernel::G<uint16_t>(player + 0xD4) = show ? uint16_t(g_player_mask | 1) : uint16_t(g_player_mask & ~1u);
+        if (show) {
+            kernel::W32(player + kFlags, g_player_flags & ~kHidden);
+            uint32_t instance = R32(player + 0xB8);
+            if (instance && mem::IsCommitted(instance + 0xA8)) {
+                // The body draw rejects poses older than one render frame. Simulation is paused, so keep
+                // the frozen pose drawable without advancing animation or changing the saved simulation stamp.
+                g_kept_instance = instance;
+                g_instance_frame = R32(instance + 0xA4);
+                g_instance_flags = R32(instance + 0xA8);
+                kernel::W32(instance + 0xA4, R32(0x1F65BC));
+            }
+        }
+        if (first && Trace())
+            LOGR("nightfire: photo trace: player %08X, model %08X, mask %04X -> %04X, flags %08X -> %08X, zone %08X -> %08X",
+                 player, R32(player + 0xB8), g_player_mask, kernel::G<uint16_t>(player + 0xD4),
+                 g_player_flags, R32(player + kFlags), g_camera_zone, R32(cam + 4));
+    }
     // the first person gun left out
-    g_kept_gun = 0;
+    g_hidden_gun.clear();
     const uint32_t actor = R32(kActors);
     const uint32_t gun = actor && mem::IsCommitted(actor + kGun) ? R32(actor + kGun) : 0;
-    if (gun && mem::IsCommitted(gun + kFlags)) {
-        g_kept_gun = gun, g_gun_flags = R32(gun + kFlags);
-        kernel::W32(gun + kFlags, g_gun_flags | kHidden);
-    }
+    HideGun(gun);
 }
 void PhotoAfterPass() {
     if (!g_kept_cam) return;
@@ -412,7 +484,20 @@ void PhotoAfterPass() {
     std::memcpy(kernel::HostPtr(cam + kWorld2), g_kept + 0x40, 0x40);
     std::memcpy(kernel::HostPtr(cam + kZoom), g_kept + 0x80, 4);
     std::memcpy(kernel::HostPtr(cam + kFov), g_kept + 0x84, 4);
-    if (g_kept_gun) kernel::W32(g_kept_gun + kFlags, g_gun_flags), g_kept_gun = 0;
+    kernel::W32(cam + 4, g_camera_zone);
+    kernel::W32(kDrawAllRooms, g_all_rooms);
+    if (g_kept_instance) {
+        kernel::W32(g_kept_instance + 0xA4, g_instance_frame);
+        kernel::W32(g_kept_instance + 0xA8, g_instance_flags);
+        g_kept_instance = 0;
+    }
+    if (g_kept_player) {
+        kernel::G<uint16_t>(g_kept_player + 0xD4) = g_player_mask;
+        kernel::W32(g_kept_player + kFlags, g_player_flags);
+        g_kept_player = 0;
+    }
+    for (const auto& [obj, flags] : g_hidden_gun) kernel::W32(obj + kFlags, flags);
+    g_hidden_gun.clear();
 }
 
 // the panel (GameInfo::ui, src/common/pc_extras.cpp): bottom left, in the modern menus' colours; not in a picture
@@ -442,26 +527,27 @@ void PhotoUi() {
         dl->AddText(font, fs * 0.85f, {30 * s, io.DisplaySize.y - 50 * s}, IM_COL32(205, 228, 255, 150), hint.c_str());
         return;
     }
-    char v[4][48];
+    char v[kRows][48];
     std::snprintf(v[0], 48, "%.0f\xC2\xB0", l.fov_deg);
     std::snprintf(v[1], 48, "%.1f", l.exposure);
     static const char* dofs[] = {"Off", "Light", "Medium", "Strong", "Strongest"};
     std::snprintf(v[2], 48, "%s", dofs[std::clamp(l.dof, 0, 4)]);
     std::snprintf(v[3], 48, "%s", style.c_str());
-    const char* names[4] = {"Field of View", "Exposure", "Depth of Field", "Look"};
+    std::snprintf(v[kRowPlayer], 48, "%s", l.show_player ? "Show" : "Hide");
+    const char* names[kRows] = {"Field of View", "Exposure", "Depth of Field", "Look", "Player Character"};
     const float x0 = 30 * s, w = std::min(860 * s, io.DisplaySize.x - 2 * x0);
     const std::string help1 = pad ? "Left stick: move   Right stick: look   LT / RT: down / up   LB / RB: slower / faster"
                                   : "Mouse: look   WASD: move   Q / E: down / up   Ctrl / Shift: slower / faster";
     const std::string help2 = pad ? "D-pad: choose and change   Y: picture   X: hide   B: back"
                                   : "Arrows: choose and change   " + shot + ": picture   H: hide   Esc: back";
-    const float h = 20 * s + fh * 1.1f + 4 * (fh + 6 * s) + 2 * (fs * 0.8f + 6 * s) + 22 * s;
+    const float h = 20 * s + fh * 1.1f + float(kRows) * (fh + 6 * s) + 2 * (fs * 0.8f + 6 * s) + 22 * s;
     const float y0 = io.DisplaySize.y - h - 30 * s;
     dl->AddRectFilled({x0, y0}, {x0 + w, y0 + h}, navy, 12 * s);
     dl->AddRectFilled({x0, y0}, {x0 + 6 * s, y0 + h}, electric, 12 * s, ImDrawFlags_RoundCornersLeft);
     float y = y0 + 16 * s;
-    dl->AddText(font, fh * 1.1f, {x0 + 26 * s, y}, white, "PHOTO MODE");
+    dl->AddText(font, fh * 1.1f, {x0 + 26 * s, y}, white, "PHOTO MODE / NOCLIP");
     y += fh * 1.1f + 8 * s;
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < kRows; i++) {
         const bool cur = i == row;
         if (cur) dl->AddRectFilled({x0 + 16 * s, y - 3 * s}, {x0 + w - 16 * s, y + fh + 1 * s}, IM_COL32(40, 120, 255, 200), 8 * s);
         dl->AddText(font, fs, {x0 + 28 * s, y + (fh - fs) / 2}, cur ? white : ice, names[i]);

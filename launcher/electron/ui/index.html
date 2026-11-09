@@ -30,6 +30,7 @@
     <button data-page="settings"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><span>Settings</span></button>
     <button data-page="textures"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><path d="M13 17h8M17 13v8"/></svg><span>HD Textures</span></button>
     <button data-page="music" id="nav-music" hidden><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg><span>Music</span></button>
+    <button data-page="android"><svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/></svg><span>Android</span></button>
     <button data-page="log"><svg viewBox="0 0 24 24"><path d="M5 3h10l4 4v14H5z"/><path d="M8 11h8M8 15h8M8 7h4"/></svg><span>Log</span></button>
     <div class="nav-foot"><div id="version"></div><div class="classified">// CLASSIFIED: MI6 EYES ONLY</div></div>
   </nav>
@@ -148,6 +149,21 @@
       </div>
       <pre id="pack-log" class="log small"></pre>
       <p class="muted fine">The pack is made from your copy of the game: keep it to yourself, do not share it.</p>
+    </section>
+
+    <section id="page-android" class="page">
+      <div class="page-head"><h2>Android</h2></div>
+      <p class="lead">Build a game package from your own disc, copy the ZIP to your Android device, then import it in the sideloaded NightFire app.</p>
+      <div class="card"><div class="card-body">
+        <p class="muted">Install the game on the Mission page first. Packaging needs Linux (WSL on Windows), Android NDK r27 or newer, clang, CMake 3.25+, Ninja, git, python3 and zip. Put the NDK under ~/Android/Sdk/ndk, or set ANDROID_NDK_HOME in the Linux environment. The first build can take 20 minutes or longer.</p>
+        <label class="form-row"><span>Device</span><select id="android-abi"><option value="arm64-v8a">ARM64 phone / tablet</option><option value="x86_64">x86_64 emulator</option></select></label>
+        <label class="check"><input type="checkbox" id="android-textures"><span>Include my HD texture pack</span></label>
+        <div id="android-progress" hidden><div class="bar indet"><div></div></div></div>
+        <div id="android-msg" class="msg"></div>
+        <div class="row"><button class="btn" id="btn-android">Build Android package...</button><button class="btn ghost" id="btn-android-folder" hidden>Show package</button></div>
+      </div></div>
+      <pre id="android-log" class="log small"></pre>
+      <p class="muted fine">The package contains your game. Keep it for personal use.</p>
     </section>
 
     <!-- MUSIC: Xbox custom soundtracks -->

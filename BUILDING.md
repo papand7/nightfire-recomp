@@ -43,7 +43,9 @@ Sideloaded only. The app (`android/`, an APK with no game code or files) is a la
 **game package** built on your PC from your own disc and copied to the phone, where the app imports it (a `.zip` or a
 folder) into its private storage. Never share the package: it is your game.
 
-**The package** (Linux or WSL; the Windows and Linux launchers will run this later): the Android NDK r27 or newer,
+**The package**: the Windows and Linux launchers have an **Android** page. Install the desktop game first, then choose **Build Android package** and a ZIP destination; optionally include your HD textures. Windows runs the builder in WSL. Install the following requirements inside Linux/WSL (the launcher also checks the default `~/Android/Sdk`):
+
+For manual packaging (Linux or WSL): the Android NDK r27 or newer,
 clang, CMake 3.25+, Ninja, git, python3 and zip; with your game in `assets/` as above:
 ```
 export ANDROID_HOME=/opt/android        # with ndk/<version> inside, or ANDROID_NDK_HOME=<the NDK>

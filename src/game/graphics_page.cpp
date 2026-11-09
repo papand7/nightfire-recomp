@@ -1,7 +1,7 @@
 // Graphics, a page of the game's own menus (opened from Settings, in the front end and from the pause screen), and
 // its three style pages (Enhanced, Toon and Retro options). They are built as Settings is, from AV Options'
 // records (src/game/pc_settings_page.cpp, nf::BuildPage), so their text, choices, focus, sounds and prompts are the
-// game's own. A keeps the page's values and goes back, B goes back without, as on AV Options.
+// game's own. Changes apply live; A and B return. Actions which restart network play still require A.
 //
 // Every row drives a value the renderers use: the quality preset (gpu::ApplyQuality's set: anisotropic filtering,
 // FXAA or SMAA, ambient occlusion, bloom), reflections, the shader style and its options (gpu/style.h, drawn by the Vulkan renderer),
@@ -40,6 +40,7 @@
 #include "gpu/style.h"
 #include "core/netplay.h"
 #include "kernel/kernel.h"
+#include "kernel/memory.h"
 
 namespace nf {
 extern bool modern_buttons;  // src/common/buttons.cpp
@@ -81,7 +82,7 @@ constexpr uint32_t kFps = 0x1000FC61, kPauseBg = 0x1000FC62, kHideHud = 0x1000FC
                    kWheel = 0x1000FC6E;
 // More Settings' second set: aiming, Discord, resetting
 constexpr uint32_t kAchievements = 0x1000FC6F, kMoreNext = 0x1000FC70, kAdsZoom = 0x1000FD31, kDiscord = 0x1000FD32,
-                   kReset = 0x1000FD33, kMoreBack = 0x1000FD34;
+                   kReset = 0x1000FD33, kMoreBack = 0x1000FD34, kMovement = 0x1000FD35, kGameplayBlood = 0x1000FD36, kShafts = 0x1000FD37;
 
 const std::vector<MenuRow> kGfxRows = {
     {kQuality, nf::kMenuChoice, "Graphics Quality", "Low to Ultra set the rows below at once; changing one makes it Custom."},
@@ -109,7 +110,7 @@ const std::vector<MenuRow> kEffectsRows = {
     {kLighting, nf::kMenuChoice, "Lighting", "Fog: depth in the distance. Bounce: rooms take on their lights' and walls' colour.", 5},
     {kRayTracing, nf::kMenuChoice, "Ray Tracing", "Shade: in place of AO. Shadows: from effect lights. Full: the level lit by its lamps and a sun. + GI: light bounced off walls. RTX-class GPU.", 6},
     {kDof, nf::kMenuChoice, "Depth of Field", "Distance: far scenery soft. Focus: what you aim at stays sharp.", 7},
-    {kBlood, nf::kMenuChoice, "Blood", "Blood where your shots hit, and at your view's edges when you are hit. Every style.", 8},
+    {kShafts, nf::kMenuChoice, "Light Shafts", "Screen-space light beams: Off or strength 0.1 to 3. Works without fog and applies immediately. Blood is in Gameplay & More.", 8},
     {kToneHdr, nf::kMenuChoice, "Tone Mapping", "AgX or ACES: bright light rolls off instead of clipping to white. Auto: the exposure adapts.", 9},
     {kMotion2, nf::kMenuChoice, "Motion Blur", "A little blur as you turn and move. The gun and HUD stay sharp.", 10},
     {kSmoothTurn, nf::kMenuChoice, "Smooth Turning", "A frame in between, turned by the mouse: 120 Hz turning on a 120 Hz+ screen.", 11},
@@ -155,9 +156,11 @@ const std::vector<MenuRow> kMoreRows = {
     {kMenuColors, nf::kMenuChoice, "Menu Colours", "The menu backgrounds as the game has them, or blue as on the PC version. Text and Bond stay.", 10},
     {kCoop, nf::kMenuChoice, "Co-op", "A second player in the story missions: split screen, network, friendly fire.", 11},
     {kAchievements, nf::kMenuChoice, "Achievements", "The 19 achievements: which are unlocked, and how far along the medal ones are.", 12},
-    {kMoreNext, nf::kMenuChoice, "Next Page", "Aiming, Discord, and settings back to their defaults.", 13},
+    {kMoreNext, nf::kMenuChoice, "Gameplay & More", "Tighter movement, blood, aiming, Discord and defaults.", 13},
 };
 const std::vector<MenuRow> kMore2Rows = {
+    {kGameplayBlood, nf::kMenuChoice, "Blood", "Blood at character impacts and red at the view edges when you are hurt. Applies immediately.", 6},
+    {kMovement, nf::kMenuChoice, "Tighter Movement", "Quicker starts and direction changes, less floaty jumps with original jump height. Single-player and multiplayer: the host decides for everyone. Network co-op: set before hosting.", 4},
     {kAds, nf::kMenuChoice, "Aim Down Sights", "L (right mouse) raises the gun and zooms in, not the red crosshair. Blur: the background too.", 0},
     {kAdsZoom, nf::kMenuChoice, "Aim Zoom", "How far aiming down the sights zooms in (scopes keep their own).", 1},
     {kMotion, nf::kMenuChoice, "Weapon Sway", "A very light head bob and weapon sway as you move and turn.", 2},
@@ -382,6 +385,8 @@ float ReadOption(X86Context& ctx, uint32_t player, uint32_t id, const Options& o
 }
 
 const Options kOffOn = {{"Off", 0}, {"On", 1}};
+const Options kShaftLevels = {{"Off", 0}, {"0.1", 0.1f}, {"0.25", 0.25f}, {"0.5", 0.5f}, {"0.75", 0.75f},
+                              {"1.0", 1}, {"1.5", 1.5f}, {"2.0", 2}, {"2.5", 2.5f}, {"3.0", 3}};
 const Options kFilters = {{"As the Game", 0}, {"2x", 2}, {"4x", 4}, {"8x", 8}, {"16x", 16}};
 const Options kAoLevels = {{"Off", 0}, {"Low", 1}, {"High", 2}};
 const Options kReflectLevels = {{"Off", gpu::kReflectOff}, {"Low", gpu::kReflectLow}, {"High", gpu::kReflectHigh}};
@@ -616,13 +621,13 @@ void RestoreDefaults(X86Context& ctx, uint32_t player) {
 
 // Effects
 void EnterEffects(X86Context& ctx, uint32_t player) {
-    ShowOptions(ctx, player, kBlood, kOffOn, Current().blood ? 1.0f : 0.0f);  // drawn over the picture: any renderer
     if (!Vulkan()) {
-        for (uint32_t id : {kAo, kBloom, kReflect, kParticles, kMaterials, kLighting, kRayTracing, kDof, kToneHdr, kMotion2, kSmoothTurn, kContact, kFloorRefl})
+        for (uint32_t id : {kAo, kBloom, kReflect, kParticles, kMaterials, kLighting, kShafts, kRayTracing, kDof, kToneHdr, kMotion2, kSmoothTurn, kContact, kFloorRefl})
             Choice(ctx, player, id, {{"Needs Vulkan", 0xFF}}, 0xFF);
         return;
     }
     gpu::GraphicsStyle st = Current();
+    ShowOptions(ctx, player, kShafts, kShaftLevels, st.atmosphere ? st.shaft_strength : 0.0f);
     ShowOptions(ctx, player, kAo, kAoLevels, float(st.quality_ao));
     ShowOptions(ctx, player, kBloom, kOffOn, st.quality_bloom ? 1.0f : 0.0f);
     ShowOptions(ctx, player, kReflect, kReflectLevels, float(st.reflections));
@@ -639,7 +644,7 @@ void EnterEffects(X86Context& ctx, uint32_t player) {
                (st.displacement ? 16u : 0u) | (st.wall_displacement ? 32u : 0u));
     Choice(ctx, player, kLighting,
            {{"Original", 0}, {"Fog", 1}, {"Bounce", 2}, {"Fog + Bounce", 3}, {"Fog + Snow", 5}, {"Fog + Bounce + Snow", 7}},
-           (st.atmosphere ? 1u : 0u) | (st.bounce_light ? 2u : 0u) | (st.weather ? 4u : 0u));
+           (st.atmosphere && st.fog_strength > 0 ? 1u : 0u) | (st.bounce_light ? 2u : 0u) | (st.weather ? 4u : 0u));
     if (gpu::RayTracingSupported())
         Choice(ctx, player, kRayTracing, {{"Off", 0}, {"Shade", 1}, {"Shade + Shadows", 2}, {"Full Lighting", 3},
                                  {"Full + GI", 4}, {"Full + Volumetric", 5}, {"Full + GI + Volumetric", 6}},
@@ -663,13 +668,16 @@ void EnterEffects(X86Context& ctx, uint32_t player) {
 }
 void KeepEffects(X86Context& ctx, uint32_t player) {
     gpu::GraphicsStyle st = Current();
-    st.blood = ReadOption(ctx, player, kBlood, kOffOn) > 0;
     if (!Vulkan()) {
         Request(st);
         return;
     }
     if (uint32_t lv = ChoiceValue(ctx, player, kLighting); lv <= 7) {
-        st.atmosphere = lv & 1, st.bounce_light = lv & 2;
+        const bool fog = (lv & 1) != 0;
+        st.shaft_strength = ReadOption(ctx, player, kShafts, kShaftLevels);
+        st.atmosphere = fog || st.shaft_strength > 0;
+        st.fog_strength = fog ? (st.fog_strength > 0 ? st.fog_strength : 0.5f) : 0.0f;
+        st.bounce_light = lv & 2;
         st.weather = lv & 4 ? std::max(st.weather, 1) : 0;
     }
     st.quality_ao = int(ReadOption(ctx, player, kAo, kAoLevels));
@@ -814,7 +822,7 @@ void EnterCoop(X86Context& ctx, uint32_t player) {
     Choice(ctx, player, kCoopDone, {{"Keep", 0}}, 0);
 }
 // Co-op kept; true when Network: Join's page is to open (the joining is done there)
-bool KeepCoop(X86Context& ctx, uint32_t player) {
+bool KeepCoop(X86Context& ctx, uint32_t player, bool live = false) {
     uint32_t mode = ChoiceValue(ctx, player, kCoopMode), split = ChoiceValue(ctx, player, kCoopSplit);
     if (mode <= 3) nf::coop = mode >= 1;  // network co-op: split screen co-op over the SDK's lockstep netplay
     if (split <= 1) nf::coop_side = split == 1;
@@ -826,6 +834,7 @@ bool KeepCoop(X86Context& ctx, uint32_t player) {
     LOGR("nightfire: Co-op kept: %s, %s, friendly fire %d, keep together %d, respawn %d",
          mode == 2 ? "network host" : mode == 3 ? "network join" : nf::coop ? "split screen" : "off",
          nf::coop_side ? "side by side" : "one above the other", nf::coop_friendly_fire, nf::coop_leash, nf::coop_respawn);
+    if (live) return false;  // changing a choice must never restart or join a network session
     // network: the game started again in lockstep (every copy runs the whole game, only the controllers travel:
     // core/netplay.h), from the title, the host's controller playing player 1, the joiner's player 2; leaving it the same
     const bool want = mode == 2 || mode == 3, now = netplay::Active();
@@ -960,6 +969,11 @@ const Options kAdsZooms = {{"Off", 100}, {"110%", 110}, {"120%", 120}, {"130% (D
                            {"175%", 175}, {"200%", 200}};
 bool g_reset_armed = false;  // Reset to Defaults asked once: A again resets
 void EnterMore2(X86Context& ctx, uint32_t player) {
+    ShowOptions(ctx, player, kGameplayBlood, kOffOn, Current().blood ? 1.0f : 0.0f);
+    if (nf::CanChangeMovement())
+        Choice(ctx, player, kMovement, {{"Original", 0}, {"Tighter", 1}}, nf::tight_movement ? 1 : 0);
+    else
+        Choice(ctx, player, kMovement, {{nf::TightMovement() ? "Tighter (Host)" : "Original (Host)", 0}}, 0);
     const app::Settings& s = app::Get();
     g_reset_armed = false;
     Choice(ctx, player, kAds, {{"Off", 0}, {"On", 1}}, nf::aim_down_sights ? 1 : 0);
@@ -970,6 +984,11 @@ void EnterMore2(X86Context& ctx, uint32_t player) {
     Choice(ctx, player, kMoreBack, {{"Open", 0}}, 0);
 }
 void KeepMore2(X86Context& ctx, uint32_t player) {
+    auto blood_style = Current();
+    blood_style.blood = ReadOption(ctx, player, kGameplayBlood, kOffOn) > 0;
+    Request(blood_style);
+    const uint32_t movement = ChoiceValue(ctx, player, kMovement);
+    if (nf::CanChangeMovement() && movement <= 1) nf::tight_movement = movement != 0;
     uint32_t ads = ChoiceValue(ctx, player, kAds), discord = ChoiceValue(ctx, player, kDiscord);
     std::lock_guard<std::recursive_mutex> lock(app::UiLock());
     if (ads <= 1) nf::aim_down_sights = ads > 0;
@@ -1001,7 +1020,7 @@ void ResetAll() {
         nf::view_motion = true, nf::foot_ik = true, nf::coop = false, nf::coop_friendly_fire = false;
         nf::coop_side = false, nf::coop_leash = true, nf::coop_respawn = true, nf::fov_percent = 100;
         nf::draw_distance = 100, nf::modern_menus = true, nf::modern_buttons = true, nf::rounded_font = false;
-        nf::perf_overlay = false, nf::ads_zoom = 130;
+        nf::perf_overlay = false, nf::ads_zoom = 130, nf::tight_movement = false;
         app::Save();
     }
     gpu::GraphicsStyle st, cur = Current();
@@ -1657,8 +1676,65 @@ void KeysPageFrame(X86Context& ctx) {
     LOGR("nightfire: Key Bindings: %s is %s", r.label, r.extra ? nf::KeyName(*r.extra).c_str() : KeysText(r.control).c_str());
 }
 
+// Poll selected values rather than focus/pointers: mouse, pad and classic menus all use the same widgets.
+// Capture a baseline on entry, apply only edits, then absorb any dependent choices refreshed by a preset.
+void SettingsLiveFrame(X86Context& ctx) {
+    // CallGuest restores integer registers, but leaves flags/x87 state changed. The pad reader's
+    // caller must receive the exact context it had before these extra widget queries.
+    struct RestoreContext {
+        X86Context& target;
+        X86Context saved;
+        ~RestoreContext() { target = saved; }
+    } restore{ctx, ctx};
+    static uint32_t last_page = 0, last_key = 0;
+    static std::vector<std::pair<uint32_t, uint32_t>> last_values;
+    const uint32_t pw = MenuUp() ? R32(0x25F1D0 + 0x1BC) : 0;
+    const uint32_t page = pw && mem::IsCommitted(pw + 0xAC) ? R32(pw + 0x18) : 0;
+    const bool shared = page == kStylePage &&
+        (g_style_rows == kMorePage || g_style_rows == kMore2Page || g_style_rows == kEffectsPage ||
+         g_style_rows == kCoopPage || g_style_rows == kEnhPage || g_style_rows == kToonPage || g_style_rows == kRetroPage);
+    if (page != 0x4000FC10 && page != kGfxPage && !shared) {
+        last_page = last_key = 0;
+        last_values.clear();
+        return;
+    }
+    const uint32_t key = shared ? g_style_rows : page;
+    auto values = [&] {
+        std::vector<std::pair<uint32_t, uint32_t>> out;
+        uint32_t w = R32(pw + 0x94);
+        if (w) w -= R32(pw + 0xA0) * 4;
+        const uint32_t eax = ctx.eax;
+        for (int n = 0; w && n < 200 && mem::IsCommitted(w + 0x7B); w = R32(w), n++) {
+            if (kernel::G<uint8_t>(w + 0x7A) & 1) continue;
+            const uint8_t type = kernel::G<uint8_t>(w + 0x7B);
+            if (type != 9 && type != 10) continue;
+            const uint32_t value = kernel::CallGuest(ctx, 0x72630, {w, type == 9 ? 0x35u : 0x40u, 0, 0});
+            out.emplace_back(R32(w + 0x18), value);
+        }
+        ctx.eax = eax;
+        return out;
+    };
+    auto now = values();
+    if (pw != last_page || key != last_key) {
+        last_page = pw, last_key = key, last_values = std::move(now);
+        return;
+    }
+    if (now == last_values) return;
+    if (page == 0x4000FC10) ApplyPcSettings(ctx, 0);
+    else if (page == kGfxPage) {
+        KeepGraphics(ctx, 0);
+        EnterGraphics(ctx, 0);  // quality, AA and filtering must agree after a preset changes
+    } else if (g_style_rows == kMorePage) KeepMore(ctx, 0);
+    else if (g_style_rows == kMore2Page) KeepMore2(ctx, 0);
+    else if (g_style_rows == kEffectsPage) KeepEffects(ctx, 0);
+    else if (g_style_rows == kCoopPage) KeepCoop(ctx, 0, true);
+    else KeepStyle(ctx, 0, g_style_rows);
+    last_values = values();
+}
+
 // each frame (nf::LanFrame): the games found shown as they come and go, outside the menu's update
 void NetplayPageFrame(X86Context& ctx) {
+    SettingsLiveFrame(ctx);
     if (g_focus_later.frames && --g_focus_later.frames == 0) {
         const uint32_t eax = ctx.eax;
         nf::MenuFocus(ctx, g_focus_later.player, g_focus_later.page, g_focus_later.row);

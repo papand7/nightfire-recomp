@@ -225,6 +225,7 @@ uint32_t Patch(uint32_t stream, uint32_t at) {
         std::vector<uint8_t> it(b.begin() + item[2], b.begin() + codenames_end);
         Put32(it, 4, id);
         Put16(it, 0xC, y);
+        Put16(it, 0x10, kRowY[1] - kRowY[0] - 1);  // navigation rejects overlapping rectangles
         for (size_t p = 0; p + 4 <= it.size();) {
             uint32_t op = Get32(it, p), n = RecordSize(op);
             if (!n) break;
@@ -241,6 +242,7 @@ uint32_t Patch(uint32_t stream, uint32_t at) {
     std::vector<uint8_t> ours = clone(kPcItem, kRowY[4], pc_label), quit = clone(kQuitItem, kRowY[5], quit_label);
     std::vector<uint8_t> net = clone(kNetItem, kRowY[2], net_label);
     ours.insert(ours.end(), quit.begin(), quit.end());
+    for (size_t row : item) Put16(b, row + 0x10, kRowY[1] - kRowY[0] - 1);
     Put16(b, item[0] + 0xC, kRowY[0]), Put16(b, item[1] + 0xC, kRowY[1]), Put16(b, item[2] + 0xC, kRowY[3]);
     for (size_t p = item[1]; p < item[2];) {  // Multiplayer's label: Split Screen
         uint32_t op = Get32(b, p), n = RecordSize(op);

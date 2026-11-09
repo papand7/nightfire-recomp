@@ -28,6 +28,7 @@
     },
     "files": [
       "main.js",
+      "android-package.sh",
       "preload.js",
       "ui/**/*",
       "package.json"

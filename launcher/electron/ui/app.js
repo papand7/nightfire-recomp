@@ -3,6 +3,8 @@
 const $ = id => document.getElementById(id);
 let S = null;          // the service's last state
 let checkedUpdate = false;
+let androidBusy = false;
+let androidOutput = null;
 
 function toast(text) {
     const t = $('toast');
@@ -69,6 +71,7 @@ nf.onService(ev => {
 
 function render() {
     if (!S) return;
+    $('btn-android').disabled = androidBusy || S.busy || !S.built;
     $('version').textContent = 'Launcher ' + S.version;
     $('nav-music').hidden = !S.music;
     const g = S.game || {};
@@ -78,7 +81,7 @@ function render() {
     line.append(g.ok ? `${g.release} disc image found` : 'No game yet');
     $('game-path').textContent = g.ok ? g.path : (g.error || '');
 
-    const busy = S.busy, building = busy && S.job === 'build';
+    const busy = S.busy || androidBusy, building = busy && S.job === 'build';
     $('build-title').textContent = !S.built ? 'Install' : S.update ? 'Update ready' : 'Installed';
     const info = $('build-info');
     if (!S.built) {
@@ -418,3 +421,35 @@ nf.onPack(ev => {
 });
 
 nf.state().then(s => { if (s) { S = s; render(); } });
+
+// ---- Android export
+$('btn-android').onclick = async () => {
+    $('btn-android').disabled = true;
+    try {
+        const r = await nf.makeAndroid({ abi: $('android-abi').value, textures: $('android-textures').checked });
+        if (r.ok) {
+            androidBusy = true;
+            $('android-log').textContent = '';
+            $('android-progress').hidden = false;
+            $('btn-android-folder').hidden = true;
+            setMsg($('android-msg'), 'Building Android package...', true);
+        } else if (!r.cancelled) setMsg($('android-msg'), r.message, false);
+    } catch (e) { setMsg($('android-msg'), e.message, false); }
+    render();
+};
+nf.onAndroid(ev => {
+    if (ev.line) {
+        const el = $('android-log');
+        el.textContent = (el.textContent + ev.line + '\n').slice(-300000);
+        el.scrollTop = el.scrollHeight;
+    }
+    if (ev.done) {
+        androidBusy = false;
+        $('android-progress').hidden = true;
+        setMsg($('android-msg'), ev.line, ev.ok);
+        androidOutput = ev.ok ? ev.path : null;
+        $('btn-android-folder').hidden = !androidOutput;
+        render();
+    }
+});
+$('btn-android-folder').onclick = () => nf.revealAndroid();

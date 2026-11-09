@@ -2,6 +2,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('nf', {
+    revealAndroid: () => ipcRenderer.invoke('android:reveal'),
+    makeAndroid: opts => ipcRenderer.invoke('android:run', opts),
+    onAndroid: fn => ipcRenderer.on('android', (_, ev) => fn(ev)),
     command: cmd => ipcRenderer.send('svc', cmd),
     state: () => ipcRenderer.invoke('svc:state'),
     paths: () => ipcRenderer.invoke('paths'),

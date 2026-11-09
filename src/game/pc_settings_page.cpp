@@ -57,7 +57,7 @@ constexpr uint32_t kPage = 0x4000FC10;
 constexpr uint32_t kFov = 0x1000FC11, kMouse = 0x1000FC12, kInvert = 0x1000FC13, kSkip = 0x1000FC14,
                    kSharp = 0x1000FC15, kAspect = 0x1000FC16, kMore = 0x1000FC17;
 constexpr uint32_t kDisplay = 0x1000FC1B, kResolution = 0x1000FC1C, kVsync = 0x1000FC1D, kCap = 0x1000FC1E;
-constexpr uint32_t kHelpBox = 0x10000225;
+constexpr uint32_t kController = 0x1000FC1F, kHelpBox = 0x10000225;
 constexpr uint32_t kSetById = 0x72820, kGoTo = 0x92C40, kSetWidget = 0x72630;
 constexpr uint32_t kMenuContext = 0x25F1D0, kContextSize = 0x1D8;
 constexpr uint32_t kList = 0x10000100;  // Edit Codename's list widget
@@ -85,6 +85,7 @@ constexpr uint32_t kGraphics = 0x1000FC18;
 const std::vector<Row> kRows = {
     {kFov, kSliderRow, "Field of View", "How wide the view is, on foot and driving. The game's is in the middle."},
     {kMouse, kSliderRow, "Mouse Sensitivity", "How far the view turns for the mouse's movement."},
+    {kController, kChoiceRow, "Controller Scheme", "The original on-foot joypad layouts. NightFire is the default; keyboard and mouse keep their own controls."},
     {kInvert, kChoiceRow, "Invert Mouse", "Moving the mouse forward looks down."},
     {kSkip, kChoiceRow, "Skip Intro Movies", "Starts without the EA and MGM logo movies."},
     {kSharp, kChoiceRow, "Sharp Text", "Text and HUD pictures sharp at high resolutions. Rounded: a modern font (next start)."},
@@ -96,7 +97,7 @@ const std::vector<Row> kRows = {
     {kGraphics, kButtonRow, "Graphics", "Picture quality, the shader style and its options."},
     {kMore, kButtonRow, "More Settings", "Frame counter, HUD, keyboard and mouse, language and more."},
 };
-constexpr int16_t kFirstY = 88, kRowStep = 21;  // AV's rows are 28 apart from 86 (below the title band): twelve need it closer
+constexpr int16_t kFirstY = 88, kRowStep = 21;  // AV's rows are 28 apart from 86 (below the title band): thirteen need it closer
 
 // a string's guest copy, made once for each text (by its contents: a host pointer can be another string's later)
 uint32_t Str(const char* s) {
@@ -188,6 +189,9 @@ void Enter(X86Context& ctx, uint32_t player) {
     g_fov_step = FovStep(), g_mouse_step = MouseStep();
     Slider(ctx, player, kFov, g_fov_step);
     Slider(ctx, player, kMouse, g_mouse_step);
+    Choice(ctx, player, kController,
+           Numbered({"NightFire", "Moonraker", "Octopussy", "Goldfinger", "Dr. No", "Thunderball", "GoldenEye", "Classic Bond"}),
+           std::min(nf::controller_scheme, 7u));
     Choice(ctx, player, kInvert, Numbered({"Off", "On"}), s.mouse_invert_y ? 1 : 0);
     Choice(ctx, player, kSkip, Numbered({"Off", "On"}), nf::skip_intro ? 1 : 0);
     Choice(ctx, player, kSharp, Numbered({"Off", "On", "Rounded"}), !s.sharp_2d ? 0 : nf::rounded_font ? 2 : 1);
@@ -230,9 +234,15 @@ void Keep(X86Context& ctx, uint32_t player) {
     uint32_t vsync = SetById(ctx, player, kVsync, 0x35, 0) & 0xFF, cap = SetById(ctx, player, kCap, 0x35, 0) & 0xFF;
     std::lock_guard<std::recursive_mutex> lock(app::UiLock());
     app::Settings& s = app::Get();
-    if (fov != g_fov_step) nf::fov_percent = 50 + std::min(fov, 20u) * 5;
-    if (mouse != g_mouse_step)
+    if (fov != g_fov_step) {
+        nf::fov_percent = 50 + std::min(fov, 20u) * 5;
+        g_fov_step = fov;
+    }
+    if (mouse != g_mouse_step) {
         s.mouse_sensitivity = uint32_t(std::lround(25 * std::pow(2.0, std::min(mouse, 20u) / 5.0)));
+        g_mouse_step = mouse;
+    }
+    nf::controller_scheme = std::min(SetById(ctx, player, kController, 0x35, 0) & 0xFF, 7u);
     s.mouse_invert_y = invert == 1;
     nf::skip_intro = skip == 1;
     if (sharp <= 2) s.sharp_2d = sharp >= 1, nf::rounded_font = sharp == 2;
@@ -318,6 +328,8 @@ bool PcPageMessage(X86Context& ctx, uint32_t player, uint32_t widget, uint32_t m
             if (r.id == id) SetById(ctx, player, kHelpBox, 0x18, Str(r.help));
     return false;
 }
+
+void ApplyPcSettings(X86Context& ctx, uint32_t player) { Keep(ctx, player); }
 
 uint32_t MenuString(const char* s) { return Str(s); }
 uint32_t MenuSet(X86Context& ctx, uint32_t player, uint32_t id, uint32_t msg, uint32_t a, uint32_t b) {
@@ -422,6 +434,11 @@ std::vector<uint8_t> BuildPage(const std::vector<uint8_t>& av, uint32_t (*record
         std::vector<uint8_t> b = g.bytes;
         put(b, 4, id);
         put16(b, 0xC, y);
+        // The guest's directional search (0x734D0) excludes a neighbouring row when its rectangle overlaps
+        // the current one. AV Options' original heights exceed our tighter row spacing.
+        int16_t height;
+        std::memcpy(&height, &b[0x10], 2);
+        put16(b, 0x10, std::min<int16_t>(height, step - 1));
         for (size_t p = 0; p + 4 <= b.size();) {
             uint32_t op = get(b, p), n = record_size(op);
             if (!n) break;

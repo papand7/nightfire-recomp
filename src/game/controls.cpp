@@ -4,9 +4,8 @@
 // 0x158 bytes from 0x1FE6D0): a switch on the player's controller style (the u16 at +0xE: NightFire 0, Moonraker 1,
 // Octopussy 2, Goldfinger 3, Dr. No 4, Thunderball 5, GoldenEye 6, Classic Bond 7) picks which stick axis is moving,
 // strafing, turning and looking and which button does what. The keys are laid out for style 0's controls page. While
-// controller 1 is played on the keyboard and mouse its player's style is 0, so the game's prompts and controls page
-// name the buttons the keys play (the pictures show the keys: src/common/buttons.cpp); a controller puts the chosen
-// style back, and the profile is written with it (0x6ED30 packs a player's controls for the save and the launch data).
+// controller 1 is played on the keyboard and mouse its style is temporarily 0 during pad decoding.
+// Restore it immediately afterwards so menus and profile saves see the chosen joystick layout.
 //
 // Crouch on the keyboard is held, not toggled: the game toggles on A (style 0's controls +0x34, set while held). A
 // character's posture is its object's word +0xD2, read by 0xA8A60 (its first person eye, a callback: the object):
@@ -18,6 +17,7 @@
 // while the keyboard plays, moving forward and standing. 0xA9CF0 (cdecl: the actor, the object, a speed) makes a
 // character's walk from its controls (2 forward, 0 and 1 to the side), the stick capped at full, eased, then times
 // the speed: that speed is raised (nf::SprintFactor, src/game/mouse.cpp).
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 
@@ -31,7 +31,8 @@
 
 namespace {
 constexpr uint32_t kControls = 0x1FE6D0, kPlayerSize = 0x158, kStyle = 0xE, kPort = 0x156;
-int g_player = -1;     // controller 1's player while its style is held at 0
+int g_player = -1;     // controller 1's keyboard player
+bool g_forced = false;
 uint16_t g_chosen = 0;  // its own style meanwhile
 constexpr uint32_t kCrouchSlot = 0x34, kActor = 0xBC, kPlayerIndex = 0x8DE, kPosture = 0xD2, kEyeDrop = 0x89C;
 uint32_t g_objects[4] = {};  // each player's character object, from 0xA8A60 last frame
@@ -107,11 +108,6 @@ void HoldToCrouch() {
     sent = want;
 }
 
-void Restore() {
-    if (g_player < 0) return;
-    kernel::G<uint16_t>(kControls + uint32_t(g_player) * kPlayerSize + kStyle) = g_chosen;
-    g_player = -1;
-}
 }  // namespace
 
 namespace nf {
@@ -121,31 +117,62 @@ float SprintFactor(int player) { return player >= 0 && player < 4 && g_sprint[pl
 X86_EXTERN_FUNC(__imp__sub_000DE720);
 X86_FUNC(sub_000DE720) {
     uint32_t players = kernel::R32(ctx.esp + 4), count = kernel::R32(ctx.esp + 8) & 0xFFFF;
-    if (!input::UsingKeyboard() || players != kControls || count > 4) {
-        Restore();
-    } else if (g_player >= 0) {
-        uint16_t& style = kernel::G<uint16_t>(kControls + uint32_t(g_player) * kPlayerSize + kStyle);
-        if (style) g_chosen = style, style = 0;  // chosen anew in the options meanwhile: that one is the player's
-    } else {
-        for (uint32_t i = 0; i < count; i++) {
-            uint32_t p = kControls + i * kPlayerSize;
-            if (kernel::G<uint8_t>(p + kPort) != 0) continue;  // controller 1's player
-            g_chosen = kernel::G<uint16_t>(p + kStyle);
-            g_player = int(i);
-            kernel::G<uint16_t>(p + kStyle) = 0;
-            if (g_chosen)
-                LOGR("nightfire: controller style %u chosen; the keyboard and mouse play as NightFire's (style 0)",
-                     g_chosen);
-            break;
+    // Apply the saved layout when it changes or controller 1 acquires a new player. Afterwards the original
+    // Controller Setup page can still change the live layout; keep that choice in the PC settings too.
+    static uint32_t applied = ~0u;
+    static int owner = -1;
+    int current = -1;
+    if (players == kControls && count <= 4) {
+        for (uint32_t i = 0; i < count; i++)
+            if (kernel::G<uint8_t>(kControls + i * kPlayerSize + kPort) == 0) { current = int(i); break; }
+        if (current >= 0) {
+            auto& style = kernel::G<uint16_t>(kControls + uint32_t(current) * kPlayerSize + kStyle);
+            nf::controller_scheme = std::min(nf::controller_scheme, 7u);
+            if (applied != nf::controller_scheme || owner != current) {
+                style = uint16_t(nf::controller_scheme);
+                applied = nf::controller_scheme;
+            } else {
+                uint32_t chosen = style;
+                if (chosen <= 7 && chosen != nf::controller_scheme) {
+                    nf::controller_scheme = applied = chosen;
+                    app::Save();
+                }
+            }
         }
+        owner = current;
+    }
+    g_player = input::UsingKeyboard() ? current : -1;
+    g_forced = g_player >= 0;
+    if (g_forced) {
+        auto& style = kernel::G<uint16_t>(kControls + uint32_t(g_player) * kPlayerSize + kStyle);
+        g_chosen = style;
+        style = 0;
     }
     __imp__sub_000DE720(ctx, base);
+    if (g_forced) {
+        kernel::G<uint16_t>(kControls + uint32_t(g_player) * kPlayerSize + kStyle) = g_chosen;
+        g_forced = false;
+    }
     if (players == kControls) {
         nf::AimDownSights(count), nf::LanFrame(ctx), nf::ModernMenuFrame(ctx);
         nf::PhotoFrame(ctx), nf::QuickFrame(ctx);  // photo mode, the quick restart key, Discord's presence
         gpu::SetAiming(nf::AimingDownSights());  // depth of field's focus blurs more while aiming
     }
-    if (players == kControls) HoldToCrouch(), Sprint();
+    if (players == kControls) {
+        static const bool trace = std::getenv("NF_MENU_TRACE") != nullptr;
+        static uint32_t last_page = 0, last_focus = 0;
+        if (trace && nf::MenuUp()) {
+            uint32_t page = kernel::R32(0x25F1D0 + 0x1BC);
+            uint32_t focus = page ? kernel::R32(page + 0xAC) : 0;
+            if (page != last_page || focus != last_focus) {
+                LOGR("nightfire: menu trace: page %08X focus %08X height %d scheme %u",
+                     page ? kernel::R32(page + 0x18) : 0, focus ? kernel::R32(focus + 0x18) : 0,
+                     focus ? kernel::G<int16_t>(focus + 0x76) : 0, nf::controller_scheme);
+                last_page = page, last_focus = focus;
+            }
+        }
+        HoldToCrouch(), Sprint();
+    }
     nf::MouseAsStick();
 }
 
@@ -161,7 +188,7 @@ X86_FUNC(sub_000A8A60) {  // a character's first person eye (cdecl: the object):
 X86_EXTERN_FUNC(__imp__sub_0006ED30);
 X86_FUNC(sub_0006ED30) {
     int player = int(kernel::R32(ctx.esp + 8) & 0xFFFF);
-    if (player != g_player) return __imp__sub_0006ED30(ctx, base);
+    if (!g_forced || player != g_player) return __imp__sub_0006ED30(ctx, base);
     uint16_t& style = kernel::G<uint16_t>(kControls + uint32_t(player) * kPlayerSize + kStyle);
     style = g_chosen;
     __imp__sub_0006ED30(ctx, base);

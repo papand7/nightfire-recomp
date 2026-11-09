@@ -263,6 +263,15 @@ void ModernMenuFrame(X86Context& ctx) {
     for (const Seen& v : seen) select |= v.type == 5 && v.text.find("~A") != std::string::npos;
     std::vector<std::string> table;
     for (const Seen& v : seen) {
+        // The pause layout picker is a one-column list sharing the tabs' id. Keep its
+        // selected layout as a choice instead of losing it among the bindings table.
+        if (page.page == 0x4000004B && v.type == 6 && R32(v.w + 0x20) == 9) {
+            ModernRow r;
+            r.id = v.id, r.kind = kModernChoice, r.label = "Joystick Layout", r.value = v.text;
+            r.focused = true;
+            order.push_back({{v.y, v.x}, r});
+            continue;
+        }
         if (v.type != 6 || !rows.count(v.id) || !rows[v.id].label.empty()) continue;
         const uint32_t shown = R32(v.w + 0x560);
         std::vector<std::vector<std::string>> entries;
@@ -455,6 +464,11 @@ void ModernMenuFrame(X86Context& ctx) {
     ModernAction a;
     while (ModernMenuAction(a)) {
         if (a.page != page.page) continue;
+        // On the native Controls tab, up/down cycle layouts; left/right change tabs.
+        if (page.page == 0x4000004B && page.tab == 2 && a.id == 0x10000028) {
+            if (a.control == input::kLeft) a.control = input::kUp;
+            else if (a.control == input::kRight || a.control == input::kA) a.control = input::kDown;
+        }
         if (a.id && a.id != focused_id) MenuFocus(ctx, 0, pw, a.id);
         if (a.list && a.control >= 0)  // a list's entry: up or down to it first
             for (int k = 0; k < std::abs(a.list_step) && k < 8; k++) ModernMenuPress(a.list_step > 0 ? input::kDown : input::kUp);

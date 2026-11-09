@@ -180,6 +180,22 @@ window.SCHEMA = [
     {
         id: 'controls', title: 'Controls', icon: 'pad', groups: [
             {
+                title: 'Gameplay', items: [
+                    { f: 's', key: 'tight_movement', label: 'Tighter movement', def: false,
+                        help: 'Quicker starts and direction changes, less floaty jumps with original jump height. Also applies in single-player. In multiplayer the host decides for everyone.' },
+                    { f: 'g', key: 'blood', label: 'Blood on hit', def: true,
+                        help: 'Blood at character impacts, plus red view edges when hurt. Works with every renderer.' },
+                ],
+            },
+            {
+                title: 'Joypad', items: [
+                    { f: 's', key: 'controller_scheme', label: 'Original control scheme', def: 0,
+                        options: pick([0, 'NightFire (Default)'], [1, 'Moonraker'], [2, 'Octopussy'], [3, 'Goldfinger'],
+                            [4, 'Dr. No'], [5, 'Thunderball'], [6, 'GoldenEye'], [7, 'Classic Bond']),
+                        help: 'The original on-foot layouts for controller 1. Keyboard and mouse retain their own controls.' },
+                ],
+            },
+            {
                 title: 'Keyboard and mouse', items: [
                     { f: 's', key: 'keyboard', label: 'Keyboard plays as controller 1', def: true },
                     { f: 's', key: 'keyboard_alone', label: 'Keyboard alone (pads start at 2)', def: false },

@@ -25,6 +25,8 @@ const GAME_EXES = ['Nightfire', 'NightfireDriving'];
 let win = null;
 let svc = null;
 let state = null;
+let android = null;
+let androidOutput = null;
 let pack = null;  // the running hd_pack
 
 function send(channel, data) {
@@ -49,6 +51,7 @@ function startService() {
 }
 
 function command(cmd) {
+    if (android && !['state', 'quit'].includes(cmd.cmd)) return;
     if (svc && svc.stdin.writable) svc.stdin.write(JSON.stringify(cmd) + '\n');
 }
 
@@ -194,6 +197,42 @@ ipcMain.handle('textures:run', async (_, o) => {
 });
 ipcMain.handle('textures:cancel', async () => { if (pack) pack.kill(); });
 
+// ---- Android package: the same Linux build on Linux and in Windows' WSL.
+ipcMain.handle('android:run', async (_, options = {}) => {
+    if (android || (state && state.busy)) return { ok: false, message: 'Another job is running.' };
+    const repo = path.join(ROOT, 'source');
+    if (!state || !state.built || !fs.existsSync(path.join(repo, 'sdk/scripts/android/package.sh')))
+        return { ok: false, message: 'Install the game on the Mission page first. If the source was removed, rebuild it.' };
+    const output = await dialog.showSaveDialog(win, { title: 'Save Android game package',
+        defaultPath: path.join(LAUNCHER_DIR, 'NightFire-android-package.zip'),
+        filters: [{ name: 'Android game package', extensions: ['zip'] }] });
+    if (output.canceled) return { ok: false, cancelled: true };
+    // Check again after the native dialog: a service job may have started while it was open.
+    if (android || state.busy) return { ok: false, message: 'Another job is running.' };
+    const args = [repo, path.join(playDir(), 'assets'), output.filePath,
+        options.textures === true ? path.join(playDir(), 'mods', 'textures') : '',
+        options.abi === 'x86_64' ? 'x86_64' : 'arm64-v8a'];
+    const child = spawn(WINDOWS ? 'wsl.exe' : 'bash', WINDOWS
+        ? ['--exec', 'bash', '-s', '--', ...args] : ['-s', '--', ...args],
+        { windowsHide: true, detached: !WINDOWS, stdio: ['pipe', 'pipe', 'pipe'] });
+    android = child;
+    const emit = ev => send('android', ev);
+    readline.createInterface({ input: child.stdout }).on('line', line => emit({ line }));
+    readline.createInterface({ input: child.stderr }).on('line', line => emit({ line }));
+    let failed = false;
+    child.on('error', e => { failed = true; emit({ line: e.message }); });
+    child.stdin.on('error', () => {});
+    child.on('close', code => {
+        android = null;
+        if (!failed && code === 0) androidOutput = output.filePath;
+        emit({ done: true, ok: !failed && code === 0, path: output.filePath,
+            line: code === 0 ? 'Package ready. Copy it to your Android device and import it in the NightFire app.'
+                : 'Packaging failed. Check the log and the build requirements above.' });
+    });
+    child.stdin.end(fs.readFileSync(path.join(__dirname, 'android-package.sh'), 'utf8').replace(/\r\n/g, '\n'));
+    return { ok: true };
+});
+ipcMain.handle('android:reveal', () => { if (androidOutput) shell.showItemInFolder(androidOutput); });
 // ---- the rest
 ipcMain.on('svc', (_, cmd) => command(cmd));
 ipcMain.handle('svc:state', () => state);
@@ -222,6 +261,10 @@ app.whenReady().then(() => {
 });
 app.on('before-quit', () => {
     app.isQuitting = true;
+    if (android) {
+        if (WINDOWS) spawn('taskkill', ['/pid', String(android.pid), '/T', '/F'], { windowsHide: true });
+        else { try { process.kill(-android.pid, 'SIGTERM'); } catch {} }
+    }
     if (svc) { command({ cmd: 'quit' }); svc.stdin.end(); }
 });
 app.on('window-all-closed', () => app.quit());

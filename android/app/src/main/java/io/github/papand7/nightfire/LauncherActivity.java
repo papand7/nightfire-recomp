@@ -2,20 +2,30 @@ package io.github.papand7.nightfire;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -24,253 +34,352 @@ import android.widget.TextView;
 
 import org.json.JSONObject;
 
-/**
- * The launcher: Play, Import package and a few settings, in the modern menus' blues. The game package is built on the
- * player's PC by the NightFire launcher from their own disc and copied to the phone; this imports it into the app's
- * private storage (PackageStore).
- */
+/** Responsive native launcher. The APK contains no game data; PackageStore imports the player's package. */
 public class LauncherActivity extends Activity {
     private static final int PICK_ZIP = 1, PICK_FOLDER = 2;
-    private static final int NAVY = 0xFF061430, BLUE = 0xFF0C2C5E, ACCENT = 0xFF3C8CFF, TEXT = 0xFFE1EEFF,
-                             DIM = 0xFF9DB8E0;
-
-    private TextView status;
+    private static final int NAVY = 0xFF080F1C, PANEL = 0xFF101F34, BORDER = 0xFF253B56,
+            ACCENT = 0xFF438DFF, CYAN = 0xFF87CFFF, TEXT = 0xFFF0F5FF, DIM = 0xFFABBDD3;
+    private TextView status, packageTitle, badge, importStatus;
     private ProgressBar progress;
     private Button play, importZip, importFolder, settings;
-    private boolean busy;
-    private final Handler ui = new Handler(Looper.getMainLooper());
+    private boolean resumed;
+    private final Runnable importObserver = this::renderImport;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[] { NAVY, BLUE });
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.setPadding(dp(32), dp(24), dp(32), dp(24));
-
-        TextView title = text("007: NightFire", 34, TEXT);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        root.addView(title);
-        root.addView(text("Android (beta): your own game, built from your disc on your PC", 14, DIM));
-
-        status = text("", 15, TEXT);
-        status.setPadding(0, dp(18), 0, dp(12));
-        root.addView(status);
-        progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        progress.setMax(1000);
-        progress.setVisibility(View.GONE);
-        root.addView(progress, new LinearLayout.LayoutParams(dp(420), LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        play = button("Play", true);
-        play.setOnClickListener(v -> play());
-        importZip = button("Import package (.zip)", false);
-        importZip.setOnClickListener(v -> pick(PICK_ZIP));
-        importFolder = button("Import package folder", false);
-        importFolder.setOnClickListener(v -> pick(PICK_FOLDER));
-        settings = button("Settings", false);
-        settings.setOnClickListener(v -> settings());
-        for (Button b : new Button[] { play, importZip, importFolder, settings }) {
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(320), dp(52));
-            lp.topMargin = dp(10);
-            root.addView(b, lp);
-        }
-        TextView help = text("On your PC: the NightFire launcher's Android package (or sdk/scripts/android/package.sh) makes "
-                             + "NightFire-android-package.zip from your disc. Copy it to this phone (USB or a file share), "
-                             + "then Import package. A controller works too; the touch controls hide while one is connected.",
-                             12, DIM);
-        help.setPadding(0, dp(18), 0, 0);
-        root.addView(help, new LinearLayout.LayoutParams(dp(520), LinearLayout.LayoutParams.WRAP_CONTENT));
-
+        FrameLayout screen = new FrameLayout(this);
+        screen.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[] { NAVY, 0xFF10233E }));
+        // Target SDK 35 draws behind the system bars. Content stays inside bars and camera cutouts.
+        screen.setOnApplyWindowInsetsListener((v, insets) -> {
+            if (Build.VERSION.SDK_INT >= 30) {
+                Insets safe = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                v.setPadding(safe.left, safe.top, safe.right, safe.bottom);
+            } else {
+                v.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
+                        insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
+            }
+            return insets.consumeSystemWindowInsets();
+        });
         ScrollView scroll = new ScrollView(this);
-        scroll.setBackground(bg);
         scroll.setFillViewport(true);
-        scroll.addView(root);
-        setContentView(scroll);
-        refresh();
+        scroll.setClipToPadding(false);
+        screen.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+        FrameLayout centre = new FrameLayout(this);
+        scroll.addView(centre, new ScrollView.LayoutParams(-1, -2));
+
+        LinearLayout columns = column();
+        LinearLayout mission = card();
+        add(mission, text("MISSION CONTROL", 11, CYAN, true), 0);
+        add(mission, text("Your next mission awaits.", 30, TEXT, true), 12);
+        add(mission, text("007: NightFire, ready for a new screen.", 15, DIM, false), 10);
+        badge = text("", 11, CYAN, true);
+        badge.setPadding(dp(12), dp(7), dp(12), dp(7));
+        badge.setBackground(shape(0xFF192E49, BORDER, 8));
+        LinearLayout.LayoutParams tag = new LinearLayout.LayoutParams(-2, -2);
+        tag.topMargin = dp(28);
+        mission.addView(badge, tag);
+        packageTitle = text("", 21, TEXT, true);
+        add(mission, packageTitle, 16);
+        status = text("", 14, DIM, false);
+        status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        add(mission, status, 8);
+        play = button("Play NightFire", true);
+        play.setOnClickListener(v -> {
+            if (ImportTask.active) return;
+            if (PackageStore.problem(this) == null) startActivity(new Intent(this, GameActivity.class));
+            else pick(PICK_ZIP);
+        });
+        add(mission, play, 24);
+        add(mission, text("Touch controls and gamepad supported.", 12, DIM, false), 12);
+
+        LinearLayout setup = card();
+        add(setup, text("Your game", 21, TEXT, true), 0);
+        add(setup, text("Bring your own copy. Set up once, then play whenever you like.", 14, DIM, false), 8);
+        step(setup, "1", "Build your package", "In the desktop launcher's Android page, create your game package.");
+        step(setup, "2", "Copy it here", "Transfer the ZIP to this device using USB or a file share.");
+        step(setup, "3", "Import and play", "Choose your package below. Your saves stay when you update it.");
+        importZip = button("Import game package", true);
+        importZip.setOnClickListener(v -> pick(PICK_ZIP));
+        add(setup, importZip, 24);
+        importFolder = button("Import an unpacked folder", false);
+        importFolder.setOnClickListener(v -> pick(PICK_FOLDER));
+        add(setup, importFolder, 10);
+        progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        progress.setProgressTintList(ColorStateList.valueOf(ACCENT));
+        progress.setIndeterminateTintList(ColorStateList.valueOf(ACCENT));
+        progress.setMax(1000);
+        add(setup, progress, 18);
+        importStatus = text("", 14, DIM, false);
+        add(setup, importStatus, 8);
+        settings = button("Game settings", false);
+        settings.setOnClickListener(v -> settings());
+        add(setup, settings, 18);
+
+        ResponsivePage page = new ResponsivePage(columns, mission, setup);
+        add(page, text("007 / NIGHTFIRE", 24, TEXT, true), 0);
+        TextView edition = text("ANDROID EDITION", 11, CYAN, true);
+        edition.setLetterSpacing(0.16f);
+        add(page, edition, 6);
+        add(page, columns, 28);
+        add(page, text("Built from your own disc. Your game stays on your device.", 12, DIM, false), 24);
+        centre.addView(page, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL));
+        setContentView(screen);
+        screen.requestApplyInsets();
+        ImportTask.observer = importObserver;
+        renderImport();
     }
 
-    @Override
-    protected void onResume() {
+    /** Available width, not device type or orientation, decides the layout. Text can grow and the page can scroll. */
+    private class ResponsivePage extends LinearLayout {
+        final LinearLayout columns, mission, setup;
+        Boolean wide;
+        ResponsivePage(LinearLayout columns, LinearLayout mission, LinearLayout setup) {
+            super(LauncherActivity.this);
+            this.columns = columns; this.mission = mission; this.setup = setup;
+            setOrientation(VERTICAL);
+        }
+        @Override protected void onMeasure(int widthSpec, int heightSpec) {
+            int width = Math.min(MeasureSpec.getSize(widthSpec), dp(1120));
+            int edge = width >= dp(600) ? dp(32) : dp(16);
+            setPadding(edge, dp(28), edge, dp(28));
+            float fontScale = getResources().getConfiguration().fontScale;
+            boolean next = width - 2 * edge >= dp(720 * Math.max(1, fontScale));
+            if (wide == null || wide != next) {
+                wide = next;
+                columns.removeAllViews();
+                columns.setOrientation(next ? HORIZONTAL : VERTICAL);
+                LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(next ? 0 : -1, -2, next ? 1 : 0);
+                LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(next ? 0 : -1, -2, next ? 1 : 0);
+                if (next) right.leftMargin = dp(20); else right.topMargin = dp(16);
+                columns.addView(mission, left);
+                columns.addView(setup, right);
+                columns.setBaselineAligned(false);
+            }
+            super.onMeasure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY), heightSpec);
+        }
+    }
+
+    @Override protected void onResume() {
         super.onResume();
-        refresh();
+        resumed = true;
+        ImportTask.observer = importObserver;
+        renderImport();
+    }
+    @Override protected void onPause() { resumed = false; super.onPause(); }
+    @Override protected void onDestroy() {
+        if (ImportTask.observer == importObserver) ImportTask.observer = null;
+        super.onDestroy();
     }
 
     private void refresh() {
-        if (busy) return;
+        if (ImportTask.active) return;
         String why = PackageStore.problem(this);
         JSONObject m = PackageStore.manifest(this);
-        if (why == null && m != null) {
-            status.setText("Game package: " + m.optString("title", "the game") + ", built " + m.optString("built", "?")
-                           + " (" + m.optString("abi", "") + ")");
-        } else {
-            status.setText(why);
-        }
-        play.setEnabled(why == null);
-        play.setAlpha(why == null ? 1f : 0.45f);
+        boolean ready = why == null && m != null;
+        badge.setText(ready ? "READY TO PLAY" : m == null ? "SETUP REQUIRED" : "PACKAGE NEEDS ATTENTION");
+        badge.setTextColor(ready ? 0xFFA0E5CB : CYAN);
+        packageTitle.setText(ready ? m.optString("title", "NightFire") : m == null ? "Add your game" : "Check your package");
+        String date = m != null ? m.optString("built", "") : "";
+        if (date.length() >= 10) date = date.substring(0, 10);
+        status.setText(ready ? "Installed on this device" + (date.isEmpty() ? "." : " \u00b7 Built " + date)
+                : m == null ? "Import the package you created on your PC to get started." : why);
+        play.setText(ready ? "Play NightFire" : "Import game package");
+        enable(play, true);
+        enable(settings, ready);
+        importZip.setText(ready ? "Import an updated package" : "Import game package");
     }
 
-    private void play() {
-        startActivity(new Intent(this, GameActivity.class));
+    private void renderImport() {
+        boolean busy = ImportTask.active;
+        enable(importZip, !busy);
+        enable(importFolder, !busy);
+        progress.setVisibility(busy ? View.VISIBLE : View.GONE);
+        importStatus.setVisibility(busy ? View.VISIBLE : View.GONE);
+        if (busy) {
+            enable(play, false); enable(settings, false);
+            play.setText("Importing...");
+            badge.setText("IMPORT IN PROGRESS");
+            packageTitle.setText("Getting your game ready");
+            status.setText("Keep the app open while your package is imported.");
+            progress.setIndeterminate(ImportTask.total <= 0);
+            if (ImportTask.total > 0)
+                progress.setProgress((int) Math.min(1000, 1000.0 * ImportTask.done / ImportTask.total));
+            importStatus.setText(ImportTask.done == 0 ? "Preparing the package..." : String.format(java.util.Locale.getDefault(),
+                    ImportTask.total > 0 ? "Importing \u00b7 %.0f MB of %.0f MB" : "Importing \u00b7 %.0f MB copied",
+                    ImportTask.done / 1e6, ImportTask.total / 1e6));
+        } else {
+            refresh();
+            if (resumed && ImportTask.finished) {
+                ImportTask.finished = false;
+                if (ImportTask.error != null) message("Couldn't import the package", ImportTask.error);
+                else message("Ready to play", "Your game is installed. You can now remove the transferred ZIP to free up space.");
+            }
+        }
     }
 
     private void pick(int what) {
-        if (busy) return;
+        if (ImportTask.active) return;
         Intent i;
         if (what == PICK_ZIP) {
             i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             i.addCategory(Intent.CATEGORY_OPENABLE);
             i.setType("*/*");
-            i.putExtra(Intent.EXTRA_MIME_TYPES, new String[] { "application/zip", "application/x-zip-compressed",
-                                                                "application/octet-stream" });
-        } else {
-            i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        }
+            i.putExtra(Intent.EXTRA_MIME_TYPES, new String[] { "application/zip", "application/x-zip-compressed", "application/octet-stream" });
+        } else i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         startActivityForResult(i, what);
     }
-
-    @Override
-    protected void onActivityResult(int request, int result, Intent data) {
+    @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
-        if (result != RESULT_OK || data == null || data.getData() == null) return;
-        final Uri uri = data.getData();
-        final boolean zip = request == PICK_ZIP;
-        busy = true;
-        setButtons(false);
-        progress.setVisibility(View.VISIBLE);
-        progress.setProgress(0);
-        status.setText("Importing the game package...");
-        new Thread(() -> {
-            String error = null;
-            try {
-                PackageStore.Progress p = (done, total, what) -> ui.post(() -> {
-                    if (total > 0) progress.setProgress((int) (done * 1000 / total));
-                    status.setText(String.format("Importing: %.0f MB%s", done / 1e6,
-                                                 total > 0 ? String.format(" of %.0f MB", total / 1e6) : ""));
-                });
-                if (zip) PackageStore.importZip(this, uri, p);
-                else PackageStore.importTree(this, uri, p);
-            } catch (Exception e) {
-                error = e.getMessage() != null ? e.getMessage() : e.toString();
-            }
-            final String err = error;
-            ui.post(() -> {
-                busy = false;
-                progress.setVisibility(View.GONE);
-                setButtons(true);
-                refresh();
-                if (err != null) message("Import failed", err);
-                else message("Imported", "The game package is ready: Play. You may delete the .zip from the phone now.");
-            });
-        }, "import").start();
+        if ((request != PICK_ZIP && request != PICK_FOLDER) || result != RESULT_OK || data == null || data.getData() == null) return;
+        if (!ImportTask.active) ImportTask.start(getApplicationContext(), data.getData(), request == PICK_ZIP);
+    }
+
+    /** Application-owned work survives activity recreation without retaining a destroyed Activity or its views. */
+    private static final class ImportTask {
+        static final Handler UI = new Handler(Looper.getMainLooper());
+        static boolean active, finished;
+        static long done, total;
+        static String error;
+        static Runnable observer;
+        static void notifyUi() { if (observer != null) observer.run(); }
+        static void start(Context app, Uri uri, boolean zip) {
+            active = true; finished = false; error = null; done = total = 0;
+            notifyUi();
+            new Thread(() -> {
+                String failure = null;
+                try {
+                    long[] last = { 0 };
+                    PackageStore.Progress callback = (copied, size, name) -> {
+                        long now = SystemClock.uptimeMillis();
+                        if (now - last[0] < 100) return;
+                        last[0] = now;
+                        UI.post(() -> {
+                            done = copied;
+                            // ZIP's byte size is compressed; copied counts unpacked bytes, so no false percentage.
+                            total = zip ? 0 : size;
+                            notifyUi();
+                        });
+                    };
+                    if (zip) PackageStore.importZip(app, uri, callback);
+                    else PackageStore.importTree(app, uri, callback);
+                } catch (Exception e) { failure = e.getMessage() != null ? e.getMessage() : e.toString(); }
+                final String result = failure;
+                UI.post(() -> { active = false; finished = true; error = result; notifyUi(); });
+            }, "game-import").start();
+        }
     }
 
     private void settings() {
-        if (PackageStore.manifest(this) == null) {
-            message("Settings", "Import a game package first.");
-            return;
-        }
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(20), dp(12), dp(20), 0);
-        final String[] scales = { "50", "67", "75", "100" };
-        final Spinner scale = spinner(new String[] { "50% (fastest)", "67%", "75%", "100% (sharpest)" });
+        if (ImportTask.active || PackageStore.problem(this) != null) return;
+        LinearLayout box = column();
+        box.setPadding(dp(24), dp(8), dp(24), dp(16));
+        final String[] scales = { "50", "67", "75", "100" }, caps = { "30", "60", "0" };
+        Spinner scale = spinner(new String[] { "50% \u00b7 Fastest", "67% \u00b7 Balanced", "75% \u00b7 Detailed", "100% \u00b7 Sharpest" });
         scale.setSelection(indexOf(scales, PackageStore.readSetting(this, "render_percent"), 1));
-        final String[] caps = { "30", "60", "0" };
-        final Spinner cap = spinner(new String[] { "30 frames a second (cooler, longer battery)", "60 frames a second",
-                                                    "Unlimited" });
+        Spinner cap = spinner(new String[] { "30 FPS \u00b7 Battery saver", "60 FPS \u00b7 Smooth", "Unlimited" });
         cap.setSelection(indexOf(caps, PackageStore.readSetting(this, "fps_cap"), 1));
-        final CheckBox fps = new CheckBox(this);
-        fps.setText("Show the frame rate");
-        fps.setChecked("true".equals(PackageStore.readSetting(this, "show_fps")));
-        final CheckBox intro = new CheckBox(this);
-        intro.setText("Skip the intro movies");
-        intro.setChecked(!"false".equals(PackageStore.readSetting(this, "skip_intro")));
-        box.addView(label("Render resolution"));
-        box.addView(scale);
-        box.addView(label("Frame rate"));
-        box.addView(cap);
-        box.addView(fps);
-        box.addView(intro);
-        box.addView(label("The game's own menus (Options, PC Settings) have the rest."));
-        new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
-            .setTitle("Settings")
-            .setView(box)
+        CheckBox fps = check("Show frame rate", "true".equals(PackageStore.readSetting(this, "show_fps")));
+        CheckBox intro = check("Skip intro movies", !"false".equals(PackageStore.readSetting(this, "skip_intro")));
+        add(box, text("Render resolution", 14, DIM, false), 12);
+        add(box, scale, 4);
+        add(box, text("Frame rate", 14, DIM, false), 16);
+        add(box, cap, 4);
+        add(box, fps, 16);
+        add(box, intro, 4);
+        add(box, text("More options are available in the game's Settings menu.", 13, DIM, false), 16);
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(box);
+        new AlertDialog.Builder(this).setTitle("Game settings").setView(scroll)
             .setPositiveButton("Save", (d, w) -> {
                 try {
                     PackageStore.writeSetting(this, "render_percent", scales[scale.getSelectedItemPosition()]);
                     PackageStore.writeSetting(this, "fps_cap", caps[cap.getSelectedItemPosition()]);
                     PackageStore.writeSetting(this, "show_fps", fps.isChecked() ? "true" : "false");
                     PackageStore.writeSetting(this, "skip_intro", intro.isChecked() ? "true" : "false");
-                } catch (Exception e) {
-                    message("Settings", "Not saved: " + e.getMessage());
-                }
-            })
-            .setNegativeButton("Cancel", null)
-            .show();
+                } catch (Exception e) { message("Settings weren't saved", e.getMessage()); }
+            }).setNegativeButton("Cancel", null).show();
     }
 
-    // ---- views
-
-    private int dp(float v) {
-        return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, getResources().getDisplayMetrics());
+    private int dp(float v) { return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, getResources().getDisplayMetrics())); }
+    private LinearLayout column() {
+        LinearLayout v = new LinearLayout(this); v.setOrientation(LinearLayout.VERTICAL); return v;
     }
-
-    private TextView text(String s, float sp, int color) {
+    private LinearLayout card() {
+        LinearLayout v = column();
+        v.setPadding(dp(24), dp(24), dp(24), dp(24));
+        v.setBackground(shape(PANEL, BORDER, 20));
+        return v;
+    }
+    private TextView text(String value, float sp, int color, boolean bold) {
         TextView t = new TextView(this);
-        t.setText(s);
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
-        t.setTextColor(color);
-        t.setGravity(Gravity.CENTER_HORIZONTAL);
+        t.setText(value); t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp); t.setTextColor(color);
+        t.setTypeface(Typeface.create("sans-serif", bold ? Typeface.BOLD : Typeface.NORMAL));
+        t.setIncludeFontPadding(false);
+        t.setLineSpacing(dp(3), 1);
         return t;
     }
-
-    private TextView label(String s) {
-        TextView t = new TextView(this);
-        t.setText(s);
-        t.setPadding(0, dp(10), 0, dp(2));
-        return t;
+    private void add(LinearLayout parent, View child, int gap) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2); lp.topMargin = dp(gap);
+        parent.addView(child, lp);
     }
-
-    private Button button(String s, boolean main) {
+    private void step(LinearLayout parent, String number, String title, String body) {
+        LinearLayout row = new LinearLayout(this);
+        TextView n = text(number, 13, CYAN, true);
+        n.setGravity(Gravity.CENTER); n.setBackground(shape(0xFF192E49, BORDER, 10));
+        row.addView(n, new LinearLayout.LayoutParams(dp(32), dp(32)));
+        LinearLayout words = column();
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1); lp.leftMargin = dp(12);
+        row.addView(words, lp);
+        add(words, text(title, 15, TEXT, true), 0);
+        add(words, text(body, 13, DIM, false), 5);
+        add(parent, row, 20);
+    }
+    private GradientDrawable shape(int fill, int stroke, int radius) {
+        GradientDrawable d = new GradientDrawable(); d.setColor(fill); d.setCornerRadius(dp(radius));
+        d.setStroke(dp(1), stroke); return d;
+    }
+    private Button button(String label, boolean primary) {
         Button b = new Button(this);
-        b.setText(s);
-        b.setAllCaps(false);
-        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, main ? 20 : 16);
-        b.setTextColor(main ? Color.WHITE : TEXT);
-        GradientDrawable d = new GradientDrawable();
-        d.setCornerRadius(dp(10));
-        d.setColor(main ? ACCENT : 0x332A5CA8);
-        d.setStroke(dp(2), main ? 0xFF8CC0FF : 0xFF4A78C0);
-        b.setBackground(d);
+        b.setText(label); b.setAllCaps(false); b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        b.setSingleLine(false); b.setMaxLines(3); b.setEllipsize(null);
+        b.setTextColor(primary ? Color.WHITE : TEXT);
+        b.setMinHeight(dp(56)); b.setMinimumWidth(0); b.setMinWidth(0);
+        b.setPadding(dp(16), dp(14), dp(16), dp(14));
+        StateListDrawable states = new StateListDrawable();
+        states.addState(new int[] { android.R.attr.state_focused }, shape(primary ? ACCENT : 0xFF203B5C, CYAN, 12));
+        states.addState(new int[] {}, shape(primary ? 0xFF286AD1 : 0xFF14273F, primary ? ACCENT : BORDER, 12));
+        b.setBackground(new RippleDrawable(ColorStateList.valueOf(0x4487CFFF), states, shape(Color.WHITE, Color.WHITE, 12)));
         return b;
     }
-
-    private Spinner spinner(String[] items) {
-        Spinner s = new Spinner(this);
-        ArrayAdapter<String> a = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, items);
-        a.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        s.setAdapter(a);
-        return s;
+    private void enable(Button button, boolean enabled) { button.setEnabled(enabled); button.setAlpha(enabled ? 1 : 0.4f); }
+    private CheckBox check(String label, boolean checked) {
+        CheckBox c = new CheckBox(this); c.setText(label); c.setTextColor(TEXT); c.setTextSize(15);
+        c.setButtonTintList(ColorStateList.valueOf(CYAN)); c.setMinHeight(dp(52)); c.setChecked(checked); return c;
     }
-
-    private static int indexOf(String[] values, String v, int fallback) {
-        if (v != null)
-            for (int i = 0; i < values.length; i++)
-                if (values[i].equals(v)) return i;
+    private Spinner spinner(String[] items) {
+        Spinner spinner = new Spinner(this);
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, items) {
+            @Override public View getView(int position, View convertView, ViewGroup parent) {
+                TextView t = (TextView) super.getView(position, convertView, parent);
+                t.setSingleLine(false); t.setMaxLines(3); t.setTextSize(16); t.setTextColor(TEXT);
+                t.setPadding(dp(12), dp(12), dp(12), dp(12)); return t;
+            }
+            @Override public View getDropDownView(int position, View convertView, ViewGroup parent) {
+                TextView t = (TextView) super.getDropDownView(position, convertView, parent);
+                t.setSingleLine(false); t.setMaxLines(3); t.setTextSize(16); t.setTextColor(TEXT);
+                t.setPadding(dp(16), dp(14), dp(16), dp(14)); return t;
+            }
+        };
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter); spinner.setMinimumHeight(dp(56)); return spinner;
+    }
+    private static int indexOf(String[] values, String value, int fallback) {
+        for (int i = 0; value != null && i < values.length; i++) if (values[i].equals(value)) return i;
         return fallback;
     }
-
-    private void setButtons(boolean on) {
-        for (Button b : new Button[] { importZip, importFolder, settings }) b.setEnabled(on);
-        play.setEnabled(on && PackageStore.problem(this) == null);
-    }
-
     private void message(String title, String body) {
-        new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
-            .setTitle(title)
-            .setMessage(body)
-            .setPositiveButton("OK", null)
-            .show();
+        new AlertDialog.Builder(this).setTitle(title).setMessage(body).setPositiveButton("OK", null).show();
     }
 }

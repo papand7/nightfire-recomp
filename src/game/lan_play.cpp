@@ -172,6 +172,7 @@ std::map<int, std::vector<Named>> g_infos;  // the host's: each client's
 std::vector<Named> g_lobby;
 uint8_t g_settings[kSettingsSize];
 bool g_have_settings = false;
+bool g_movement = false;  // host rule under g_lock; clients never write their preference into it
 uint32_t g_starts = 0;                    // the host's count of matches started from the lobby
 std::atomic<bool> g_send_now{false};
 // the host's bot setup (0x245280..0x2452EE: its own bots, how many, six records), as its options left it; the lobby
@@ -283,6 +284,10 @@ void SendLobby() {
     std::memcpy(body.data() + kSettingsSize, &g_starts, 4);
     size_t n = std::min<size_t>(g_lobby.size(), 40);
     body.insert(body.end(), (const uint8_t*)g_lobby.data(), (const uint8_t*)(g_lobby.data() + n));
+    // Optional rule tail follows the names, preserving the native settings block and old packet offsets.
+    const uint32_t rules = g_movement ? 1u : 0u;
+    const auto* rule_bytes = reinterpret_cast<const uint8_t*>(&rules);
+    body.insert(body.end(), rule_bytes, rule_bytes + sizeof rules);
     for (auto& [id, c] : g_clients) SendRaw(c.addr, kLobby, body.data(), body.size(), uint8_t(n));
 }
 
@@ -359,6 +364,11 @@ void Receive() {
                 if (g_infos[h.peer].size() != names.size()) g_send_now = true;
                 g_infos[h.peer] = names;
             } else if (h.type == kLobby && !g_host) {
+                if (from.sin_addr.s_addr != g_host_addr.sin_addr.s_addr || from.sin_port != g_host_addr.sin_port) continue;
+                const size_t tail = sizeof h + head + h.count * sizeof(Named);
+                uint32_t rules = 0;
+                if (size_t(n) >= tail + sizeof rules) std::memcpy(&rules, buf + tail, sizeof rules);
+                g_movement = (rules & 1) != 0;
                 g_heard_host = Now();
                 std::memcpy(g_settings, p, kSettingsSize);
                 g_have_settings = true;
@@ -672,7 +682,7 @@ void Queue(Event e);
 bool g_replaying = false;  // a remote shot being fired from its puppet (0x211F0 lets it)
 void Inject(X86Context& ctx, uint32_t obj);
 void HitBot(X86Context& ctx, uint32_t obj);
-void CollectHits(uint32_t obj);
+void CollectHits(X86Context& ctx, uint32_t obj);
 struct NetHitter {
     int slot = -1;
     int64_t when = -100000;
@@ -882,6 +892,13 @@ void NetJoin(uint32_t ip, uint16_t port) {
 }
 void NetStop() { End(); }
 bool NetOn() { return g_on; }
+bool NetGuest() { return g_on && !g_host; }
+bool NetMovement(bool& enabled) {
+    if (!NetGuest()) return false;
+    std::lock_guard<std::mutex> lock(g_lock);
+    enabled = g_have_settings && g_movement;
+    return true;
+}
 
 // a character driven from the network (its weapon is not the game's to fire: src/game/aim.cpp skips its update)
 bool LanPuppet(uint32_t obj) {
@@ -895,6 +912,14 @@ bool LanPuppet(uint32_t obj) {
 // each frame, after 0xDE720 read the controls (src/game/controls.cpp): this copy's players' state for the network
 void LanFrame(X86Context& ctx) {
     Start();
+    if (g_on) {
+        static int last_rule = -1;
+        const int rule = nf::TightMovement() ? 1 : 0;
+        if (last_rule != rule) {
+            last_rule = rule;
+            LOGR("nightfire: LAN movement: host rule %s (%s)", rule ? "tighter" : "original", g_host ? "host" : "client");
+        }
+    }
     Search();
     NetplayPageFrame(ctx);
     LobbyFrame(ctx);
@@ -980,7 +1005,12 @@ void LanFrame(X86Context& ctx) {
     g_in_match = in_match;
     if (names.size() != g_local_names.size()) g_send_now = true;
     g_local_names = names;
-    if (g_host) std::memcpy(g_settings, &kernel::G<uint8_t>(kSettings), kSettingsSize), g_have_settings = true;
+    if (g_host) {
+        if (g_movement != nf::tight_movement) g_send_now = true;
+        g_movement = nf::tight_movement;
+        std::memcpy(g_settings, &kernel::G<uint8_t>(kSettings), kSettingsSize);
+        g_have_settings = true;
+    }
 }
 }  // namespace nf
 
@@ -1079,7 +1109,7 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
             move_yaw = std::atan2(dx, dz);
         }
     }
-    if (key0 >= 0) CollectHits(obj);
+    if (key0 >= 0) CollectHits(ctx, obj);
     bool dead = key0 >= 0 && R32(obj + 0xBC) && GetF(R32(obj + 0xBC) + 0x90) <= 0;  // its death playing
     if (key0 >= 0 && R32(obj + 0xBC) && !dead) {  // its legs: the posture for its speed, played by the think's last step
         static uint32_t pair = mem::AllocHostContiguous(8, 16);
@@ -1711,7 +1741,7 @@ void HitBot(X86Context& ctx, uint32_t obj) {
 
 // our rounds in a puppet's hit list (before its think; a bot's list is handled by its AI's messages, which a puppet's
 // AI did not always take): each to the victim's copy, its damage zeroed here; our player's shot shows its hit mark
-void CollectHits(uint32_t obj) {
+void CollectHits(X86Context& ctx, uint32_t obj) {
     int vslot = SlotOf(obj);
     uint8_t vpeer, vlocal;
     {
@@ -1738,6 +1768,7 @@ void CollectHits(uint32_t obj) {
             e.weapon = uint16_t(entry >= 0x18CFA0 ? (entry - 0x18CFA0) / 0x10C : 0);
             std::memcpy(e.node, kernel::HostPtr(n + 8), 0x40);
             Queue(e);
+            nf::BloodHit(ctx, obj, n);
             if (sslot < kFirstBot) nf::LanHitMark(sslot, kernel::G<uint16_t>(n + 0x46) == 5);
             static int said = 0;
             if (said++ < 5) LOGR("nightfire: LAN: our slot %d hit %u:%u: sent to its copy", sslot, vpeer, vlocal);

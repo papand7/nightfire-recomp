@@ -13,6 +13,7 @@ uint64_t NetStateHash() {
     auto mix = [&](uint32_t v) {
         for (int i = 0; i < 4; i++) h = (h ^ ((v >> (i * 8)) & 0xFF)) * 1099511628211ull;
     };
+    mix(nf::TightMovement() ? 1u : 0u);
     mix(kernel::R32(0x25F1D0 + 0x1BC));
     for (uint32_t i = 0; i < 4; i++) {
         uint32_t cam = kernel::R32(0x1F661C + i * 4), obj = cam ? kernel::R32(cam + 0x64) : 0;
