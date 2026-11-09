@@ -2,6 +2,22 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-09: 1.5.5 release preparation and in-game light shafts
+
+Graphics > Effects now exposes Light Shafts (Off, 0.1 through 3). Blood remains on Gameplay & More.
+Fog and shafts are independently controlled: enabling shafts with Fog off sets fog strength zero, and turning
+shafts back off disables the atmosphere pass when fog is off too. Live Exchange checks passed Off -> 0.1
+without fog -> 3 -> Off, including persistence after Back.
+
+The supplied Nightfire.2026.11.08_22.20.25.dmp has an access violation writing guest D003FFA0 from a menu
+widget lookup. Its 96 recorded instruction bytes match current sub_000723C0; the guest ESP is D0040024,
+near a stack guard. The native stack repeats the settings page 4000FC30, row 1000FC7E and activation 4B.
+Custom settings pages now ignore nested synchronous activations, preventing duplicate apply/back recursion.
+Exact user reproduction steps are pending; the dump does not contain guest memory or its matching PDB.
+
+Merged the published 1.5.4 launcher/SDK improvements, keeping Android export and the gameplay fixes.
+The source bundles shipped in the launchers must be generated after the final game and SDK commits.
+
 ## 2026-11-09: blood at character impacts and visible gameplay toggles
 
 Blood now emits native depth-tested red particles at the actual character hit position after damage, in place

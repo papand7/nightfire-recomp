@@ -354,6 +354,24 @@ X86_FUNC(sub_00093960) {
 X86_EXTERN_FUNC(__imp__sub_0008E320);
 X86_FUNC(sub_0008E320) {
     uint32_t widget = R32(ctx.esp + 8), message = R32(ctx.esp + 0xC);
+    // A can be forwarded while applying/backing out of a page. A second activation on
+    // that synchronous call chain must not apply/back again (guest-stack overflow).
+    static thread_local bool activating_settings = false;
+    const uint32_t page = widget ? R32(widget + 0x18) : 0;
+    const bool activation = message == kActivate &&
+        (page == 0x4000FC10 || page == 0x4000FC20 || page == 0x4000FC30);
+    if (activation && activating_settings) {
+        LOG_FIRST(3, "nightfire: duplicate settings activation ignored on page %08X", page);
+        ctx.eax = 1;
+        ctx.esp += 4;
+        return;
+    }
+    struct ActivationScope {
+        bool& busy;
+        bool active;
+        ~ActivationScope() { if (active) busy = false; }
+    } scope{activating_settings, activation};
+    if (activation) activating_settings = true;
     if (widget && message == 0x4C && (R32(widget + 0x18) >> 28) == 4) {  // a page entered: the mouse's geometry
         g_page_widget = widget;
         g_page_id = R32(widget + 0x18);
