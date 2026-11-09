@@ -63,6 +63,8 @@ extern bool skip_paris;  // a new game's START goes to the menus, not into Paris
 extern bool hide_hud;  // no HUD, for screenshots (src/game/hud.cpp, src/driving/hud.cpp)
 extern bool tight_movement;  // optional firmer on-foot movement, original by default
 bool TightMovement();       // effective host rule while networked
+void ThrowSpawned(uint32_t entry, uint32_t obj);  // after the round spawner 0x211F0 (src/game/throw.cpp)
+void ThrowFrame();                                // player 1's frame
 bool CanChangeMovement();
 bool NetGuest();
 bool NetMovement(bool& enabled);  // true when a LAN client follows the host

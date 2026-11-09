@@ -2,6 +2,36 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-09: Tighter Movement also quickens grenades (and their fall)
+
+- Grenades (weapons 52-55) leave through the round spawner 0x211F0 like shots (fired from 0xBAE50 with the weapon's
+  entry). The thrown object's data ([obj+0xBC]) has its speed at +0xD0 (units a frame, the entry's +0x20: 0.167 for
+  the stun grenade 53) and its fuse at +0xD4 (frames, 210 = 3.5 s, one off each frame). Both are per frame, so the
+  game runs them at the right speed at 60 fps: the slow feel is the original tuning, not a timing fault.
+- src/game/throw.cpp: with Tighter Movement (host rule in netplay) the speed x1.5 and the fuse x0.7 at the throw.
+  The remote mine 56 is left alone.
+- Grenade gravity: the grenade's think (0x23670) integrates velocity with the global gravity vector at 0x1F6648
+  (y at 0x1F664C, the same one players use; call 0xD7430 at 0x239FE). The hook on 0x23670 scales that y by 1.6 for the
+  thrown grenades only (kept in a list of the last 8), and restores it after. Measured at frame 30 of a stun grenade:
+  original 24.64 with only the faster throw, 23.93 with the gravity too.
+- Measured (`.local/throw_test.py <tag> 53 [tight]`, LEVEL=07000005 The Exchange, which has weapon 53's model):
+  off 0.167 and 210 frames; on 0.250 and 147 frames (2.45 s); no exceptions. Linux build and pause smoke test OK.
+- NF_THROW_TRACE=1 logs each throw's data and its path each frame.
+
+## 2026-11-09: on-screen touch controls on Windows (setting)
+
+- Settings: `touch_controls` (settings.toml, Vulkan, D3D11 and D3D12 draw them), F1 window under General:
+  "On-screen touch controls (for a touch screen)". Android keeps them always on; `XBE_TOUCH=1` still forces them.
+- Windows: WM_POINTER touch points (main.cpp WndProc) go to `app::TouchPoint`, which builds SDL finger events for the
+  same touch.cpp logic (left = stick, buttons, right = look). The touch code was `#ifndef _WIN32` before.
+- The buttons show after the first touch (the game's own rule), and hide while a controller is connected.
+- Checked: builds; a mission starts with the setting on, no touch-related exception. NOT tested on a real touch
+  screen; no touch injection in the harness. Test on the handheld before release.
+- Found along the way: handing weapon 52 (grenade) in The Exchange and Chain Reaction crashes in the gun routine
+  0x118F0 (the gun's instance [gun+0xB8] null: its model is not in those levels; a test-hook artifact). 53 (stun
+  grenade) throws in The Exchange. The null read after it went off was the NF_THROW_TRACE diagnostic itself
+  (nf::ThrowFrame reading the freed object; llvm-symbolizer on the dump's RVA), now stopped when the object goes.
+
 ## 2026-11-09: driving visibility-query freeze (1.5.6)
 
 A live frozen Driving.xbe instance spun at 0x9E540 -> 0xE7CA0 -> 0x165FD0. Two thread dumps sampled

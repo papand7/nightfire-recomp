@@ -57,6 +57,10 @@ wheel support. Everything is set from the game's own menus. For **Windows** and 
 - **Aim down sights**, sprint, hold-to-crouch, keys 1-9 for weapons, weapon sway and hit markers.
 - Every key rebindable in the game's **Key Bindings** page.
 - Xbox, PlayStation and Switch **controllers**, with rumble.
+- **Touch controls** on a touch screen (Windows): an on-screen stick, buttons and look, turned on under the F1
+  settings window's **On-screen touch controls**. Android always has them.
+- **Tighter Movement** (Controls, Gameplay; off by default): firmer on-foot jumps and falls, and quicker grenades,
+  for a snappier feel. In multiplayer the host sets it for everyone.
 - **Steering wheels**, pedals, shifters and button boxes in the driving missions, with force feedback, set up in the
   game's **Steering Wheel** page.
 

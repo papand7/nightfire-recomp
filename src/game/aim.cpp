@@ -199,6 +199,7 @@ X86_FUNC(sub_000BD740) {  // the first person gun placed (cdecl: the object)
     int i = PlayerOf(obj);
     if (i < 0) return;
     if (i == 0) nf::WeaponKeys(ctx, obj);  // the number keys (src/game/weapon_keys.cpp)
+    if (i == 0) nf::ThrowFrame();
     if (i == 0 && WeaponsTest()) {
         static uint32_t idx = uint32_t(WeaponsTest()) - 1;
         int f = int(g_test_frames % TestPeriod()) + 200 - int(TestPeriod());  // its pictures (the shot file): a as it is, b, c NF_ADS_CAL

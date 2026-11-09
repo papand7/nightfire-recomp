@@ -1196,6 +1196,7 @@ X86_FUNC(sub_000211F0) {
              yaw * 57.29578f, pitch * 57.29578f);
     }
     __imp__sub_000211F0(ctx, base);
+    nf::ThrowSpawned(entry, ctx.eax);
     if (slot < 0 || !origin || !dir || entry < 0x18CFA0) return;
     if (slot >= kFirstBot && (!g_host || nf::LanPuppet(shooter))) return;  // the host's bots' rounds go out too
     Event e{};
