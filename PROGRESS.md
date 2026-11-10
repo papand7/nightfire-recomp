@@ -66,6 +66,11 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
   Tested (120 ms, 50 ms jitter, 5% loss, the target strafing): 8 of 8 honest hits kept (one matched the body 218 ms
   from the view time: with the plain view time alone three had been dropped, 2.4 m off, which is why the +-250 ms
   window), the fake hits all dropped, no damage taken.
+- Prediction past the newest state: from the last three states, position = p + v*t + a*t^2/2 (a clamped to 8 m/s2),
+  yaw carried at its rate, at most 250 ms ahead (was a straight line). Measured on a 6 m circle, a stop and a direction
+  change, 15 cm ahead, with the game's exact positions: 0.007 m mean against 0.04 m for the straight line. With random
+  position noise of 1 cm it is worse (0.11 m against 0.05 m), so it only helps where positions arrive exact but late.
+  A sudden change of direction (strafing, 1 m error at 150 ms) is not predictable from the past states at all.
 - Strafing (not yet seen on screen): a puppet moving mostly sideways (side speed over 0.6 of its forward speed, at
   least 0.4 m/s) gets its legs from the game's locomotion driver 0x18BB0 (cdecl: obj, node=[actor+0x820], |fwd|, fwd,
   0.1*[0x17C100], side, 0.075*[0x17C100]), the call a player's walk makes; its body keeps facing the view. The rates
