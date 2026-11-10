@@ -8,7 +8,25 @@
 #include "kernel/kernel.h"
 
 namespace nf {
+namespace {
+uint32_t set_wait = 0;
+}  // namespace
 void TeleportTest() {
+    // NF_HEALTH=<0-100> (diagnostic): player 1's health set once a mission runs (the low-health warning)
+    static const float health = [] {
+        const char* e = std::getenv("NF_HEALTH");
+        return e && *e ? float(std::atof(e)) : -1.0f;
+    }();
+    static bool set = false;
+    if (health >= 0 && !set) {
+        const uint32_t level = kernel::R32(0x1F658C), obj = kernel::R32(0x1F6654);
+        const uint32_t actor = obj ? kernel::R32(obj + 0xBC) : 0;
+        if (level && level != 0x07000048 && actor && ++set_wait > 600) {
+            kernel::G<float>(actor + 0x824) = health;
+            set = true;
+            LOGR("nightfire: health test: player 1 set to %.0f", health);
+        }
+    }
     static const float ahead = [] {
         const char* e = std::getenv("NF_TELEPORT_AHEAD");
         return e && *e ? float(std::atof(e)) : 0.0f;

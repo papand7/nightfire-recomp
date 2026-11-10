@@ -2,6 +2,16 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-10: low-health warning (hurt effects)
+
+- Below a third of health the view's edges go red: a steady tint that swells with a heartbeat (a beat every 1.1 s at
+  a third, every 0.45 s at none). Drawn in the ImGui background, so every renderer shows it. Settings: `hurt_effects`
+  (on by default) in settings.toml. app/blood.cpp SetHealth; hud.cpp sets it each frame from player 1's actor float
+  at +0x824 (100 full, read as health / 100; full in the menus).
+- Tested with NF_HEALTH=15 (teleport_test.cpp, the level's player set to 15): the screenshots show the red edges
+  swelling. Note: it is hidden with the HUD (NF_HIDE_HUD=1), like the other overlays.
+- Not done: desaturation or blur of the picture itself (the overlay can only tint).
+
 ## 2026-11-10: online list: the publish flag and the game's announce
 
 - Settings: `publish_server` (off by default) and `master_url` (https://masterserver.dankelsoft.dk/api.php) in

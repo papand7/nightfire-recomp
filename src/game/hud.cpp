@@ -2,9 +2,12 @@
 // health bar, the timer, scores, name tags and hints. The frame's 2D pass (0xDAC20) draws each view's list through
 // 0xD9410 (cdecl: the view, the list, first and end index), sprites itself and text through 0x6A340. The menus and
 // the pause screen are widgets drawn apart; while one is up (MenuUp) the lists are drawn as the game has them.
+#include <cmath>
 #include <cstdint>
 
+#include "app/app.h"
 #include "common/nightfire.h"
+#include "core/log.h"
 #include "kernel/kernel.h"
 #include "xdk/hle.h"
 
@@ -33,6 +36,14 @@ bool AnyScoped() {
 X86_EXTERN_FUNC(__imp__sub_000DAC20);
 X86_FUNC(sub_000DAC20) {  // the frame's 2D pass
     nf::HitTest(ctx);
+    // the low-health warning (app/blood.cpp): player 1's health, the actor's float at +0x824 (100 full), full in the menus
+    {
+        const uint32_t obj = kernel::R32(0x1F6654), actor = obj ? kernel::R32(obj + 0xBC) : 0;
+        const float health = actor ? kernel::G<float>(actor + 0x824) : 100.0f;
+        app::SetHealth(std::isfinite(health) ? health / 100.0f : 1.0f);
+        static uint32_t seen = 0;
+        if (health < 50 && ++seen % 600 == 1) LOGR("nightfire: low health: actor %08X, health %.1f, shown %.2f", actor, health, health / 100.0f), logx::Flush();
+    }
     nf::RagdollTest(ctx);
     nf::PhotoBeforePass(ctx);  // photo mode's free camera for the pass (src/game/photo_mode.cpp)
     __imp__sub_000DAC20(ctx, base);
