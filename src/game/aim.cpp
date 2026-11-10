@@ -156,10 +156,18 @@ void AimDownSights(uint32_t count) {
 void AimFireTest(X86Context& ctx) {
     static const bool on = [] { const char* e = std::getenv("NF_ADS_FIRE"); return e && *e == '1'; }();
     static uint32_t frame = 0;
-    if (!on || !g_players[0].aiming || ++frame % 60) return;
+    if (!on || !g_players[0].aiming) return;
+    // (the view is set at one frame in each 60 and the shot made 30 frames later, when the picture has caught up)
+    const uint32_t tick = frame++ % 60;
     const uint32_t obj = kernel::R32(0x1F6654), actor = obj ? kernel::R32(obj + kActor) : 0;
     if (!actor || !R32(obj + kWeaponState)) return;
     const uint32_t entry = Weapon(obj);
+    // NF_ADS_PITCH=1 (with NF_ADS_FIRE): the view is swept up and down (0, +0.3, -0.3, +0.6, -0.6, ... a quarter turn is 1)
+    static const bool sweep = [] { const char* e = std::getenv("NF_ADS_PITCH"); return e && *e == '1'; }();
+    static uint32_t shot = 0;
+    static const float steps[] = {0.0f, 0.3f, -0.3f, 0.6f, -0.6f, 0.9f, -0.9f};
+    if (sweep && tick == 0) SetF(actor + 0x838, steps[shot % 7]), shot++;
+    if (tick != 30) return;
     const float yaw = GetF(obj + 0x40), pitch = GetF(actor + 0x838) * 1.5707964f;  // (the pitch as the mouse sets it)
     const float fwd[3] = {std::sin(yaw) * std::cos(pitch), std::sin(pitch), std::cos(yaw) * std::cos(pitch)};
     static uint32_t vec = mem::AllocHostContiguous(32, 16);
@@ -172,8 +180,10 @@ void AimFireTest(X86Context& ctx) {
     ctx.eax = obj;
     kernel::CallGuest(ctx, 0xBAE50, {entry});
     ctx = saved;
-    LOGR("nightfire: ADS fire: the game's fire called; view forward %+.4f %+.4f %+.4f (pitch %.2f deg), eye %.2f %.2f %.2f",
-         fwd[0], fwd[1], fwd[2], pitch * 57.29578f, eye[0], eye[1], eye[2]);
+    const uint32_t cam = kernel::R32(0x1F661C);  // the camera the picture is drawn from (hit_feedback.cpp's forward)
+    LOGR("nightfire: ADS fire: the game's fire called; camera forward %+.4f %+.4f %+.4f, pitch value %.2f",
+         cam ? GetF(cam + 0x128) : 0.0f, cam ? GetF(cam + 0x12C) : 0.0f, cam ? GetF(cam + 0x130) : 0.0f,
+         GetF(actor + 0x838));
 }
 bool AimingDownSights() { return g_players[0].aiming || g_players[0].t > 0; }
 }  // namespace nf

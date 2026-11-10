@@ -9,8 +9,11 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Measured at 0 pitch (Exchange, weapon 5, aimed half the time): every shot's direction equals the view's forward
   (-0.8387 0 -0.5446 both), and its origin equals the camera position (104.954 25.670 108.825). So the shots go along
   the view centre; the earlier "0.8 m low" idea was wrong (the feet-plus-1.5 eye I had used was not the camera).
-- Not yet tested: aim at a pitch other than 0 (mouse up or down), and whether the sight picture, the view sway and
-  the gun's lag move the picture away from the camera the bullets use. Needs a manual look or the pitch test.
+- Pitch test (NF_ADS_PITCH=1 with NF_ADS_FIRE): the view is set up and down, the shot made 30 frames later. Camera
+  forward and the shot's direction agree to four decimals at every step (e.g. -0.8309 +0.1359 -0.5396 both). So bullets
+  follow the camera up and down too.
+- So the shot path is consistent with the camera. What is left: the on-screen sight picture (aim.cpp's calibrated
+  sight offsets, the view sway and the gun's lag) against the camera's centre. Not yet checked on a picture.
 
 ## 2026-11-10: the online browser (Netplay's Online row)
 
