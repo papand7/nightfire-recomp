@@ -65,6 +65,7 @@ extern bool tight_movement;  // optional firmer on-foot movement, original by de
 bool TightMovement();       // effective host rule while networked
 void ThrowSpawned(uint32_t entry, uint32_t obj);  // after the round spawner 0x211F0 (src/game/throw.cpp)
 void ThrowFrame();                                // player 1's frame
+void TeleportTest();                              // NF_TELEPORT_AHEAD=m (diagnostic): player 1 moved that far ahead, once
 bool CollectingTextures();                        // NF_COLLECT_TEXTURES=1 (src/game/texture_collect.cpp)
 void CollectTextures(X86Context& ctx);            // the pads' frame: the level files' textures dumped
 void NoteMainMenu();                              // the pads' frame: the main menu seen (src/game/start.cpp)

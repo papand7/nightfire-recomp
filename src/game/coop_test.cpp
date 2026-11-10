@@ -83,6 +83,7 @@ X86_FUNC(sub_0006CF50) {  // the players' pads read, each frame (menus too): the
     // back to the front end: one human and one character again (the mission's choice raises them for the next)
     if (next == 0x7000048 && kernel::R32(kHumans) == 2 && CoopTest()) kernel::W32(kHumans, 1), kernel::W32(kMode, 1);
     nf::CoopFrame(ctx);
+    nf::TeleportTest();
     nf::CollectTextures(ctx);
     nf::NoteMainMenu();
     if (CoopTest() && next && next != 0x7000048 && kernel::R32(kHumans) != 2) {  // a mission chosen
