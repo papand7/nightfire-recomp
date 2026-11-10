@@ -57,8 +57,8 @@ android {
         applicationId 'io.github.papand7.nightfire'
         minSdk 29
         targetSdk 35
-        versionCode 10512
-        versionName '1.5.12'
+        versionCode 10513
+        versionName '1.5.13'
         buildConfigField 'String', 'SDL_VERSION', "\"${sdlVersion}\""
     }
     buildFeatures {
