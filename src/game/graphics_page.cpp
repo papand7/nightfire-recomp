@@ -1245,10 +1245,20 @@ void ShowServers(X86Context& ctx, uint32_t player) {
 std::vector<std::string> g_online_labels;  // the Online row's items as shown
 std::vector<nf::OnlineServer> g_online_shown;
 bool g_online_busy_shown = false;  // the fetch's state the Online row was last drawn for
+// the browser's games: the LAN games found on this network first (their labels marked "LAN"), then the online list.
+// g_net_shown (the LAN games) and g_online_shown are kept as drawn; an index runs over the LAN games, then the online
 void ShowOnline(X86Context& ctx, uint32_t player) {
     g_online_busy_shown = nf::OnlineSearching();
     g_online_shown = nf::OnlineServers();
+    g_net_shown = nf::NetServers();
     g_online_labels.clear();
+    for (const auto& sv : g_net_shown) {  // "PC - map, N players" as "LAN  PC  map  N", the online list's width
+        std::string text = sv.label, pc = text, map, players;
+        if (size_t dash = text.find(" - "); dash != std::string::npos) pc = text.substr(0, dash), text = text.substr(dash + 3);
+        if (size_t comma = text.find(", "); comma != std::string::npos) map = text.substr(0, comma), players = text.substr(comma + 2);
+        if (size_t sp = players.find(' '); sp != std::string::npos) players = players.substr(0, sp);
+        g_online_labels.push_back("LAN  " + pc + "  " + (map.empty() ? text : map) + "  " + players);
+    }
     for (const auto& sv : g_online_shown) {
         char label[160];
         std::snprintf(label, sizeof label, "%s  %s  %d/%d  %s", sv.name.c_str(), sv.map.c_str(), sv.players, sv.max,
@@ -1296,11 +1306,19 @@ bool NetActivate(X86Context& ctx, uint32_t player, uint32_t on) {
     }
     if (on == Wid(kNetOnlineJoin) || on == Wid(kNetOnline)) {
         const uint32_t i = ChoiceValue(ctx, player, kNetOnline);
-        if (i >= g_online_shown.size()) {
-            MenuHelp(ctx, player, "No online game chosen: the list refreshes when this page opens.");
+        if (i < g_net_shown.size()) {  // a LAN game
+            const nf::LanServer lan = g_net_shown[i];
+            nf::NetSearch(false), g_net_open = false;
+            nf::NetJoin(lan.ip, lan.port);
+            MenuGoTo(ctx, player, kJoinPage);
+            LOGR("nightfire: Netplay: joining LAN %s", lan.label.c_str());
             return true;
         }
-        const nf::OnlineServer sv = g_online_shown[i];
+        if (i - g_net_shown.size() >= g_online_shown.size()) {
+            MenuHelp(ctx, player, "No game chosen: pick one from the list, or Refresh Online.");
+            return true;
+        }
+        const nf::OnlineServer sv = g_online_shown[i - g_net_shown.size()];
         nf::NetSearch(false), g_net_open = false;
         nf::NetJoin(sv.ip, sv.port);
         MenuGoTo(ctx, player, kJoinPage);
@@ -1824,7 +1842,10 @@ void NetplayPageFrame(X86Context& ctx) {
     {  // the online list, when its fetch has finished (or started again)
         const bool busy = nf::OnlineSearching();
         const size_t count = nf::OnlineServers().size();
-        if (busy != g_online_busy_shown || (!busy && count != g_online_shown.size())) {
+        std::vector<nf::LanServer> lan = nf::NetServers();
+        bool lan_same = lan.size() == g_net_shown.size();
+        for (size_t k = 0; lan_same && k < lan.size(); k++) lan_same = lan[k].label == g_net_shown[k].label;
+        if (busy != g_online_busy_shown || (!busy && count != g_online_shown.size()) || !lan_same) {
             uint32_t eax = ctx.eax;
             ShowOnline(ctx, g_net_player);
             ctx.eax = eax;
