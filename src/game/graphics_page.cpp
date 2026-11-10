@@ -345,7 +345,7 @@ const std::vector<MenuRow> kJoinRows = {
 };
 // Netplay's rows (the main menu's Netplay item): host, the games found on this network, join the one chosen
 constexpr uint32_t kNetHost = 0x1000FC91, kNetServer = 0x1000FC92, kNetJoin = 0x1000FC93, kNetPublish = 0x1000FD3A;
-constexpr uint32_t kNetOnline = 0x1000FD3B, kNetOnlineJoin = 0x1000FD3C;  // the online list (src/game/online.cpp)
+constexpr uint32_t kNetOnline = 0x1000FD3B, kNetOnlineJoin = 0x1000FD3C, kNetOnlineRefresh = 0x1000FD3D;  // the online list (src/game/online.cpp)
 const std::vector<MenuRow> kNetRows = {
     {kNetHost, nf::kMenuChoice, "Host Game", "Start a game others on this network can join, then choose its options.", 0},
     {kNetPublish, nf::kMenuChoice, "Publish Online", "List this game on the online list (the master server) while it is hosted: others find it from the Online browser. Your router must let the game's UDP port (27787) in.", 3},
@@ -353,6 +353,7 @@ const std::vector<MenuRow> kNetRows = {
     {kNetJoin, nf::kMenuChoice, "Join Game", "Join the game chosen above.", 2},
     {kNetOnline, nf::kMenuChoice, "Online", "The games on the online list (the master server): PC, map, players, mode.", 4},
     {kNetOnlineJoin, nf::kMenuChoice, "Join Online", "Join the online game chosen above (its UDP port must be open on its PC's router).", 5},
+    {kNetOnlineRefresh, nf::kMenuChoice, "Refresh Online", "Fetch the online list again from the master server.", 6},
 };
 constexpr int16_t kFirstY = 88, kStep = 21;  // below the panel's title band (AV's first row is at 86), as Settings'
 constexpr int16_t kStyleStep = 21;           // the shared page's twelve rows
@@ -1259,6 +1260,7 @@ void ShowOnline(X86Context& ctx, uint32_t player) {
     if (items.empty()) items.push_back({nf::OnlineSearching() ? "Searching..." : "None listed", 0});
     Choice(ctx, player, kNetOnline, items, 0);
     Choice(ctx, player, kNetOnlineJoin, {{"Join", 0}}, 0);
+    Choice(ctx, player, kNetOnlineRefresh, {{"Refresh", 0}}, 0);
 }
 void EnterNet(X86Context& ctx, uint32_t player) {
     nf::NetStop();
@@ -1284,6 +1286,12 @@ bool NetActivate(X86Context& ctx, uint32_t player, uint32_t on) {
         nf::NetHost();
         MenuGoTo(ctx, player, kJoinPage);
         LOGR("nightfire: Netplay: hosting");
+        return true;
+    }
+    if (on == Wid(kNetOnlineRefresh)) {
+        nf::OnlineRefresh();
+        ShowOnline(ctx, player);  // "Searching..." until the answer comes
+        MenuHelp(ctx, player, "Fetching the online list...");
         return true;
     }
     if (on == Wid(kNetOnlineJoin) || on == Wid(kNetOnline)) {
