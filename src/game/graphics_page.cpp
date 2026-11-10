@@ -1353,8 +1353,9 @@ bool KeysActivate(X86Context& ctx, uint32_t player, uint32_t page_widget, uint32
     }
     g_capture = {true, player, row};
     app::BeginKeyCapture();
+    input::ArmPadCapture();
     Choice(ctx, player, row->id, {{"Press a Key...", 0}}, 0);
-    nf::MenuHelp(ctx, player, "Press a key or mouse button for this action. Escape clears it.");
+    nf::MenuHelp(ctx, player, "Press a key or mouse button for this action, or a controller button for its controller input. Escape clears the key.");
     return true;
 }
 
@@ -1656,7 +1657,27 @@ void OpenNetplayPage(X86Context& ctx, uint32_t player) {
 // each frame (nf::LanFrame): a key taken for the row waiting for one
 void KeysPageFrame(X86Context& ctx) {
     uint16_t vk = 0;
-    if (!g_capture.on || !app::TakeCapturedKey(vk)) return;
+    if (!g_capture.on) return;
+    // a controller button pressed instead: it becomes this action's controller input (the settings' pad map)
+    if (g_capture.row->control >= 0 && g_capture.row->control < input::kControls) {
+        if (const int pad = input::PadPressedControl(); pad >= 0) {
+            {
+                std::lock_guard<std::recursive_mutex> lock(app::UiLock());
+                app::Settings& s = app::Get();
+                if (g_capture.row->control < int(s.pad_map.size())) s.pad_map[size_t(g_capture.row->control)] = uint8_t(pad);
+                app::Save();
+            }
+            LOGR("nightfire: Controller Bindings: %s is %s", g_capture.row->label, input::ControlLabel(pad));
+            uint32_t eax = ctx.eax, player = g_capture.player;
+            const KeyRow& r = *g_capture.row;
+            EndCapture();
+            ShowKeyRow(ctx, player, r);
+            nf::MenuHelp(ctx, player, r.help);
+            ctx.eax = eax;
+            return;
+        }
+    }
+    if (!app::TakeCapturedKey(vk)) return;
     const KeyRow& r = *g_capture.row;
     {
         std::lock_guard<std::recursive_mutex> lock(app::UiLock());
