@@ -86,7 +86,7 @@ function render() {
     const info = $('build-info');
     if (!S.built) {
         info.innerHTML = '';
-        info.append(S.os === 'linux'
+        info.append(S.os !== 'windows'
             ? `The game is built on this PC from your disc with your system's compilers (the launcher says which packages
             to install if any are missing) and takes 10 to 60 minutes. Needs about 3 GB free; this drive has ${mb(S.free_bytes)}.`
             : `The game is built on this PC from your disc. The first time this downloads about 1.4 GB of build tools

@@ -71,7 +71,9 @@ void Scan(const uint8_t* b, uint32_t size, Totals& t) {
         }
         const uint32_t data = p + 88, bytes = Size0(format, w, h);
         if (data + bytes > size) continue;
+#ifndef XBE_HEADLESS  // the headless harness has no renderer (no texture pack code to dump with)
         if (gpu::TexturePackCollect(format, w, h, b + data)) t.dumped++;
+#endif
     }
 }
 }  // namespace
