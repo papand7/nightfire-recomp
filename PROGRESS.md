@@ -66,7 +66,11 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
   Tested (120 ms, 50 ms jitter, 5% loss, the target strafing): 8 of 8 honest hits kept (one matched the body 218 ms
   from the view time: with the plain view time alone three had been dropped, 2.4 m off, which is why the +-250 ms
   window), the fake hits all dropped, no damage taken.
-- Not done: strafing puppets still face the way they move (their legs; the upper body aims along the view).
+- Strafing (not yet seen on screen): a puppet moving mostly sideways (side speed over 0.6 of its forward speed, at
+  least 0.4 m/s) gets its legs from the game's locomotion driver 0x18BB0 (cdecl: obj, node=[actor+0x820], |fwd|, fwd,
+  0.1*[0x17C100], side, 0.075*[0x17C100]), the call a player's walk makes; its body keeps facing the view. The rates
+  read from 0x17C100 are logged ("strafe N: fwd, side, rates") with NF_LAN_TRACE. The automated lobby driving closed
+  the game before a match in the last runs, so this is unverified: check by hand in a LAN match.
 
 ## 2026-11-10: ragdolls (optional, off by default)
 

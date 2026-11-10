@@ -129,6 +129,7 @@ struct Look {
     uint32_t target = 0;  // the guest's vec3 its upper body aims at (0x12220)
 };
 std::unordered_map<uint32_t, Look> g_looks;
+float g_strafe[10] = {};  // a puppet's sideways way relative to its body (radians; 0 forward or still): its legs
 // lag compensation: our own players' (and, on the host, its AI bots') places over the last second, by the host's clock,
 // to rewind to when a hit says what its shooter saw
 struct Past {
@@ -1327,7 +1328,7 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
     if (gpu::Style().weather) nf::NoteWalker(obj);
     nf::CoopNpc(obj);
     int slot = g_on ? SlotOf(obj) : -1;
-    float speed = 0, move_yaw = 0;
+    float speed = 0, move_yaw = 0, fwd_speed = 0, side_speed = 0;
     uint32_t remote_posture = 0;  // a host's AI bot's own (its puppet plays the same)
     int key0 = -1;
     if (slot >= kFirstBot) {
@@ -1341,10 +1342,31 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
             speed = std::sqrt(dx * dx + dz * dz) / 0.1f;
             move_yaw = std::atan2(dx, dz);
             remote_posture = now.posture;
+            // the way it moves, along and across its body (its drawn heading, the view): the legs' walk and strafe
+            const float body = now.yaw, along = dx * std::sin(body) + dz * std::cos(body);
+            const float across = dx * std::cos(body) - dz * std::sin(body);
+            fwd_speed = along / 0.1f, side_speed = across / 0.1f;
         }
     }
     if (key0 >= 0) CollectHits(ctx, obj);
     bool dead = key0 >= 0 && R32(obj + 0xBC) && GetF(R32(obj + 0xBC) + 0x90) <= 0;  // its death playing
+    if (key0 >= 0 && R32(obj + 0xBC) && !dead && std::fabs(side_speed) > 0.6f * std::fabs(fwd_speed) && speed >= 0.4f) {
+        // a strafe: the locomotion driver (0x18BB0, cdecl: the object, its node, |fwd|, fwd, rate, side, rate) with
+        // the side speed, as a player's walk passes it (its strafe overlay is multiplayer's: the LAN match's)
+        const uint32_t inst = R32(obj + 0xB8);
+        const uint32_t node = inst ? R32(R32(obj + 0xBC) + 0x820) : 0;
+        if (node) {
+            uint32_t eax = ctx.eax;
+            const float r1 = 0.1f * GetF(0x17C100), r2 = 0.075f * GetF(0x17C100);  // the game's own rates
+            static int64_t logged = 0;
+            if (Now() - logged > 3000) logged = Now(), LOGR("nightfire: LAN: strafe %d: fwd %.2f side %.2f, rates %.4f %.4f",
+                                                             slot, fwd_speed, side_speed, r1, r2);
+            kernel::CallGuest(ctx, 0x18BB0, {obj, node, std::bit_cast<uint32_t>(std::fabs(fwd_speed)),
+                              std::bit_cast<uint32_t>(fwd_speed), std::bit_cast<uint32_t>(r1),
+                              std::bit_cast<uint32_t>(side_speed), std::bit_cast<uint32_t>(r2)});
+            ctx.eax = eax;
+        }
+    }
     if (key0 >= 0 && R32(obj + 0xBC) && !dead) {  // its legs: the posture for its speed, played by the think's last step
         static uint32_t pair = mem::AllocHostContiguous(8, 16);
         W32(pair, obj), W32(pair + 4, R32(obj + 0xBC));
@@ -1392,7 +1414,17 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
     }
     if (!Place(g_remotes[uint16_t(key)], b)) return;
     for (int k = 0; k < 3; k++) SetF(obj + kPos + k * 4, b.pos[k]);
-    SetF(obj + kYaw, speed >= 0.4f ? move_yaw : b.yaw);  // running the way it goes (bots only run forward)
+    // the body faces its view (b.yaw); a puppet moving more sideways than forward is walked as a strafe: its legs take
+    // the way it goes, the body still the view. Forward moves keep the heading (bots only run forward, as before).
+    const float heading = b.yaw;
+    SetF(obj + kYaw, heading);
+    if (speed >= 0.4f) {
+        float rel = std::remainder(move_yaw - heading, 6.2831853f);  // the way it goes, from where it faces
+        g_strafe[slot] = std::fabs(rel) > 1.2f ? rel : 0.0f;
+        if (b.posture == 0 && std::fabs(rel) <= 1.2f) SetF(obj + kYaw, move_yaw);  // forward: as it always was
+    } else {
+        g_strafe[slot] = 0.0f;
+    }
     // its player's view: the upper body aimed along it (the game's own aim, 0x12220 as a player's at 0xACA77: the
     // target, the range 1000, the speed 0.2, bone 5; the spine turns to it in the pose, 0x15060), a point 20 m out
     // from its eyes (the object's place is its middle, the eyes about 0.45 above, lower by its crouch)
