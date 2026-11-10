@@ -129,6 +129,14 @@ struct Look {
     uint32_t target = 0;  // the guest's vec3 its upper body aims at (0x12220)
 };
 std::unordered_map<uint32_t, Look> g_looks;
+// lag compensation: our own players' (and, on the host, its AI bots') places over the last second, by the host's clock,
+// to rewind to when a hit says what its shooter saw
+struct Past {
+    int64_t time;
+    float pos[3], crouch;
+};
+std::map<uint8_t, std::deque<Past>> g_past;  // by the player's index, a bot's by its slot; under g_lock
+constexpr int64_t kPastKeep = 1500;
 constexpr int64_t kTimeout = 5000;       // ms without a packet: a client gone
 
 struct Body {
@@ -158,8 +166,9 @@ struct Event {          // a hit on another copy's player, or a death; relayed b
     uint8_t victim_peer, victim_local;
     uint8_t killer_peer, killer_local;  // 0xFF none (a fall, a suicide)
     uint16_t weapon;    // the shooter's weapon index
-    uint8_t node[0x40]; // the hit's record from +8 (damage, time, directions, type, zone)
+    uint8_t node[0x40]; // the hit's record from +8 (damage, time, directions, type, zone); its contact at +0x30
     uint32_t time;      // the host's clock when it happened (ms)
+    uint32_t view_time; // a hit: the host's clock at which its shooter saw the victim (the puppet's drawn time)
 };
 enum : uint8_t { kHitEvent = 1, kDeathEvent = 2, kShotEvent = 3 };  // a shot: node holds origin, direction, sound
 struct ServerInfo {     // a host's answer to a search (kQuery, broadcast to the port)
@@ -1210,6 +1219,16 @@ void LanFrame(X86Context& ctx) {
     }
     std::lock_guard<std::mutex> lock(g_lock);
     RosterFrame(in_match);
+    if (in_match) {
+        const int64_t t = Now() + g_offset.load();
+        for (auto& [id, b] : local) {
+            auto& h = g_past[id];
+            if (h.empty() || t > h.back().time) h.push_back({t, {b.pos[0], b.pos[1], b.pos[2]}, b.crouch});
+            while (!h.empty() && t - h.front().time > kPastKeep) h.pop_front();
+        }
+    } else {
+        g_past.clear();
+    }
     g_local = local;
     g_in_match = in_match;
     if (names.size() != g_local_names.size()) g_send_now = true;
@@ -1803,6 +1822,18 @@ uint32_t ObjectOf(uint8_t peer, uint8_t local) {
     return it == g_slot_of.end() ? 0 : SlotObject(it->second);
 }
 // a score slot's player (peer, local), false if none
+// the host's clock at which we draw a victim's puppet now (what a shot of ours at it was aimed at); now when none
+uint32_t ViewTime(int vslot) {
+    std::lock_guard<std::mutex> lock(g_lock);
+    int64_t t = Now() + g_offset.load();
+    for (auto& [k, s] : g_slot_of)
+        if (s == vslot) {
+            if (auto it = g_remotes.find(k); it != g_remotes.end()) t -= int64_t(it->second.delay);
+            break;
+        }
+    return uint32_t(t);
+}
+
 bool WhoIs(int slot, uint8_t& peer, uint8_t& local) {
     if (slot >= 0 && slot < kFirstBot) return peer = uint8_t(std::max(0, g_me.load())), local = uint8_t(slot), true;
     int key = PuppetKey(slot);
@@ -1876,6 +1907,61 @@ void KeepScores() {
     }
 }
 
+// NF_LAN_BADHIT=1 (diagnostic): every hit of ours sent with its contact 6 m off, as a cheat or a stale aim would make it
+void BadHitTest(Event& e) {
+    static const bool on = [] { const char* e2 = std::getenv("NF_LAN_BADHIT"); return e2 && *e2 == '1'; }();
+    if (!on) return;
+    float x;
+    std::memcpy(&x, e.node + 0x30, 4);
+    x += 6.0f;
+    std::memcpy(e.node + 0x30, &x, 4);
+}
+
+// lag compensation: does a hit's contact lie on our player (or the host's bot) as it was when its shooter saw it?
+// The player's place then is read from the history; the contact must be within the body there: horizontally within
+// kBodyRadius, vertically from the feet up to the head (lower by a crouch). A player with no history (just spawned)
+// or a hit too old to rewind is taken as it is. NF_LAN_LAGCOMP=0 turns it off.
+constexpr int64_t kSlack = 250;  // ms either side of the view time a hit may match
+constexpr float kBodyRadius = 1.0f, kFeet = -1.4f, kHead = 0.7f;  // metres from the object's place (honest hits: within 0.4 out, -0.9..-0.4 up; head +0.5)
+bool HitPlausible(const Event& e) {
+    static const bool on = [] { const char* v = std::getenv("NF_LAN_LAGCOMP"); return !(v && *v == '0'); }();
+    if (!on) return true;
+    std::lock_guard<std::mutex> lock(g_lock);
+    auto it = g_past.find(e.victim_local);
+    if (it == g_past.end() || it->second.size() < 2) return true;
+    const auto& h = it->second;
+    const int64_t t = int64_t(e.view_time), now = Now() + g_offset.load();
+    if (t < h.front().time || t > now + 100) return true;  // beyond what is kept (or a clock off): not judged
+    float c[3];
+    std::memcpy(c, e.node + 0x30, 12);
+    if (!std::isfinite(c[0]) || !std::isfinite(c[1]) || !std::isfinite(c[2])) return true;
+    // the body's place at the view time (interpolated), and the closest it came to the contact within kSlack of it
+    // (the clocks of two copies agree only to a few tens of ms, and the shooter's puppet is eased and extrapolated)
+    Past at = h.back();
+    for (size_t i = 1; i < h.size(); i++)
+        if (h[i].time >= t) {
+            const Past &a = h[i - 1], &b = h[i];
+            const float f = float(t - a.time) / float(std::max<int64_t>(1, b.time - a.time));
+            for (int k = 0; k < 3; k++) at.pos[k] = a.pos[k] + (b.pos[k] - a.pos[k]) * f;
+            at.crouch = a.crouch + (b.crouch - a.crouch) * f;
+            break;
+        }
+    float horizontal = std::hypot(c[0] - at.pos[0], c[2] - at.pos[2]), dy = c[1] - at.pos[1];
+    int64_t seen_at = t;
+    for (const Past& p : h) {
+        if (std::abs(p.time - t) > kSlack) continue;
+        const float d = std::hypot(c[0] - p.pos[0], c[2] - p.pos[2]);
+        if (d < horizontal) horizontal = d, dy = c[1] - p.pos[1], at.crouch = p.crouch, seen_at = p.time;
+    }
+    const bool ok = horizontal <= kBodyRadius && dy >= kFeet && dy <= kHead - at.crouch;
+    static int said = 0;
+    if (said++ < 40 || !ok)
+        LOGR("nightfire: LAN: hit on %u rewound %lld ms: contact %.2f out, %.2f up (crouch %.2f, body there %+lld ms): %s",
+             e.victim_local, (long long)(now - t), horizontal, dy, at.crouch, (long long)(seen_at - t),
+             ok ? "kept" : "DROPPED, not on the body then");
+    return ok;
+}
+
 void ApplyEvents(X86Context& ctx) {
     KeepScores();
     std::deque<Event> in;
@@ -1890,6 +1976,7 @@ void ApplyEvents(X86Context& ctx) {
         uint32_t eax = ctx.eax;
         if (e.kind == kHitEvent && e.victim_peer == g_me.load()) {
             if (!killer) continue;
+            if (!HitPlausible(e)) continue;
             if (const int64_t age = Now() + g_offset.load() - int64_t(e.time); age > kMaxHitAge) {
                 static int said = 0;
                 if (said++ < 10) LOGR("nightfire: LAN: a hit by %u:%u came %lld ms late: dropped", e.killer_peer,
@@ -2029,6 +2116,8 @@ void CollectHits(X86Context& ctx, uint32_t obj) {
             uint32_t entry = pdata ? R32(pdata + 0x38) : 0;
             e.weapon = uint16_t(entry >= 0x18CFA0 ? (entry - 0x18CFA0) / 0x10C : 0);
             std::memcpy(e.node, kernel::HostPtr(n + 8), 0x40);
+            e.view_time = ViewTime(vslot);
+            BadHitTest(e);
             Queue(e);
             nf::BloodHit(ctx, obj, n);
             if (sslot < kFirstBot) nf::LanHitMark(sslot, kernel::G<uint16_t>(n + 0x46) == 5);
@@ -2104,6 +2193,8 @@ int LanDamage(uint32_t pair, uint32_t hit) {
     uint32_t entry = pdata ? R32(pdata + 0x38) : 0;
     e.weapon = uint16_t(entry >= 0x18CFA0 ? (entry - 0x18CFA0) / 0x10C : 0);
     std::memcpy(e.node, kernel::HostPtr(hit + 8), 0x40);
+    e.view_time = ViewTime(vslot);
+    BadHitTest(e);
     Queue(e);
     static int said = 0;
     if (said++ < 5) LOGR("nightfire: LAN: our slot %d hit %u:%u: sent to its copy", sslot, vpeer, vlocal);

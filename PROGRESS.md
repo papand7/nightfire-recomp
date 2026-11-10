@@ -54,6 +54,18 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
     ("Open", "Bob", the host's bot's settings-as-name) were never spawned and stood frozen at their spawn on the
     other copies. Names are padded to five letters (PutName); the host's own bots keep their whole settings
     record and are named "Bot N".
+- Lag compensation (victim-side rewind): the shooter's copy already hits what its player saw (the puppets are drawn
+  in the past, so a shot at one is aimed where the victim really was then). The victim's copy now checks it: a hit
+  carries the host-clock time at which its shooter saw the victim (the puppet's drawn time, Event.view_time) and the
+  contact point (node+0x30); every copy keeps its own players' (and on the host its AI bots') places for 1.5 s
+  (g_past); HitPlausible rewinds to the view time and keeps the hit if the contact is within 1.0 m (horizontally) of
+  the body at any moment within +-250 ms of it and between feet -1.4 and head +0.7 m (lower by a crouch) of the
+  object's place (honest hits measured: within 0.4 m out, -0.9..-0.4 up, the head about +0.5). A hit that could not
+  have landed (a stale aim, a cheat) is dropped and logged; history too short or a view time beyond it: taken as it
+  is. NF_LAN_LAGCOMP=0 turns it off; NF_LAN_BADHIT=1 sends every hit with its contact 6 m off (diagnostic).
+  Tested (120 ms, 50 ms jitter, 5% loss, the target strafing): 8 of 8 honest hits kept (one matched the body 218 ms
+  from the view time: with the plain view time alone three had been dropped, 2.4 m off, which is why the +-250 ms
+  window), the fake hits all dropped, no damage taken.
 - Not done: strafing puppets still face the way they move (their legs; the upper body aims along the view).
 
 ## 2026-11-10: ragdolls (optional, off by default)
