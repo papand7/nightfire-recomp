@@ -159,9 +159,13 @@ const std::vector<MenuRow> kMoreRows = {
     {kAchievements, nf::kMenuChoice, "Achievements", "The 19 achievements: which are unlocked, and how far along the medal ones are.", 12},
     {kMoreNext, nf::kMenuChoice, "Gameplay & More", "Tighter movement, blood, ragdolls, aiming, Discord and defaults.", 13},
 };
+constexpr uint32_t kCrossStyle = 0x1000FD3E, kCrossColor = 0x1000FD3F, kCrossSize = 0x1000FD40;  // the crosshair (app/crosshair.cpp)
 const std::vector<MenuRow> kMore2Rows = {
     {kGameplayBlood, nf::kMenuChoice, "Blood", "Blood at character impacts and red at the view edges when you are hurt. Applies immediately.", 6},
     {kMovement, nf::kMenuChoice, "Tighter Movement", "Quicker starts and direction changes, less floaty jumps with original jump height. Single-player and multiplayer: the host decides for everyone. Network co-op: set before hosting.", 4},
+    {kCrossStyle, nf::kMenuChoice, "Crosshair", "The aiming mark: the game's own, or a dot, cross, ring or cross and dot of your own.", 8},
+    {kCrossColor, nf::kMenuChoice, "Crosshair Colour", "The colour of your crosshair.", 9},
+    {kCrossSize, nf::kMenuChoice, "Crosshair Size", "How big your crosshair is.", 10},
     {kRagdolls, nf::kMenuChoice, "Ragdolls", "Enemies go limp when they die and fall with the shot, onto the ground and against walls, instead of the death animations. Off in network play.", 7},
     {kAds, nf::kMenuChoice, "Aim Down Sights", "L (right mouse) raises the gun and zooms in, not the red crosshair. Blur: the background too.", 0},
     {kAdsZoom, nf::kMenuChoice, "Aim Zoom", "How far aiming down the sights zooms in (scopes keep their own).", 1},
@@ -345,7 +349,7 @@ const std::vector<MenuRow> kJoinRows = {
 };
 // Netplay's rows (the main menu's Netplay item): host, the games found on this network, join the one chosen
 constexpr uint32_t kNetHost = 0x1000FC91, kNetServer = 0x1000FC92, kNetJoin = 0x1000FC93, kNetPublish = 0x1000FD3A;
-constexpr uint32_t kNetOnline = 0x1000FD3B, kNetOnlineJoin = 0x1000FD3C, kNetOnlineRefresh = 0x1000FD3D;  // the online list (src/game/online.cpp)
+constexpr uint32_t kNetOnline = 0x1000FD3B, kNetOnlineJoin = 0x1000FD3C, kNetOnlineRefresh = 0x1000FD3D;
 const std::vector<MenuRow> kNetRows = {
     {kNetHost, nf::kMenuChoice, "Host Game", "Start a game others on this network can join, then choose its options.", 0},
     {kNetPublish, nf::kMenuChoice, "Publish Online", "List this game on the online list (the master server) while it is hosted: others find it from the Online browser. Your router must let the game's UDP port (27787) in.", 3},
@@ -975,6 +979,25 @@ void KeepMore(X86Context& ctx, uint32_t player) {
 const Options kAdsZooms = {{"Off", 100}, {"110%", 110}, {"120%", 120}, {"130% (Default)", 130}, {"150%", 150},
                            {"175%", 175}, {"200%", 200}};
 bool g_reset_armed = false;  // Reset to Defaults asked once: A again resets
+// the crosshair's colours (IM_COL32 layout) and sizes in pixels at 1080 lines
+const uint32_t* CrossColors() {
+    static const uint32_t c[6] = {0xFFFFFFFFu, 0xFF78FF3Cu, 0xFF3C3CFFu, 0xFF3CFFFFu, 0xFFFFFF3Cu, 0xFF2EA6FFu};
+    return c;
+}
+uint32_t CrossColorIndex(uint32_t color) {
+    for (uint32_t i = 0; i < 6; i++)
+        if (CrossColors()[i] == color) return i;
+    return 0;
+}
+const uint32_t* CrossSizes() {
+    static const uint32_t z[3] = {6, 10, 16};
+    return z;
+}
+uint32_t CrossSizeIndex(uint32_t size) {
+    for (uint32_t i = 0; i < 3; i++)
+        if (CrossSizes()[i] == size) return i;
+    return 1;
+}
 void EnterMore2(X86Context& ctx, uint32_t player) {
     ShowOptions(ctx, player, kGameplayBlood, kOffOn, Current().blood ? 1.0f : 0.0f);
     if (nf::CanChangeMovement())
@@ -987,6 +1010,11 @@ void EnterMore2(X86Context& ctx, uint32_t player) {
     ShowOptions(ctx, player, kAdsZoom, kAdsZooms, float(nf::ads_zoom));
     ShowOptions(ctx, player, kMotion, kOffOn, nf::view_motion ? 1.0f : 0.0f);
     ShowOptions(ctx, player, kRagdolls, kOffOn, nf::ragdolls ? 1.0f : 0.0f);
+    Choice(ctx, player, kCrossStyle, {{"Game", 0}, {"Dot", 1}, {"Cross", 2}, {"Ring", 3}, {"Cross and dot", 4}},
+           app::Get().crosshair_style);
+    Choice(ctx, player, kCrossColor, {{"White", 0}, {"Green", 1}, {"Red", 2}, {"Yellow", 3}, {"Cyan", 4}, {"Amber", 5}},
+           CrossColorIndex(app::Get().crosshair_color));
+    Choice(ctx, player, kCrossSize, {{"Small", 0}, {"Medium", 1}, {"Large", 2}}, CrossSizeIndex(app::Get().crosshair_size));
     Choice(ctx, player, kDiscord, {{"Off", 0}, {s.discord_app_id.empty() ? "On (No App Id Set)" : "On", 1}}, s.discord ? 1 : 0);
     Choice(ctx, player, kReset, {{"Reset...", 0}}, 0);
     Choice(ctx, player, kMoreBack, {{"Open", 0}}, 0);
@@ -1003,6 +1031,13 @@ void KeepMore2(X86Context& ctx, uint32_t player) {
     nf::ads_zoom = uint32_t(ReadOption(ctx, player, kAdsZoom, kAdsZooms));
     nf::view_motion = ReadOption(ctx, player, kMotion, kOffOn) > 0;
     nf::ragdolls = ReadOption(ctx, player, kRagdolls, kOffOn) > 0;
+    {
+        const uint32_t style = ChoiceValue(ctx, player, kCrossStyle), color = ChoiceValue(ctx, player, kCrossColor),
+                       size = ChoiceValue(ctx, player, kCrossSize);
+        if (style <= 4) app::Get().crosshair_style = style;
+        if (color <= 5) app::Get().crosshair_color = CrossColors()[color];
+        if (size <= 2) app::Get().crosshair_size = CrossSizes()[size];
+    }
     if (discord <= 1) app::Get().discord = discord == 1;
     app::Save();
     LOGR("nightfire: More Settings (page 2) kept: aim down sights %d, aim zoom %u%%, weapon sway %d, ragdolls %d, Discord %d",

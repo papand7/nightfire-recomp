@@ -269,6 +269,11 @@ X86_FUNC(sub_000B6190) {  // a player's HUD (cdecl: the actor, ...): no crosshai
     __imp__sub_000B6190(ctx, base);
     nf::CoopHud(actor, true);   // then the places in the player's own view
     if (!actor || !R32(actor + kHud)) return;
+    // a custom crosshair (Settings::crosshair_style, app/crosshair.cpp) replaces the game's, which stays hidden
+    if (app::Get().crosshair_style != 0) {
+        if (uint32_t sprite = R32(R32(actor + kHud))) kernel::G<uint8_t>(sprite + 0x38) = 0xFF;
+        return;
+    }
     int i = kernel::G<int8_t>(actor + kPlayerIndex);
     if (i < 0 || i >= 4 || !g_players[i].aiming || g_players[i].optic) return;
     if (uint32_t sprite = R32(R32(actor + kHud))) kernel::G<uint8_t>(sprite + 0x38) = 0xFF;
