@@ -81,6 +81,7 @@ X86_FUNC(sub_0006CF50) {  // the players' pads read, each frame (menus too): the
     if (next == 0x7000048 && kernel::R32(kHumans) == 2 && CoopTest()) kernel::W32(kHumans, 1), kernel::W32(kMode, 1);
     nf::CoopFrame(ctx);
     nf::CollectTextures(ctx);
+    nf::NoteMainMenu();
     if (CoopTest() && next && next != 0x7000048 && kernel::R32(kHumans) != 2) {  // a mission chosen
         LOGR("nightfire: coop test: %u humans made 2 (level %08X, next %08X)", kernel::R32(kHumans), kernel::R32(0x1F658C), next);
         kernel::W32(kHumans, 2);

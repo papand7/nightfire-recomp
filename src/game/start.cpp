@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cwchar>
+#include <vector>
 
 #include "common/nightfire.h"
 #include "core/log.h"
@@ -30,10 +31,25 @@ constexpr uint32_t kLevel = 0x1F6588, kParis = 0x9000001;
 constexpr uint32_t kLaunch = 0xE8FE0;      // cdecl: the xbe's name ("d:\" put before it), the data, its size
 constexpr uint32_t kDefaultXbe = 0x162114;  // "default.xbe"
 
+bool g_main_menu_seen = false;  // this run reached the main menu (page 0x40000002, as MenuGeometry names pages)
+
 void Put(uint32_t data, uint32_t off, const char* s) {
     std::memcpy(kernel::HostPtr(data + off), s, std::strlen(s) + 1);
 }
 }  // namespace
+
+namespace nf {
+// the pads' frame (the menus too): the main menu seen, for skip_paris
+void NoteMainMenu() {
+    if (g_main_menu_seen) return;
+    uint32_t page = 0, focused = 0;
+    static std::vector<MenuWidget> widgets;
+    if (MenuGeometry(page, widgets, focused) && page == 0x40000002) {
+        g_main_menu_seen = true;
+        LOGR("nightfire: the main menu is up: Paris from here starts as chosen");
+    }
+}
+}  // namespace nf
 
 X86_EXTERN_FUNC(__imp__sub_000DFB50);
 X86_FUNC(sub_000DFB50) {
@@ -49,7 +65,9 @@ X86_FUNC(sub_000DFB50) {
         return e && *e == '1';
     }();
 #endif
-    const bool cold = first && !relaunched;
+    // a cold start's Paris before the menus: the title's START. Once the main menu was up, a Paris launch is the
+    // player choosing it (the title's START can open the menus without one), never sent back to them
+    const bool cold = first && !relaunched && !g_main_menu_seen;
     first = false;
     uint32_t data = kernel::R32(ctx.esp + 4), size = kernel::R32(ctx.esp + 8);
     if (!nf::skip_paris || !cold || kernel::R32(kLevel) != kParis || !data || size < 0x980) {

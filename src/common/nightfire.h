@@ -67,6 +67,7 @@ void ThrowSpawned(uint32_t entry, uint32_t obj);  // after the round spawner 0x2
 void ThrowFrame();                                // player 1's frame
 bool CollectingTextures();                        // NF_COLLECT_TEXTURES=1 (src/game/texture_collect.cpp)
 void CollectTextures(X86Context& ctx);            // the pads' frame: the level files' textures dumped
+void NoteMainMenu();                              // the pads' frame: the main menu seen (src/game/start.cpp)
 bool CanChangeMovement();
 bool NetGuest();
 bool NetMovement(bool& enabled);  // true when a LAN client follows the host
