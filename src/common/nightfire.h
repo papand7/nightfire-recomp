@@ -130,6 +130,7 @@ void NetHost();
 void NetJoin(uint32_t ip, uint16_t port);
 void NetStop();
 bool NetOn();
+float LanCrouch(uint32_t obj);  // a LAN puppet's crouch: its body lowered by this in the pose (src/game/foot_ik.cpp)
 void LanFrame(X86Context& ctx);  // default.xbe: each frame, this copy's players for LAN play (src/game/lan_play.cpp)
 bool LanPuppet(uint32_t obj);
 int LanDamage(uint32_t pair, uint32_t hit);  // before 0x3D900: 0 the game's, 1 refused

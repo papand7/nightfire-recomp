@@ -16,6 +16,9 @@
 // animation stood on) and under each ankle: a foot over lower ground is lowered by the difference (the pelvis with it,
 // so the leg reaches), one over higher ground raised, the knee bending in the plane it bent in, the foot tilted a
 // little with the slope. Eased over a few frames; none in the air or dead.
+// A LAN puppet whose player crouches (nf::LanCrouch: its eye's drop) has its body lowered by as much here, the feet
+// kept where they stand and the knees bent forward, setting or not: the bots have no plain crouch of their own, and
+// the shots' hit zones are its bones.
 // NF_IK_TRACE=1 logs the numbers every 5 s; NF_IK=0/1 overrides the setting.
 #include <algorithm>
 #include <cmath>
@@ -64,7 +67,7 @@ uint32_t g_frame = 0;
 bool g_inner = false;
 float g_fit = 0;  // the largest miss of a turned knee and ankle against where they were solved to be (a check)
 
-void BendLegs(X86Context& ctx, uint32_t obj, uint32_t skel, uint32_t parents) {
+void BendLegs(X86Context& ctx, uint32_t obj, uint32_t skel, uint32_t parents, float crouch) {
     static const bool trace = [] {
         const char* e = std::getenv("NF_IK_TRACE");
         return e && *e == '1';
@@ -81,8 +84,8 @@ void BendLegs(X86Context& ctx, uint32_t obj, uint32_t skel, uint32_t parents) {
 
     Feet& ft = g_feet[obj];
     ft.seen = g_frame;
-    // the ground the animation stood on (under the middle) and under each foot
-    const Floor mid = Ground(ctx, obj, place, 0.3f, 3.0f);
+    // the ground the animation stood on (under the middle) and under each foot (no probes: the crouch alone)
+    const Floor mid = nf::foot_ik ? Ground(ctx, obj, place, 0.3f, 3.0f) : Floor{};
     float want[2] = {0, 0};
     V normal[2] = {{0, 1, 0}, {0, 1, 0}};
     const float lowest = std::min(old[51].t.y, old[55].t.y);
@@ -100,22 +103,28 @@ void BendLegs(X86Context& ctx, uint32_t obj, uint32_t skel, uint32_t parents) {
         ft.n[l] = Unit(ft.n[l] + (normal[l] - ft.n[l]) * kEase);
     }
     ft.drop += (std::min({0.0f, want[0], want[1]}) - ft.drop) * kEase;
-    if (std::abs(ft.delta[0]) + std::abs(ft.delta[1]) + std::abs(ft.drop) < 1e-3f) return;
+    const float drop = ft.drop - crouch;  // the pelvis lowered: for the lower foot, and by a crouch
+    if (std::abs(ft.delta[0]) + std::abs(ft.delta[1]) + std::abs(drop) < 1e-3f) return;
+    // the way it faces: a straight leg's knee bends forward
+    const float yaw = F(obj + 0x40);
+    const V forward{std::sin(yaw), 0, std::cos(yaw)};
 
-    // the pelvis, and every bone with it, lowered for the lower foot
-    for (uint32_t i = 0; i < kBones; i++) now[i].t.y += ft.drop;
+    // the pelvis, and every bone with it, lowered
+    for (uint32_t i = 0; i < kBones; i++) now[i].t.y += drop;
     bool moved[kBones] = {};
     for (int l = 0; l < 2; l++) {
         const uint32_t a = kLegs[l][0], b = kLegs[l][1], c = kLegs[l][2], d = kLegs[l][3];
         const V A = now[a].t, B = now[b].t, C = now[c].t;
-        const V T = C + V{0, ft.delta[l] - ft.drop, 0};  // the ankle where the ground wants it
+        const V T = C + V{0, ft.delta[l] - drop, 0};  // the ankle where the ground wants it
         const float l1 = Len(B - A), l2 = Len(C - B);
         if (l1 < 1e-4f || l2 < 1e-4f) continue;
         V to = T - A;
         float dist = std::clamp(Len(to), std::abs(l1 - l2) + 1e-3f, (l1 + l2) * 0.999f);
         V dir = Unit(to);
         // the knee bends where it bent: the old knee off the hip-to-ankle line
-        V bend = Unit((B - A) - dir * Dot(B - A, dir));
+        const V off = (B - A) - dir * Dot(B - A, dir);
+        V bend = Unit(off);
+        if (Len(off) < 0.03f || Dot(off, forward) < 0) bend = Unit(forward - dir * Dot(forward, dir));  // straight: forward
         if (Len(bend) < 0.5f) bend = Unit(Cross(dir, V{0, 0, 1}));
         float cosa = std::clamp((l1 * l1 + dist * dist - l2 * l2) / (2 * l1 * dist), -1.0f, 1.0f);
         const V B2 = A + dir * (l1 * cosa) + bend * (l1 * std::sqrt(1 - cosa * cosa));
@@ -175,7 +184,8 @@ X86_EXTERN_FUNC(__imp__sub_000DD290);
 X86_FUNC(sub_000DD290) {  // a character's pose: its bones' world matrices, then (a char) its skin matrices
     const uint32_t obj = R32(ctx.esp + 4), skel = R32(ctx.esp + 8);
     uint32_t parents = 0;
-    if ((!nf::foot_ik && !nf::RagdollsOn()) || g_inner || !Plausible(obj) || !Plausible(skel) ||
+    const float crouch = Plausible(obj) ? nf::LanCrouch(obj) : 0;
+    if ((!nf::foot_ik && !nf::RagdollsOn() && crouch <= 0.01f) || g_inner || !Plausible(obj) || !Plausible(skel) ||
         (kernel::G<uint32_t>(skel + kFlags) & 4) || !Human(skel, parents)) {
         __imp__sub_000DD290(ctx, base);
         return;
@@ -187,7 +197,8 @@ X86_FUNC(sub_000DD290) {  // a character's pose: its bones' world matrices, then
     g_inner = false;
     g_frame++;
     if (kernel::G<uint32_t>(skel + kFlags) & 4) {
-        if (!nf::Ragdoll(ctx, obj, skel, parents) && nf::foot_ik) BendLegs(ctx, obj, skel, parents);
+        if (!nf::Ragdoll(ctx, obj, skel, parents) && (nf::foot_ik || crouch > 0.01f))
+            BendLegs(ctx, obj, skel, parents, crouch);
     }
     if ((g_frame & 1023) == 0)
         for (auto it = g_feet.begin(); it != g_feet.end();) it = g_frame - it->second.seen > 20000 ? g_feet.erase(it) : std::next(it);

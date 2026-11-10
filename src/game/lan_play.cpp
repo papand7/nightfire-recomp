@@ -11,8 +11,12 @@
 // Lag compensation is the shooter's: a copy's own shot hits what its player saw (the puppets, drawn in the past), and
 // the hit goes to the victim's copy; one that arrives there more than 400 ms after it was fired is dropped (no being
 // shot long after reaching cover). Hits, deaths and shots are acknowledged and sent again until they are (at most 3 s).
+// Each state carries its player's view pitch and crouch (the actor's +0x838, +0x89C): a puppet's upper body aims
+// along the view (the game's own aim target, 0x12220) and a crouched one's body is lowered with its knees bent in its
+// pose (src/game/foot_ik.cpp; the bots have no plain crouch: their posture ids are AI actions, dives and rolls), so
+// the shots' hit zones, its bones, are where its player is: a chest-high shot passes over a crouched player.
 // NF_LAN_SIM=delay,jitter,loss (ms, ms, %; diagnostic) holds and drops this copy's outgoing packets as a slow network
-// would.
+// would. lan_test / lan_test2 (files in the game's folder, diagnostic) switch NF_LAN_TEST's test while it runs.
 //
 // A multiplayer match (0xA25F0) makes the humans (up to 4, [0x260044]) and the bots ([0x260048], clamped to 6): bot
 // i is score slot 4+i, its character object at 0x262814 + i*0x30 (the score table 0x262738, 0x30 a slot, +0x1C the
@@ -37,6 +41,7 @@
 // player 1's and the puppets' places every 5 s.
 #include <algorithm>
 #include <atomic>
+#include <bit>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -47,6 +52,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 // Winsock on Windows; elsewhere sdk/runtime/compat's names on POSIX sockets
@@ -64,6 +70,7 @@
 #include <unistd.h>  // gethostname
 #endif
 
+#include "app/app.h"
 #include "common/nightfire.h"
 #include "gpu/style.h"
 #include "game/menu_page.h"
@@ -113,10 +120,20 @@ constexpr float kDelayMin = 60, kDelayMax = 350;  // ms in the past remote playe
 constexpr int64_t kExtrapolate = 250;    // ms past the newest state they are carried on
 constexpr int64_t kResend = 120, kGiveUp = 3000;  // an event not acknowledged: sent again this often, until
 constexpr int64_t kMaxHitAge = 400;      // ms: a hit older than this when it reaches the victim's copy is dropped
+constexpr uint32_t kViewPitch = 0x838, kEyeDrop = 0x89C;  // a player's actor: its view's pitch, its crouch's eye drop
+// a puppet's look as its player has it, for the pose hook (nf::LanCrouch) and its aim; the game's thread only
+struct Look {
+    float crouch = 0;
+    int64_t when = 0;     // last set (a slot no longer a puppet keeps none)
+    uint32_t target = 0;  // the guest's vec3 its upper body aims at (0x12220)
+};
+std::unordered_map<uint32_t, Look> g_looks;
 constexpr int64_t kTimeout = 5000;       // ms without a packet: a client gone
 
 struct Body {
     float pos[3], yaw;
+    float pitch = 0;   // the view's (a quarter turn up is 1: the actor's +0x838)
+    float crouch = 0;  // metres the eye is lowered by crouching (the actor's +0x89C; 0 standing, about 0.45 down)
 };
 struct Entry {          // one player's state on the wire
     uint8_t peer, local;
@@ -784,6 +801,8 @@ bool Interpolate(const std::deque<Sample>& s, int64_t t, Body& out) {
         for (int k = 0; k < 3; k++) out.pos[k] = a.body.pos[k] + (b.body.pos[k] - a.body.pos[k]) * f;
         float d = std::remainder(b.body.yaw - a.body.yaw, 6.2831853f);
         out.yaw = a.body.yaw + d * f;
+        out.pitch = a.body.pitch + (b.body.pitch - a.body.pitch) * f;
+        out.crouch = a.body.crouch + (b.body.crouch - a.body.crouch) * f;
         return true;
     }
     // past the newest: carried on along the last two, at most kExtrapolate
@@ -811,8 +830,8 @@ bool Place(Remote& r, Body& out) {
     frames++, guessed += t > r.samples.back().time;
     if (trace && Now() >= next) {
         next = Now() + 5000;
-        LOGR("nightfire: LAN: remote drawn %.0f ms behind (lag %.0f, jitter %.0f), %d of %d frames past the newest",
-             r.delay, r.lag, r.jitter, guessed, frames);
+        LOGR("nightfire: LAN: remote drawn %.0f ms behind (lag %.0f, jitter %.0f), %d of %d frames past the newest; "
+             "crouch %.2f, pitch %.2f", r.delay, r.lag, r.jitter, guessed, frames, out.crouch, out.pitch);
         frames = guessed = 0;
     }
     if (r.drawn) {
@@ -1062,6 +1081,13 @@ bool NetMovement(bool& enabled) {
 }
 
 // a character driven from the network (its weapon is not the game's to fire: src/game/aim.cpp skips its update)
+// a puppet's crouch (metres its body is lowered by in the pose, src/game/foot_ik.cpp), 0 for anyone else
+float LanCrouch(uint32_t obj) {  // (no lock: the pose can be made while the think's hook holds it)
+    if (!g_on) return 0;
+    auto it = g_looks.find(obj);
+    return it == g_looks.end() || Now() - it->second.when > 200 ? 0 : it->second.crouch;  // a puppet this moment
+}
+
 bool LanPuppet(uint32_t obj) {
     if (!g_on) return false;
     int slot = SlotOf(obj);
@@ -1106,16 +1132,22 @@ void LanFrame(X86Context& ctx) {
     uint32_t humans = std::min<uint32_t>(R32(kHumans), 4);
     std::vector<std::pair<uint8_t, Body>> local;
     bool in_match = MatchOn();
-    auto body = [](uint32_t obj) {
+    auto body = [](uint32_t obj, bool player = false) {
         Body b;
         for (int k = 0; k < 3; k++) b.pos[k] = GetF(obj + kPos + k * 4);
         b.yaw = GetF(obj + kYaw);
+        if (uint32_t actor = R32(obj + 0xBC); player && actor) {
+            b.pitch = std::clamp(GetF(actor + kViewPitch), -1.0f, 1.0f);
+            b.crouch = std::clamp(GetF(actor + kEyeDrop), 0.0f, 0.6f);
+            if (!std::isfinite(b.pitch)) b.pitch = 0;
+            if (!std::isfinite(b.crouch)) b.crouch = 0;
+        }
         return b;
     };
     for (uint32_t i = 0; in_match && i < humans; i++) {
         uint32_t obj = SlotObject(int(i));
         if (!obj) break;
-        local.push_back({uint8_t(i), body(obj)});
+        local.push_back({uint8_t(i), body(obj, true)});
     }
     in_match = !local.empty();
     if (in_match && g_host)  // the host's AI bots: the clients' puppets
@@ -1276,8 +1308,9 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
         static uint32_t pair = mem::AllocHostContiguous(8, 16);
         W32(pair, obj), W32(pair + 4, R32(obj + 0xBC));
         uint32_t eax = ctx.eax;
+        const uint32_t id = uint32_t(Posture(speed));
         g_own_posture = true;
-        kernel::CallGuest(ctx, 0x341C0, {uint32_t(Posture(speed)), 0, 0, 0, 0, 0, pair});
+        kernel::CallGuest(ctx, 0x341C0, {id, 0, 0, 0, 0, 0, pair});
         g_own_posture = false;
         ctx.eax = eax;
     }
@@ -1296,6 +1329,18 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
     if (!Place(g_remotes[uint16_t(key)], b)) return;
     for (int k = 0; k < 3; k++) SetF(obj + kPos + k * 4, b.pos[k]);
     SetF(obj + kYaw, speed >= 0.4f ? move_yaw : b.yaw);  // running the way it goes (bots only run forward)
+    // its player's view: the upper body aimed along it (the game's own aim, 0x12220 as a player's at 0xACA77: the
+    // target, the range 1000, the speed 0.2, bone 5; the spine turns to it in the pose, 0x15060), a point 20 m out
+    // from its eyes (the object's place is its middle, the eyes about 0.45 above, lower by its crouch)
+    Look& look = g_looks[obj];
+    look.crouch = b.crouch, look.when = Now();
+    if (!look.target) look.target = mem::AllocHostContiguous(16, 16);
+    const float up = b.pitch * 1.5707964f;
+    const float eye[3] = {b.pos[0], b.pos[1] + 0.45f - b.crouch, b.pos[2]};
+    SetF(look.target, eye[0] + std::sin(b.yaw) * std::cos(up) * 20);
+    SetF(look.target + 4, eye[1] + std::sin(up) * 20);
+    SetF(look.target + 8, eye[2] + std::cos(b.yaw) * std::cos(up) * 20);
+    kernel::CallGuest(ctx, 0x12220, {obj, look.target, std::bit_cast<uint32_t>(1000.0f), std::bit_cast<uint32_t>(0.2f), 0, 5});
     static bool said = false;
     if (!said) said = true, LOGR("nightfire: LAN: slot %d is client %d's player %d", slot, key >> 8, (key & 0xFF) + 1);
     static const bool trace = [] {
@@ -2032,10 +2077,22 @@ X86_FUNC(sub_000341C0) {  // a bot's posture request
 // front of the first puppet, facing it, once a second
 namespace {
 void TestFrame() {
-    static const std::string test = [] {
+    static std::string test = [] {
         const char* e = std::getenv("NF_LAN_TEST");
         return std::string(e ? e : "");
     }();
+    // lan_test (lan_test2 for --instance 2; diagnostic): a file in the game's folder naming the test, read each
+    // second ("off" none)
+    static const std::string file = app::Instance() > 1 ? "lan_test" + std::to_string(app::Instance()) : "lan_test";
+    static int64_t read_at = 0;
+    if (Now() - read_at > 1000) {
+        read_at = Now();
+        if (FILE* f = std::fopen(file.c_str(), "r")) {
+            char name[32] = {};
+            if (std::fscanf(f, "%31s", name) == 1) test = std::strcmp(name, "off") ? name : "";
+            std::fclose(f);
+        }
+    }
     if (test.empty() || !MatchOn()) return;
     uint32_t me = SlotObject(0);
     if (!me) return;

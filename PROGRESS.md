@@ -2,7 +2,7 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
-## 2026-11-10: LAN play over slow networks: smoother players, reliable hits and deaths (protocol NFL2)
+## 2026-11-10: LAN play over slow networks: smoother players, reliable hits and deaths, crouch and aim (protocol NFL2)
 
 - What was already there: each copy moves its own players itself (no input delay, nothing to predict or correct) and
   decides its own shots' hits on what its player saw (the shooter's lag compensation). What was missing:
@@ -30,8 +30,19 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Driving the menus now: `.local/lan_drive.py` gets both copies through Netplay to the lobby by the page each log
   shows (title, codename 4000004A, main 40000002, Netplay 4000FC30); the rest (scenario, map, a villain for the host,
   options, start) is still partly by hand. `.local/both.py <name>` takes both copies' screenshots side by side.
-- Not done: crouching is not sent (a crouched player is drawn standing, so shots over its head hit), nor the aim's
-  pitch; strafing puppets face the way they move.
+- Crouch and aim, the same day: each state now also carries the view's pitch (actor +0x838) and the crouch's eye
+  drop (actor +0x89C, 0 to 0.45). A puppet's upper body aims along its player's view through the game's own aim,
+  0x12220(obj, target*, 1000.0f, 0.2f, 0, 5) as a player's at 0xACA77 (inst+0x5C the target, flags 0x80|0x200; the
+  spine turns to it in the pose, 0x15060), a point 20 m out from its eyes, set each frame after its think. The bots
+  have no plain crouch: a scan of the posture ids 1-0x7F (0x341C0, NF_LAN_POSTURE_SCAN, since removed) found AI
+  actions only (0x2D hunched over, 0x30 a dive, 0x2E/0x2F rolls, 0x0C/0x0D dodges, 0x40 a death fall; standing ids
+  keep the head about 0.45 above the object's place). So the pose hook (foot_ik.cpp, setting or not) lowers a
+  crouched puppet's body by the eye drop with the feet kept and the knees bent forward (a straight leg's knee now
+  bends the way the character faces). Tested with two copies (Skyrail; the client's X crouches with controller
+  scheme 7, the keyboard off): the puppet kneels on the host, looks up and down with its player; the host's shots
+  aimed at a standing chest hit zone 4 standing and passed over the crouched puppet, aimed lower they hit it.
+- Not done: strafing puppets still face the way they move (their legs; the upper body now aims along the view). The
+  host's AI bots send no crouch (their actors are not players').
 
 ## 2026-11-10: ragdolls (optional, off by default)
 
