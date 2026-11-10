@@ -43,7 +43,8 @@ wheel support. Everything is set from the game's own menus. For **Windows**, wit
 - **Smooth edges:** TAA, SMAA, FXAA and MSAA, plus **FSR 2** and **NVIDIA DLSS** (RTX graphics cards) for more
   frames per second, and **DLAA** for the smoothest edges at full sharpness.
 - **Effects:** ambient occlusion, contact shadows, bloom, ice and wet-floor reflections, light from muzzle flashes
-  and fire, fog, depth of field, optional motion blur and blood.
+  and fire, fog, depth of field, optional motion blur and blood that stays: dark red stains on the floor and walls
+  where you hit someone.
 - **Ragdolls** (optional, Gameplay & More): enemies go limp when they die and fall with the shot, onto the ground
   and against walls, instead of the death animations.
 - **Movies** upscaled sharp, in 4:3 or stretched.
@@ -114,9 +115,10 @@ The **NightFire PC Launcher** sets everything up:
   with Vulkan (Mesa or NVIDIA drivers). HD texture packs work; DLSS is Windows-only for now.
 - **macOS (beta, Apple Silicon only):** `NightFireLauncher-macOS-arm64.dmg`. Open it and drag the launcher to
   Applications. It is not signed, so the first time right-click it and choose **Open**. This is the first macOS
-  build: the launcher builds and packages, but the game itself has not been run on a Mac yet. The game draws with
-  Vulkan, which macOS only has through MoltenVK, and that path is untested, so expect problems and please report
-  them. The HD texture pack tool is built for the Mac too, but untested; DLSS is Windows-only for now.
+  build (1.5.13, a test release): the launcher installs CMake and Ninja itself and asks macOS for Apple's command
+  line developer tools (**Install the requirements**). The game draws with Vulkan through MoltenVK, shipped with it,
+  and its shaders compile through glslang. It has not been run on a Mac yet, so expect problems and please report
+  them. Ray tracing and DLSS are off on the Mac; the HD texture pack tool is built but untested.
 
 Building it yourself instead: see [BUILDING.md](BUILDING.md).
 
