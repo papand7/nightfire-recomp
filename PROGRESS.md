@@ -12,7 +12,16 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Phoenix Base (07000026) by the same route: no level loaded (0 draws), not measured.
 - Diagnostics added (SDK app/main.cpp, main_sdl.cpp, app.h): `frame work: X ms` every 10 s (capped runs), and
   `NF_UNCAPPED=1` (no pacing; reaching the level needs the menus' timing, so it is not used for numbers yet).
-- Next: batch the scenery's draws (about 2,000 a frame) and measure on a weaker machine, where the frame may be limited.
+- Draw-call analysis (XBE_PERF: `streamed a frame`): about 2,000 indexed draws a frame, 6.9 MB of vertex and index
+  data copied into the stream each frame, of which 6.2 MB is distinct meshes (about 1,800 distinct of 2,000 draws).
+  So instancing has little to merge (about 10% of draws repeat a mesh).
+- Tried a geometry cache (GPU buffers keyed by source address, re-uploaded only when the bytes changed): it reused
+  about a third of the draws, but most of the rest were scratch buffers at new addresses each draw; the table grew to
+  50,000 entries and draw time rose from 3.4 to 9.6 ms. Reverted. The copies are the game's own per-draw data, so a
+  real fix needs the level's static geometry identified at load time (its addresses are fixed per level), not a
+  per-draw cache.
+- Measurement note: a loaded machine (other programs running) raised the frame work to 15-20 ms; the same build
+  read 2.3 ms when idle. Compare runs only on an idle machine.
 
 ## 2026-11-10: LAN play over slow networks: smoother players, reliable hits and deaths, crouch and aim (protocol NFL2)
 
