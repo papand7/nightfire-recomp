@@ -42,6 +42,7 @@
 // player 1's and the puppets' places every 5 s.
 #include <algorithm>
 #include <atomic>
+#include <memory>
 #include <bit>
 #include <chrono>
 #include <cmath>
@@ -72,6 +73,7 @@
 #endif
 
 #include "app/app.h"
+#include "core/http.h"
 #include "common/nightfire.h"
 #include "gpu/style.h"
 #include "game/menu_page.h"
@@ -1105,15 +1107,59 @@ std::vector<LanServer> NetServers() {
     }
     return out;
 }
+// Online list (Settings::publish_server): while a host runs with it on, the master server is told every 30 s that this
+// PC's game is open (its port, map and players; the master asks the game itself, so only a reachable game is listed),
+// and told to remove it when the host stops. On a background thread: a request can take up to 8 s.
+namespace {
+std::shared_ptr<std::atomic<bool>> g_publishing;  // the thread's flag: cleared to stop it
+std::string PublishUrl(const char* action) {
+    std::string base = app::Get().master_url;
+    if (base.empty()) return "";
+    std::string url = base + "?a=" + action + "&game=nightfire&port=" + std::to_string(kPort);
+    if (!std::strcmp(action, "announce")) url += "&max=8&v=1.5.14";  // (the map and players: the game's own answer)
+    return url;
+}
+void StopPublishing() {
+    if (!g_publishing) return;
+    g_publishing->store(false);
+    g_publishing.reset();
+}
+void StartPublishing() {
+    StopPublishing();
+    if (!app::Get().publish_server || app::Get().master_url.empty()) return;
+    auto flag = std::make_shared<std::atomic<bool>>(true);
+    g_publishing = flag;
+    std::thread([flag] {
+        std::string body;
+        int64_t next = 0;
+        while (flag->load()) {
+            if (Now() >= next) {
+                next = Now() + 30000;
+                const std::string url = PublishUrl("announce");
+                if (!url.empty() && !http::Get(url, &body)) LOGR("nightfire: online list: the master server did not answer");
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        }
+        const std::string url = PublishUrl("remove");
+        if (!url.empty()) http::Get(url, &body);
+    }).detach();
+    LOGR("nightfire: online list: publishing this game to the master server");
+}
+}  // namespace
+
 void NetHost() {
     End();
     Begin(true, 0, kPort);
+    StartPublishing();
 }
 void NetJoin(uint32_t ip, uint16_t port) {
     End();
     Begin(false, ip, port);
 }
-void NetStop() { End(); }
+void NetStop() {
+    StopPublishing();
+    End();
+}
 bool NetOn() { return g_on; }
 bool NetGuest() { return g_on && !g_host; }
 bool NetMovement(bool& enabled) {

@@ -344,9 +344,10 @@ const std::vector<MenuRow> kJoinRows = {
     {kJoinAddress, nf::kMenuChoice, "Join This Address", "Join the host at the address above (UDP port 27015 unless the launcher's Host address names another).", 10},
 };
 // Netplay's rows (the main menu's Netplay item): host, the games found on this network, join the one chosen
-constexpr uint32_t kNetHost = 0x1000FC91, kNetServer = 0x1000FC92, kNetJoin = 0x1000FC93;
+constexpr uint32_t kNetHost = 0x1000FC91, kNetServer = 0x1000FC92, kNetJoin = 0x1000FC93, kNetPublish = 0x1000FD3A;
 const std::vector<MenuRow> kNetRows = {
     {kNetHost, nf::kMenuChoice, "Host Game", "Start a game others on this network can join, then choose its options.", 0},
+    {kNetPublish, nf::kMenuChoice, "Publish Online", "List this game on the online list (the master server) while it is hosted: others find it from the Online browser. Your router must let the game's UDP port (27787) in.", 3},
     {kNetServer, nf::kMenuChoice, "Game", "The games found on this network: PC, map, players.", 1},
     {kNetJoin, nf::kMenuChoice, "Join Game", "Join the game chosen above.", 2},
 };
@@ -1242,12 +1243,19 @@ void EnterNet(X86Context& ctx, uint32_t player) {
     nf::NetSearch(true);
     g_net_open = true, g_net_player = player;
     Choice(ctx, player, kNetHost, {{"Start", 0}}, 0);
+    Choice(ctx, player, kNetPublish, {{"Off", 0}, {"On", 1}}, app::Get().publish_server ? 1 : 0);
     ShowServers(ctx, player);
     Choice(ctx, player, kNetJoin, {{"Join", 0}}, 0);
     LOGR("nightfire: Netplay opened: searching this network");
 }
 bool NetActivate(X86Context& ctx, uint32_t player, uint32_t on) {
     if (on == Wid(kNetHost)) {
+        {
+            std::lock_guard<std::recursive_mutex> lock(app::UiLock());
+            app::Settings& s = app::Get();
+            s.publish_server = ChoiceValue(ctx, player, kNetPublish) == 1;
+            app::Save();
+        }
         nf::NetSearch(false), g_net_open = false;
         nf::NetHost();
         MenuGoTo(ctx, player, kJoinPage);

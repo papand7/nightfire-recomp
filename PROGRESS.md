@@ -2,6 +2,18 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-10: online list: the publish flag and the game's announce
+
+- Settings: `publish_server` (off by default) and `master_url` (https://masterserver.dankelsoft.dk/api.php) in
+  settings.toml. Netplay's Host Game page has a "Publish Online" row (Off/On, id 0x1000FD3A) read when Start is chosen.
+- While a published host runs, a background thread (lan_play.cpp StartPublishing) GETs `api.php?a=announce` every 30 s
+  (port 27787, max 8, v=1.5.14); stopping the host GETs `a=remove`. The request is curl (sdk runtime core/http.cpp:
+  curl.exe on Windows with no console window, the system curl elsewhere): no web library is linked.
+- Tested: the master server's API locally (announce, listing, the games count); the game's own publish path is not
+  yet tested in a run (it needs a host started from the menus). The live address did not resolve yet: the website and
+  api.php are not uploaded.
+- Next: the in-game Online browser (lists the master's servers and joins them by address).
+
 ## 2026-11-10: performance baseline at Low (The Exchange, this PC)
 
 - `.local/perf_run.py <tag> 07000005` (the menus to The Exchange, 40 s standing, XBE_PERF's log). Low preset
