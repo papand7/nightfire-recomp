@@ -36,7 +36,10 @@ int CoopTest() {
         const char* e = std::getenv("NF_COOP_TEST");
         return e && *e ? std::atoi(e) : 0;
     }();
-    return n ? n : nf::coop ? 3 : 0;
+    if (n) return n;
+    // the setting: story missions only, never a multiplayer match (the game's flag, set by its multiplayer menus) or
+    // a LAN match (it had made every match a two-player split screen on each copy)
+    return nf::coop && !kernel::R32(kMulti) && !nf::NetOn() ? 3 : 0;
 }
 int g_split = 0;  // the screen split now (nf::CoopSplit)
 uint32_t g_game_side = 0xFFFFFFFF;  // the game's side by side flag [0x1F660C] before co-op set it

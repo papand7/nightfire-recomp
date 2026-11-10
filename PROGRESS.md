@@ -2,6 +2,37 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-10: LAN play over slow networks: smoother players, reliable hits and deaths (protocol NFL2)
+
+- What was already there: each copy moves its own players itself (no input delay, nothing to predict or correct) and
+  decides its own shots' hits on what its player saw (the shooter's lag compensation). What was missing:
+  - The host stamped each client's state with its own arrival time, so the client's network jitter went into the
+    positions every other copy drew. It now keeps the client's own time (the host's clock as the client keeps it).
+  - One fixed 100 ms interpolation delay. A client's state goes client -> host -> client, so over the internet it
+    often arrived later than that and was extrapolated. Each remote player now has its own delay: its mean lag plus
+    three times its jitter plus a send interval (60-350 ms), eased 1.5 ms a state. Corrections after an
+    extrapolation are eased in (an error offset that decays 15% a frame); 3 m or more (a respawn) at once.
+  - Hits, deaths and shots were sent twice and lost if both packets were: hits missing, scores drifting apart. They
+    are now acknowledged (kAck) and sent again every 120 ms for up to 3 s.
+  - A hit that reaches the victim's copy more than 400 ms after it was fired is dropped (no dying long after
+    reaching cover); events carry their time for it.
+- The magic is now "NFL2": 1.5.13 and older copies do not see or join 1.5.14 ones. The master server
+  (server/master/api.php) asks both.
+- NF_LAN_SIM=delay,jitter,loss (ms, ms, %) holds and drops a copy's outgoing packets (both copies: a round trip of
+  twice the delay); NF_LAN_DELAY=ms forces one delay (100 = before); NF_LAN_TRACE=1 logs each remote's delay, lag,
+  jitter and the frames drawn past its newest state.
+- Measured (two copies on this PC, Skyrail, NF_LAN_SIM=70,30,5, the client strafing, the host firing): lag about
+  88 ms, jitter 8, delay settled at about 145 ms, 2% of frames past the newest state. With NF_LAN_DELAY=100, 53-65%.
+  10 events sent again (none given up, none dropped as late); the kill counted on both copies.
+- Bug found on the way: Story co-op left on made every multiplayer and LAN match a two-player split screen on each
+  copy ("reconnect the controller to port 2"). src/game/coop_test.cpp now leaves matches alone (the game's
+  multiplayer flag 0x260018, or a LAN session); story co-op still starts with two players (The Exchange).
+- Driving the menus now: `.local/lan_drive.py` gets both copies through Netplay to the lobby by the page each log
+  shows (title, codename 4000004A, main 40000002, Netplay 4000FC30); the rest (scenario, map, a villain for the host,
+  options, start) is still partly by hand. `.local/both.py <name>` takes both copies' screenshots side by side.
+- Not done: crouching is not sent (a crouched player is drawn standing, so shots over its head hit), nor the aim's
+  pitch; strafing puppets face the way they move.
+
 ## 2026-11-10: ragdolls (optional, off by default)
 
 - src/game/ragdoll.cpp, from foot IK's pose hook (0xDD290; the bone math now shared in src/game/bones.h): a human

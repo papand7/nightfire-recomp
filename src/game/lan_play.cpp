@@ -4,6 +4,15 @@
 // the match's bot characters, driven from the network instead of by their AI ("puppets"), drawn 100 ms in the past
 // between the two states around that time (interpolation; at most 250 ms past the newest it is extrapolated), so
 // they move smoothly whatever the packets' timing. The clients keep the host's clock (pings, half the round trip).
+// Each state carries the time its copy took it (the host's clock), and each remote player's delay follows how late
+// its states arrive (their mean lag plus three times their jitter, 60 to 350 ms; eased a little each state), so a
+// player two hops away over the internet is drawn as smoothly as one on the same network. A correction (the real
+// state after an extrapolated guess) is eased in over a few frames rather than jumped to.
+// Lag compensation is the shooter's: a copy's own shot hits what its player saw (the puppets, drawn in the past), and
+// the hit goes to the victim's copy; one that arrives there more than 400 ms after it was fired is dropped (no being
+// shot long after reaching cover). Hits, deaths and shots are acknowledged and sent again until they are (at most 3 s).
+// NF_LAN_SIM=delay,jitter,loss (ms, ms, %; diagnostic) holds and drops this copy's outgoing packets as a slow network
+// would.
 //
 // A multiplayer match (0xA25F0) makes the humans (up to 4, [0x260044]) and the bots ([0x260048], clamped to 6): bot
 // i is score slot 4+i, its character object at 0x262814 + i*0x30 (the score table 0x262738, 0x30 a slot, +0x1C the
@@ -96,12 +105,14 @@ int SlotOf(uint32_t obj) {
 
 // ---- the network --------------------------------------------------------------------------------------------------
 
-constexpr uint32_t kMagic = 0x314C464E;  // "NFL1"
-enum : uint8_t { kHello = 1, kWelcome, kState, kSnap, kPing, kPong, kInfo, kLobby, kQuery, kServer, kEvent, kRoster };
+constexpr uint32_t kMagic = 0x324C464E;  // "NFL2" (1.5.14: acknowledged events with their time; NFL1 copies differ)
+enum : uint8_t { kHello = 1, kWelcome, kState, kSnap, kPing, kPong, kInfo, kLobby, kQuery, kServer, kEvent, kRoster, kAck };
 constexpr uint16_t kPort = 27787;
 constexpr int kRate = 30;                // states and snapshots a second
-constexpr int64_t kDelay = 100;          // ms in the past remote players are drawn
+constexpr float kDelayMin = 60, kDelayMax = 350;  // ms in the past remote players are drawn (each by its own lag)
 constexpr int64_t kExtrapolate = 250;    // ms past the newest state they are carried on
+constexpr int64_t kResend = 120, kGiveUp = 3000;  // an event not acknowledged: sent again this often, until
+constexpr int64_t kMaxHitAge = 400;      // ms: a hit older than this when it reaches the victim's copy is dropped
 constexpr int64_t kTimeout = 5000;       // ms without a packet: a client gone
 
 struct Body {
@@ -128,6 +139,7 @@ struct Event {          // a hit on another copy's player, or a death; relayed b
     uint8_t killer_peer, killer_local;  // 0xFF none (a fall, a suicide)
     uint16_t weapon;    // the shooter's weapon index
     uint8_t node[0x40]; // the hit's record from +8 (damage, time, directions, type, zone)
+    uint32_t time;      // the host's clock when it happened (ms)
 };
 enum : uint8_t { kHitEvent = 1, kDeathEvent = 2, kShotEvent = 3 };  // a shot: node holds origin, direction, sound
 struct ServerInfo {     // a host's answer to a search (kQuery, broadcast to the port)
@@ -155,6 +167,11 @@ struct Sample {
 struct Remote {
     std::deque<Sample> samples;  // oldest first, by the host's clock
     int64_t heard = 0;           // our clock
+    float lag = 50, jitter = 15; // how late its states arrive (ms, means), and how much that varies
+    float delay = 100;           // ms in the past it is drawn (from the two, eased)
+    float err[3] = {};           // a correction still being eased in (metres, drawn = state + err)
+    float last[3] = {}, prev[3] = {};  // the two states drawn before (their places)
+    bool drawn = false;
 };
 
 std::mutex g_lock;
@@ -210,13 +227,61 @@ struct Client {
 std::map<int, Client> g_clients;  // the host's, by peer id
 int64_t g_heard_host = 0;         // a client's: the host's last packet
 
+// a packet out: at once, or held and maybe dropped (NF_LAN_SIM=delay,jitter,loss: a slow network, diagnostic)
+struct Held {
+    int64_t due;
+    sockaddr_in to;
+    std::string data;
+};
+std::deque<Held> g_held;
+std::mutex g_held_lock;
+struct Sim {
+    int delay = 0, jitter = 0, loss = 0;
+    bool on = false;
+};
+const Sim& SimOf() {
+    static const Sim sim = [] {
+        Sim m;
+        if (const char* e = std::getenv("NF_LAN_SIM"); e && *e) {
+            std::sscanf(e, "%d,%d,%d", &m.delay, &m.jitter, &m.loss);
+            m.on = true;
+            LOGR("nightfire: LAN: simulated network: %d ms, jitter %d ms, %d%% lost", m.delay, m.jitter, m.loss);
+        }
+        return m;
+    }();
+    return sim;
+}
+void Out(const sockaddr_in& to, const char* data, int size) {
+    const Sim& sim = SimOf();
+    if (!sim.on) {
+        sendto(g_sock, data, size, 0, (const sockaddr*)&to, sizeof to);
+        return;
+    }
+    static uint32_t seed = 0x5EED;
+    auto random = [&] { seed = seed * 1664525u + 1013904223u; return int((seed >> 8) % 1000); };
+    if (random() < sim.loss * 10) return;
+    std::lock_guard<std::mutex> lock(g_held_lock);
+    g_held.push_back({Now() + sim.delay + (sim.jitter ? random() % (sim.jitter + 1) : 0), to, std::string(data, size)});
+}
+void SendHeld() {
+    std::lock_guard<std::mutex> lock(g_held_lock);
+    const int64_t now = Now();
+    for (auto it = g_held.begin(); it != g_held.end();)  // jitter reorders them, as a network can
+        if (it->due <= now) {
+            sendto(g_sock, it->data.data(), int(it->data.size()), 0, (const sockaddr*)&it->to, sizeof it->to);
+            it = g_held.erase(it);
+        } else {
+            ++it;
+        }
+}
+
 void Send(const sockaddr_in& to, uint8_t type, const std::vector<Entry>& entries, uint32_t time) {
     char buf[1200];
     Header h{kMagic, type, uint8_t(g_me.load() < 0 ? 0 : g_me.load()), uint8_t(std::min<size_t>(entries.size(), 40)),
              0, time};
     std::memcpy(buf, &h, sizeof h);
     std::memcpy(buf + sizeof h, entries.data(), h.count * sizeof(Entry));
-    sendto(g_sock, buf, int(sizeof h + h.count * sizeof(Entry)), 0, (const sockaddr*)&to, sizeof to);
+    Out(to, buf, int(sizeof h + h.count * sizeof(Entry)));
 }
 
 void SendRaw(const sockaddr_in& to, uint8_t type, const void* body, size_t size, uint8_t count) {
@@ -225,7 +290,39 @@ void SendRaw(const sockaddr_in& to, uint8_t type, const void* body, size_t size,
     size = std::min(size, sizeof buf - sizeof h);
     std::memcpy(buf, &h, sizeof h);
     std::memcpy(buf + sizeof h, body, size);
-    sendto(g_sock, buf, int(sizeof h + size), 0, (const sockaddr*)&to, sizeof to);
+    Out(to, buf, int(sizeof h + size));
+}
+
+// events sent until acknowledged (each destination its own), at most kGiveUp
+struct Unacked {
+    Event e;
+    sockaddr_in to;
+    int64_t next, until;
+};
+std::vector<Unacked> g_unacked;  // under g_lock
+uint32_t KeyOf(const Event& e) { return uint32_t(e.origin) << 24 | (e.id & 0xFFFFFF); }
+bool Same(const sockaddr_in& a, const sockaddr_in& b) { return a.sin_addr.s_addr == b.sin_addr.s_addr && a.sin_port == b.sin_port; }
+void Reliable(const sockaddr_in& to, const Event& e) {
+    SendRaw(to, kEvent, &e, sizeof e, 1);
+    g_unacked.push_back({e, to, Now() + kResend, Now() + kGiveUp});
+}
+void Resend() {
+    const int64_t now = Now();
+    for (auto it = g_unacked.begin(); it != g_unacked.end();) {
+        if (now >= it->until) {
+            static int said = 0;
+            if (said++ < 10) LOGR("nightfire: LAN: event %08X never acknowledged: given up", KeyOf(it->e));
+            it = g_unacked.erase(it);
+            continue;
+        }
+        if (now >= it->next) {
+            SendRaw(it->to, kEvent, &it->e, sizeof it->e, 1);
+            it->next = now + kResend;
+            static int said = 0;
+            if (said++ < 10) LOGR("nightfire: LAN: event %08X sent again", KeyOf(it->e));
+        }
+        ++it;
+    }
 }
 
 // the host's AI bots (its bot setup, or the game's count without one), as many as fit after `others` players from
@@ -300,6 +397,14 @@ void Store(const Entry& e) {  // a remote player's state, by the host's clock
     if (!s.empty() && int64_t(e.time) <= s.back().time) return;  // old or repeated
     s.push_back({int64_t(e.time), e.body});
     while (s.size() > 32) s.pop_front();
+    // how late it came (the host's clock now against when it was taken), and the delay that keeps a state or two ahead
+    const float lag = float(Now() + g_offset.load() - int64_t(e.time));
+    if (lag > -100 && lag < 2000) {
+        r.jitter += (std::abs(lag - r.lag) - r.jitter) / 16;
+        r.lag += (lag - r.lag) / 16;
+        const float want = std::clamp(r.lag + 3 * r.jitter + 1000.0f / kRate, kDelayMin, kDelayMax);
+        r.delay += std::clamp(want - r.delay, -1.5f, 1.5f);  // a little each state: no jump in the drawn time
+    }
 }
 
 void Receive() {
@@ -330,12 +435,23 @@ void Receive() {
             Event e;
             std::memcpy(&e, buf + sizeof h, sizeof e);
             std::lock_guard<std::mutex> lock(g_lock);
-            uint32_t key = uint32_t(e.origin) << 24 | (e.id & 0xFFFFFF);
+            uint32_t key = KeyOf(e);
+            SendRaw(from, kAck, &key, sizeof key, 1);  // every copy of it: the one acknowledged may be lost
             if (g_events_seen.count(key)) continue;
             g_events_seen[key] = true;
             if (g_events_seen.size() > 4096) g_events_seen.erase(g_events_seen.begin());
             if (g_host) g_events_out.push_back(e);  // to the other clients too
             g_events_in.push_back(e);
+            continue;
+        }
+        if (h.type == kAck) {
+            if (n < int(sizeof h + 4)) continue;
+            uint32_t key;
+            std::memcpy(&key, buf + sizeof h, 4);
+            std::lock_guard<std::mutex> lock(g_lock);
+            g_unacked.erase(std::remove_if(g_unacked.begin(), g_unacked.end(),
+                                           [&](const Unacked& u) { return KeyOf(u.e) == key && Same(u.to, from); }),
+                            g_unacked.end());
             continue;
         }
         if (h.type == kRoster) {
@@ -395,7 +511,7 @@ void Receive() {
                 }
                 g_clients[peer] = {from, now};
                 Header w{kMagic, kWelcome, uint8_t(peer), 0, 0, uint32_t(now)};
-                sendto(g_sock, (const char*)&w, sizeof w, 0, (const sockaddr*)&from, sizeof from);
+                Out(from, (const char*)&w, sizeof w);
                 continue;
             }
             auto c = g_clients.find(peer);
@@ -407,7 +523,9 @@ void Receive() {
                 Send(from, kPong, {e}, h.time);
             } else if (h.type == kState) {
                 for (Entry e : es) {
-                    e.peer = uint8_t(peer), e.time = uint32_t(now);
+                    // the client's own time (the host's clock as it keeps it), unless it is far off
+                    const int64_t t = int64_t(e.time);
+                    e.peer = uint8_t(peer), e.time = uint32_t(t > now + 50 || t < now - 2000 ? now : t);
                     g_latest[uint16_t(e.peer << 8 | e.local)] = e;
                     Store(e);
                 }
@@ -434,7 +552,12 @@ void Loop() {
     int64_t next = Now(), last_ping = 0, last_hello = -10000, last_lobby = 0;
     while (!g_quit) {
         Receive();
+        SendHeld();
         int64_t now = Now();
+        {
+            std::lock_guard<std::mutex> lock(g_lock);
+            Resend();
+        }
         if (now >= next) {
             next += 1000 / kRate;
             if (next < now) next = now;
@@ -470,8 +593,7 @@ void Loop() {
                 }
                 for (const Event& e : g_events_out)
                     for (auto& [id, c] : g_clients)
-                        if (id != e.origin)
-                            for (int k = 0; k < 2; k++) SendRaw(c.addr, kEvent, &e, sizeof e, 1);
+                        if (id != e.origin) Reliable(c.addr, e);
                 g_events_out.clear();
                 std::vector<Entry> all = mine;
                 for (auto& [k, e] : g_latest) all.push_back(e);
@@ -483,8 +605,7 @@ void Loop() {
                 if (now - last_hello > 500) last_hello = now, Send(g_host_addr, kHello, {}, uint32_t(now));
             } else {
                 Send(g_host_addr, kState, mine, uint32_t(now));
-                for (const Event& e : g_events_out)
-                    for (int k = 0; k < 2; k++) SendRaw(g_host_addr, kEvent, &e, sizeof e, 1);
+                for (const Event& e : g_events_out) Reliable(g_host_addr, e);
                 g_events_out.clear();
                 if (now - last_lobby > 500 || g_send_now.exchange(false)) {
                     last_lobby = now;
@@ -511,7 +632,7 @@ bool Begin(bool host, uint32_t ip, uint16_t port) {
         g_have_settings = false, g_starts = 0, g_heard_host = Now();
         g_roster.clear(), g_roster_applied.clear(), g_roster_pending = false, g_was_in_match = false;
         g_roster_heard = -100000, g_late_start = false, g_joined_id = ~0u;
-        g_events_in.clear(), g_events_out.clear(), g_events_seen.clear();
+        g_events_in.clear(), g_events_out.clear(), g_events_seen.clear(), g_unacked.clear();
         char name[64] = {};
 #ifdef _WIN32
         DWORD n = sizeof name;
@@ -652,7 +773,7 @@ void Search() {
                     g_servers.end());
 }
 
-// a remote player's place drawn now: between the samples around kDelay ago, by the host's clock
+// a remote player's place at a time (the host's clock): between the samples around it
 bool Interpolate(const std::deque<Sample>& s, int64_t t, Body& out) {
     if (s.empty()) return false;
     if (t <= s.front().time) return out = s.front().body, true;
@@ -673,6 +794,46 @@ bool Interpolate(const std::deque<Sample>& s, int64_t t, Body& out) {
         float f = float(std::min(t - b.time, kExtrapolate)) / float(std::max<int64_t>(1, b.time - a.time));
         for (int k = 0; k < 3; k++) out.pos[k] += (b.body.pos[k] - a.body.pos[k]) * f;
     }
+    return true;
+}
+
+// a remote player's place drawn now: at its own delay, a correction eased in (the real state after a guess past the
+// newest: the jump spread over a few frames); a respawn or a teleport (3 m and more) at once
+bool Place(Remote& r, Body& out) {
+    static const int fixed = [] { const char* e = std::getenv("NF_LAN_DELAY"); return e && *e ? std::atoi(e) : 0; }();
+    if (fixed) r.delay = float(fixed);  // NF_LAN_DELAY=ms (diagnostic): one delay for all, as before 1.5.14 (100)
+    const int64_t t = Now() + g_offset.load() - int64_t(r.delay);
+    if (!Interpolate(r.samples, t, out)) return false;
+    // NF_LAN_TRACE=1: every 5 s, the share of frames drawn past the newest state (guessed: the stutter) and the lag
+    static const bool trace = [] { const char* e = std::getenv("NF_LAN_TRACE"); return e && *e == '1'; }();
+    static int frames = 0, guessed = 0;
+    static int64_t next = 0;
+    frames++, guessed += t > r.samples.back().time;
+    if (trace && Now() >= next) {
+        next = Now() + 5000;
+        LOGR("nightfire: LAN: remote drawn %.0f ms behind (lag %.0f, jitter %.0f), %d of %d frames past the newest",
+             r.delay, r.lag, r.jitter, guessed, frames);
+        frames = guessed = 0;
+    }
+    if (r.drawn) {
+        float jump[3], size = 0;
+        for (int k = 0; k < 3; k++) {
+            jump[k] = out.pos[k] - (r.last[k] + (r.last[k] - r.prev[k]));  // against carrying on as it went
+            size += jump[k] * jump[k];
+        }
+        if (size > 9) {
+            for (float& e : r.err) e = 0;
+        } else if (size > 0.0025f) {  // 5 cm: more than its own speeding up or slowing down in a frame
+            for (int k = 0; k < 3; k++) r.err[k] -= jump[k];
+        }
+    }
+    for (int k = 0; k < 3; k++) {
+        r.prev[k] = r.drawn ? r.last[k] : out.pos[k];
+        r.last[k] = out.pos[k];
+        r.err[k] *= 0.85f;
+        out.pos[k] += r.err[k];
+    }
+    r.drawn = true;
     return true;
 }
 
@@ -1101,7 +1262,7 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
         std::lock_guard<std::mutex> lock(g_lock);
         key0 = PuppetKey(slot);
         Body now, before;
-        int64_t t = Now() + g_offset - kDelay;
+        int64_t t = key0 >= 0 ? Now() + g_offset - int64_t(g_remotes[uint16_t(key0)].delay) : 0;
         if (key0 >= 0 && Interpolate(g_remotes[uint16_t(key0)].samples, t, now) &&
             Interpolate(g_remotes[uint16_t(key0)].samples, t - 100, before)) {
             float dx = now.pos[0] - before.pos[0], dz = now.pos[2] - before.pos[2];
@@ -1132,7 +1293,7 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
         SetF(obj + kPos, 0), SetF(obj + kPos + 4, 400.0f), SetF(obj + kPos + 8, 0);
         return;
     }
-    if (!Interpolate(g_remotes[uint16_t(key)].samples, Now() + g_offset - kDelay, b)) return;
+    if (!Place(g_remotes[uint16_t(key)], b)) return;
     for (int k = 0; k < 3; k++) SetF(obj + kPos + k * 4, b.pos[k]);
     SetF(obj + kYaw, speed >= 0.4f ? move_yaw : b.yaw);  // running the way it goes (bots only run forward)
     static bool said = false;
@@ -1560,7 +1721,7 @@ bool WhoIs(int slot, uint8_t& peer, uint8_t& local) {
 }
 
 void Queue(Event e) {  // ours: applied here as well when it is for this copy (the host's own, a client's to itself)
-    e.origin = uint8_t(std::max(0, g_me.load())), e.id = ++g_event_id;
+    e.origin = uint8_t(std::max(0, g_me.load())), e.id = ++g_event_id, e.time = uint32_t(Now() + g_offset.load());
     std::lock_guard<std::mutex> lock(g_lock);
     g_events_out.push_back(e);
 }
@@ -1635,6 +1796,12 @@ void ApplyEvents(X86Context& ctx) {
         uint32_t eax = ctx.eax;
         if (e.kind == kHitEvent && e.victim_peer == g_me.load()) {
             if (!killer) continue;
+            if (const int64_t age = Now() + g_offset.load() - int64_t(e.time); age > kMaxHitAge) {
+                static int said = 0;
+                if (said++ < 10) LOGR("nightfire: LAN: a hit by %u:%u came %lld ms late: dropped", e.killer_peer,
+                                      e.killer_local, (long long)age);
+                continue;
+            }
             uint32_t src = StandIn(killer, 0x18CFA0 + uint32_t(e.weapon) * 0x10C), time;
             std::memcpy(&time, e.node + 4, 4);  // the record's +0xC
             Pending p{src, time, {}};

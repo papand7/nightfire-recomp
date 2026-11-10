@@ -15,7 +15,8 @@
 //   api.php?a=selftest                           checks this hosting can write its file and send UDP.
 //
 // A new game: one entry in GAMES below (name, colour, a function that asks a server). NightFire's query is its LAN
-// discovery packet (src/game/lan_play.cpp): a 12-byte header "NFL1", type 9; the answer is type 10 with host[24],
+// discovery packet (src/game/lan_play.cpp): a 12-byte header "NFL2" (1.5.13 and before "NFL1"), type 9; the answer
+// is type 10 with host[24],
 // map[24], players, pad, port (u16): 64 bytes.
 
 const KEEP = 90;          // seconds a server stays listed after its last announce
@@ -24,12 +25,12 @@ const MAX_TOTAL = 500;
 const MIN_GAP = 10;       // seconds between announces for one address and port
 const QUERY_WAIT = 1.5;   // seconds to wait for a host's answer
 
-// a "who hosts?" packet to ip:port; the first answer for which $parse returns an array, or null
-function ask_udp($ip, $port, $packet, $parse) {
+// "who hosts?" packets to ip:port (each its own datagram); the first answer for which $parse returns an array, or null
+function ask_udp($ip, $port, array $packets, $parse) {
     $s = @stream_socket_client("udp://$ip:$port", $errno, $errstr, 2);
     if (!$s) return null;
     stream_set_timeout($s, 0, (int)(QUERY_WAIT * 1000000));
-    fwrite($s, $packet);
+    foreach ($packets as $packet) fwrite($s, $packet);
     $end = microtime(true) + QUERY_WAIT;
     $info = null;
     while (microtime(true) < $end) {
@@ -42,9 +43,12 @@ function ask_udp($ip, $port, $packet, $parse) {
 }
 function text($t) { return preg_replace('/[^\x20-\x7E]/', '', rtrim((string)$t, "\0")); }
 
+// the query in the protocol 1.5.14 speaks ("NFL2"), then the one before ("NFL1"): a host answers only its own
 function ask_nightfire($ip, $port) {
-    return ask_udp($ip, $port, pack('a4CCCCV', 'NFL1', 9, 0, 0, 0, time() & 0xFFFFFFFF), function ($buf) {
-        if (strlen($buf) < 64 || substr($buf, 0, 4) !== 'NFL1' || ord($buf[4]) !== 10) return null;
+    $q = fn($magic) => pack('a4CCCCV', $magic, 9, 0, 0, 0, time() & 0xFFFFFFFF);
+    return ask_udp($ip, $port, [$q('NFL2'), $q('NFL1')], function ($buf) {
+        $magic = substr($buf, 0, 4);
+        if (strlen($buf) < 64 || ($magic !== 'NFL2' && $magic !== 'NFL1') || ord($buf[4]) !== 10) return null;
         $d = unpack('a24host/a24map/Cplayers/Cpad/vport', substr($buf, 12, 52));
         return ['name' => text($d['host']), 'map' => text($d['map']), 'players' => $d['players']];
     });
