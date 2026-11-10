@@ -2,6 +2,16 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-10: the online browser (Netplay's Online row)
+
+- The game fetches api.php?a=list&game=nightfire&format=lines (new: one tab-separated line a server) on a background
+  thread when Netplay opens (src/game/online.cpp, http::Get); the Online row lists them (name, map, players/max, mode),
+  redrawn when the fetch finishes. Join Online joins the chosen one's address with nf::NetJoin, as a LAN host.
+- Tested against the local master (.local/mt): the list shows "Julie PC  Chain Reaction  3/8" on the Netplay page
+  (.local/online_run.py). Not yet against the live site (it did not resolve when checked).
+- Not done: a refresh button (the list refreshes each time the page opens), and joining from the online list has not
+  been played through to a match.
+
 ## 2026-11-10: low-health warning (hurt effects)
 
 - Below a third of health the view's edges go red: a steady tint that swells with a heartbeat (a beat every 1.1 s at

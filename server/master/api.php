@@ -4,7 +4,8 @@
 // keep it writable (the default on cPanel) and open  api.php?a=selftest  once.
 //
 //   api.php?a=games                              the games it lists, with their server and player counts.
-//   api.php?a=list&game=nightfire                that game's servers heard from in the last 90 s (JSON).
+//   api.php?a=list&game=nightfire                that game's servers heard from in the last 90 s (JSON; format=lines:
+//                                                one tab-separated line each, for the game).
 //   api.php?a=announce&game=nightfire&port=27787 a host says "I am here" (the game does it every 30 s while its lobby
 //        [&mode=Deathmatch&max=8&v=1.5.13]       is open). The master sends the game's own UDP query to the caller's
 //                                                address and lists only what the host answers itself (name, map,
@@ -112,6 +113,15 @@ if ($action === 'list') {
         'address' => $s['ip'], 'port' => $s['port'], 'name' => $s['name'], 'map' => $s['map'], 'players' => $s['players'],
         'max' => $s['max'], 'mode' => $s['mode'], 'version' => $s['version'],
     ], array_filter($servers, $of_game))));
+    if (($_GET['format'] ?? '') === 'lines') {  // for the game: one server a line, tab-separated, no JSON to parse
+        header('Content-Type: text/plain; charset=utf-8');
+        foreach ($out as $s)
+            echo implode("	", array_map(fn($v) => str_replace(["	", "
+", ""], ' ', (string)$v),
+                [$s['address'], $s['port'], $s['name'], $s['map'], $s['players'], $s['max'], $s['mode'], $s['version']])), "
+";
+        exit;
+    }
     done(['ok' => true, 'game' => $game, 'servers' => $out]);
 }
 

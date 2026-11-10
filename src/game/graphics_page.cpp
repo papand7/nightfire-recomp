@@ -345,11 +345,14 @@ const std::vector<MenuRow> kJoinRows = {
 };
 // Netplay's rows (the main menu's Netplay item): host, the games found on this network, join the one chosen
 constexpr uint32_t kNetHost = 0x1000FC91, kNetServer = 0x1000FC92, kNetJoin = 0x1000FC93, kNetPublish = 0x1000FD3A;
+constexpr uint32_t kNetOnline = 0x1000FD3B, kNetOnlineJoin = 0x1000FD3C;  // the online list (src/game/online.cpp)
 const std::vector<MenuRow> kNetRows = {
     {kNetHost, nf::kMenuChoice, "Host Game", "Start a game others on this network can join, then choose its options.", 0},
     {kNetPublish, nf::kMenuChoice, "Publish Online", "List this game on the online list (the master server) while it is hosted: others find it from the Online browser. Your router must let the game's UDP port (27787) in.", 3},
     {kNetServer, nf::kMenuChoice, "Game", "The games found on this network: PC, map, players.", 1},
     {kNetJoin, nf::kMenuChoice, "Join Game", "Join the game chosen above.", 2},
+    {kNetOnline, nf::kMenuChoice, "Online", "The games on the online list (the master server): PC, map, players, mode.", 4},
+    {kNetOnlineJoin, nf::kMenuChoice, "Join Online", "Join the online game chosen above (its UDP port must be open on its PC's router).", 5},
 };
 constexpr int16_t kFirstY = 88, kStep = 21;  // below the panel's title band (AV's first row is at 86), as Settings'
 constexpr int16_t kStyleStep = 21;           // the shared page's twelve rows
@@ -1238,15 +1241,36 @@ void ShowServers(X86Context& ctx, uint32_t player) {
     if (items.empty()) items.push_back({"Searching...", 0});
     Choice(ctx, player, kNetServer, items, 0);
 }
+std::vector<std::string> g_online_labels;  // the Online row's items as shown
+std::vector<nf::OnlineServer> g_online_shown;
+bool g_online_busy_shown = false;  // the fetch's state the Online row was last drawn for
+void ShowOnline(X86Context& ctx, uint32_t player) {
+    g_online_busy_shown = nf::OnlineSearching();
+    g_online_shown = nf::OnlineServers();
+    g_online_labels.clear();
+    for (const auto& sv : g_online_shown) {
+        char label[160];
+        std::snprintf(label, sizeof label, "%s  %s  %d/%d  %s", sv.name.c_str(), sv.map.c_str(), sv.players, sv.max,
+                      sv.mode.c_str());
+        g_online_labels.push_back(label);
+    }
+    std::vector<std::pair<const char*, uint32_t>> items;
+    for (size_t i = 0; i < g_online_labels.size(); i++) items.push_back({g_online_labels[i].c_str(), uint32_t(i)});
+    if (items.empty()) items.push_back({nf::OnlineSearching() ? "Searching..." : "None listed", 0});
+    Choice(ctx, player, kNetOnline, items, 0);
+    Choice(ctx, player, kNetOnlineJoin, {{"Join", 0}}, 0);
+}
 void EnterNet(X86Context& ctx, uint32_t player) {
     nf::NetStop();
     nf::NetSearch(true);
+    nf::OnlineRefresh();
     g_net_open = true, g_net_player = player;
     Choice(ctx, player, kNetHost, {{"Start", 0}}, 0);
     Choice(ctx, player, kNetPublish, {{"Off", 0}, {"On", 1}}, app::Get().publish_server ? 1 : 0);
     ShowServers(ctx, player);
     Choice(ctx, player, kNetJoin, {{"Join", 0}}, 0);
-    LOGR("nightfire: Netplay opened: searching this network");
+    ShowOnline(ctx, player);
+    LOGR("nightfire: Netplay opened: searching this network and the online list");
 }
 bool NetActivate(X86Context& ctx, uint32_t player, uint32_t on) {
     if (on == Wid(kNetHost)) {
@@ -1260,6 +1284,19 @@ bool NetActivate(X86Context& ctx, uint32_t player, uint32_t on) {
         nf::NetHost();
         MenuGoTo(ctx, player, kJoinPage);
         LOGR("nightfire: Netplay: hosting");
+        return true;
+    }
+    if (on == Wid(kNetOnlineJoin) || on == Wid(kNetOnline)) {
+        const uint32_t i = ChoiceValue(ctx, player, kNetOnline);
+        if (i >= g_online_shown.size()) {
+            MenuHelp(ctx, player, "No online game chosen: the list refreshes when this page opens.");
+            return true;
+        }
+        const nf::OnlineServer sv = g_online_shown[i];
+        nf::NetSearch(false), g_net_open = false;
+        nf::NetJoin(sv.ip, sv.port);
+        MenuGoTo(ctx, player, kJoinPage);
+        LOGR("nightfire: Netplay: joining online %s at %s:%u", sv.name.c_str(), sv.address.c_str(), sv.port);
         return true;
     }
     if (on == Wid(kNetJoin) || on == Wid(kNetServer)) {
@@ -1776,6 +1813,15 @@ void NetplayPageFrame(X86Context& ctx) {
     KeysPageFrame(ctx);
     WheelPageFrame(ctx);
     if (!g_net_open) return;
+    {  // the online list, when its fetch has finished (or started again)
+        const bool busy = nf::OnlineSearching();
+        const size_t count = nf::OnlineServers().size();
+        if (busy != g_online_busy_shown || (!busy && count != g_online_shown.size())) {
+            uint32_t eax = ctx.eax;
+            ShowOnline(ctx, g_net_player);
+            ctx.eax = eax;
+        }
+    }
     std::vector<nf::LanServer> now = nf::NetServers();
     bool same = now.size() == g_net_shown.size();
     for (size_t i = 0; same && i < now.size(); i++) same = now[i].label == g_net_shown[i].label;
