@@ -27,6 +27,11 @@ jobs:
             -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ 2>&1 | tee "$RUNNER_TEMP/configure.log"
           cmake --build "$RUNNER_TEMP/rt" -- -k 0 2>&1 | tee "$RUNNER_TEMP/build.log"
 
+      - name: MoltenVK beside the exe
+        run: |
+          ls -la "$RUNNER_TEMP/rt" | grep -i "moltenvk\|xbe_runtime_check"
+          lipo -info "$RUNNER_TEMP/rt/libMoltenVK.dylib"
+
       - name: The errors
         if: always()
         run: |
