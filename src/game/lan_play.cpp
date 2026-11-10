@@ -121,6 +121,7 @@ constexpr int64_t kExtrapolate = 250;    // ms past the newest state they are ca
 constexpr int64_t kResend = 120, kGiveUp = 3000;  // an event not acknowledged: sent again this often, until
 constexpr int64_t kMaxHitAge = 400;      // ms: a hit older than this when it reaches the victim's copy is dropped
 constexpr uint32_t kViewPitch = 0x838, kEyeDrop = 0x89C;  // a player's actor: its view's pitch, its crouch's eye drop
+constexpr uint32_t kBotPosture = 0x466;  // a bot's data: the posture it plays (0x341C0 sets it)
 // a puppet's look as its player has it, for the pose hook (nf::LanCrouch) and its aim; the game's thread only
 struct Look {
     float crouch = 0;
@@ -134,6 +135,8 @@ struct Body {
     float pos[3], yaw;
     float pitch = 0;   // the view's (a quarter turn up is 1: the actor's +0x838)
     float crouch = 0;  // metres the eye is lowered by crouching (the actor's +0x89C; 0 standing, about 0.45 down)
+    uint16_t posture = 0;  // the host's AI bot's posture id (its data's +0x466: crouches, dives, rolls), 0 a player
+    uint16_t pad = 0;
 };
 struct Entry {          // one player's state on the wire
     uint8_t peer, local;
@@ -189,6 +192,8 @@ struct Remote {
     float err[3] = {};           // a correction still being eased in (metres, drawn = state + err)
     float last[3] = {}, prev[3] = {};  // the two states drawn before (their places)
     bool drawn = false;
+    int frames = 0, guessed = 0;  // NF_LAN_TRACE: frames drawn, and of them past the newest state, since its last line
+    int64_t traced = 0;
 };
 
 std::mutex g_lock;
@@ -342,6 +347,16 @@ void Resend() {
     }
 }
 
+// a name into a match's bot record (kBotRecords, 0x12 bytes each). The record is the bot's settings, not a name:
+// byte 4 is its health (0x64 = 100 in a bot set up in the menus), and the name written over them gave a puppet the
+// health of its name's fifth letter: one of four letters or fewer ("Open", "Bob") had none, and its puppet was never
+// spawned (frozen at its spawn on the other copies). Short names are padded with spaces to five letters.
+void PutName(uint32_t rec, const char* name, size_t most = 14) {
+    const size_t n = strnlen(name, most);
+    std::memcpy(&kernel::G<char>(rec), name, n);
+    for (size_t k = n; k < 5; k++) kernel::G<char>(rec + uint32_t(k)) = ' ';
+}
+
 // the host's AI bots (its bot setup, or the game's count without one), as many as fit after `others` players from
 // the network: their score slots follow those players'
 std::vector<Named> HostBots(size_t others) {
@@ -351,8 +366,7 @@ std::vector<Named> HostBots(size_t others) {
     for (size_t i = 0; i < std::min(want, room); i++) {
         const uint8_t* rec = g_bot_cfg + 2 + i * 0x12;
         Named n{0, uint8_t(kFirstBot + others + i), rec[0x10], uint8_t(rec[0xF] == 1 ? 1 : 2), {}};
-        std::memcpy(n.name, rec, 14);
-        if (!n.name[0]) std::snprintf(n.name, sizeof n.name, "Bot %zu", i + 1);
+        std::snprintf(n.name, sizeof n.name, "Bot %zu", i + 1);  // (its record is its settings, no name)
         bots.push_back(n);
     }
     return bots;
@@ -803,6 +817,7 @@ bool Interpolate(const std::deque<Sample>& s, int64_t t, Body& out) {
         out.yaw = a.body.yaw + d * f;
         out.pitch = a.body.pitch + (b.body.pitch - a.body.pitch) * f;
         out.crouch = a.body.crouch + (b.body.crouch - a.body.crouch) * f;
+        out.posture = b.body.posture;
         return true;
     }
     // past the newest: carried on along the last two, at most kExtrapolate
@@ -825,14 +840,13 @@ bool Place(Remote& r, Body& out) {
     if (!Interpolate(r.samples, t, out)) return false;
     // NF_LAN_TRACE=1: every 5 s, the share of frames drawn past the newest state (guessed: the stutter) and the lag
     static const bool trace = [] { const char* e = std::getenv("NF_LAN_TRACE"); return e && *e == '1'; }();
-    static int frames = 0, guessed = 0;
-    static int64_t next = 0;
-    frames++, guessed += t > r.samples.back().time;
-    if (trace && Now() >= next) {
-        next = Now() + 5000;
+    r.frames++, r.guessed += t > r.samples.back().time;
+    if (trace && Now() >= r.traced + 5000) {
+        r.traced = Now();
         LOGR("nightfire: LAN: remote drawn %.0f ms behind (lag %.0f, jitter %.0f), %d of %d frames past the newest; "
-             "crouch %.2f, pitch %.2f", r.delay, r.lag, r.jitter, guessed, frames, out.crouch, out.pitch);
-        frames = guessed = 0;
+             "crouch %.2f, pitch %.2f, posture %02X", r.delay, r.lag, r.jitter, r.guessed, r.frames, out.crouch, out.pitch,
+             out.posture);
+        r.frames = r.guessed = 0;
     }
     if (r.drawn) {
         float jump[3], size = 0;
@@ -1136,6 +1150,7 @@ void LanFrame(X86Context& ctx) {
         Body b;
         for (int k = 0; k < 3; k++) b.pos[k] = GetF(obj + kPos + k * 4);
         b.yaw = GetF(obj + kYaw);
+        if (uint32_t actor = R32(obj + 0xBC); !player && actor) b.posture = kernel::G<uint16_t>(actor + kBotPosture);
         if (uint32_t actor = R32(obj + 0xBC); player && actor) {
             b.pitch = std::clamp(GetF(actor + kViewPitch), -1.0f, 1.0f);
             b.crouch = std::clamp(GetF(actor + kEyeDrop), 0.0f, 0.6f);
@@ -1163,7 +1178,8 @@ void LanFrame(X86Context& ctx) {
         std::string line;
         char buf[64];
         for (auto& [sl, b] : local)
-            if (sl >= kFirstBot) std::snprintf(buf, sizeof buf, " %d:%.1f,%.1f", sl, b.pos[0], b.pos[2]), line += buf;
+            if (sl >= kFirstBot)
+                std::snprintf(buf, sizeof buf, " %d:%.1f,%.1f posture %02X", sl, b.pos[0], b.pos[2], b.posture), line += buf;
         LOGR("nightfire: LAN: the host's AI bots%s", line.c_str());
     }
     if (!in_match)
@@ -1221,27 +1237,31 @@ X86_FUNC(sub_000A25F0) {  // a multiplayer match starts: the bots are the other 
             uint32_t rec = kBotRecords + uint32_t(n) * kBotRecordSize;  // its look and team in the match (0xA27D1)
             std::string shown = g_late_start ? std::string(m.name, strnlen(m.name, 15)) : ShownName(m, Place(m));
             std::memset(&kernel::G<uint8_t>(rec), 0, 0xF);
-            std::memcpy(&kernel::G<char>(rec), shown.data(), std::min<size_t>(shown.size(), 14));
+            PutName(rec, shown.c_str());
             kernel::G<uint8_t>(rec + 0xF) = BotTeam(m.team);
             kernel::G<uint8_t>(rec + 0x10) = m.character;
             g_slot_of[uint16_t(m.peer << 8 | m.local)] = kFirstBot + n++;
         }
         int puppets = n;
-        if (g_host)  // its AI bots after them, as many as fit
+        if (g_host)
+            LOGR("nightfire: LAN match: the host's bot setup %s, %u wanted, %zu fit", g_bot_cfg_saved ? "kept" : "not kept",
+                 g_bot_cfg[1], HostBots(size_t(n)).size());
+        if (g_host) {  // its AI bots after them, as many as fit: each with its own settings record from its setup
+            int k = 0;
             for (const Named& m : HostBots(size_t(n))) {
                 uint32_t rec = kBotRecords + uint32_t(n) * kBotRecordSize;
-                std::memset(&kernel::G<uint8_t>(rec), 0, kBotRecordSize);
-                std::memcpy(&kernel::G<char>(rec), m.name, 14);
+                std::memcpy(&kernel::G<uint8_t>(rec), g_bot_cfg + 2 + k++ * kBotRecordSize, kBotRecordSize);
                 kernel::G<uint8_t>(rec + 0xF) = BotTeam(m.team);
                 kernel::G<uint8_t>(rec + 0x10) = m.character;
                 n++;
             }
+        }
         if (g_host)  // the open places, in their slots
             for (const Named& m : g_lobby) {
                 if (m.peer != kOpen || n >= kMostBots) continue;
                 uint32_t rec = kBotRecords + uint32_t(n) * kBotRecordSize;
                 std::memset(&kernel::G<uint8_t>(rec), 0, kBotRecordSize);
-                std::memcpy(&kernel::G<char>(rec), m.name, 14);
+                PutName(rec, m.name);
                 kernel::G<uint8_t>(rec + 0xF) = BotTeam(m.team);
                 g_slot_of[uint16_t(m.peer << 8 | m.local)] = kFirstBot + n++;
             }
@@ -1289,6 +1309,7 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
     nf::CoopNpc(obj);
     int slot = g_on ? SlotOf(obj) : -1;
     float speed = 0, move_yaw = 0;
+    uint32_t remote_posture = 0;  // a host's AI bot's own (its puppet plays the same)
     int key0 = -1;
     if (slot >= kFirstBot) {
         std::lock_guard<std::mutex> lock(g_lock);
@@ -1300,6 +1321,7 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
             float dx = now.pos[0] - before.pos[0], dz = now.pos[2] - before.pos[2];
             speed = std::sqrt(dx * dx + dz * dz) / 0.1f;
             move_yaw = std::atan2(dx, dz);
+            remote_posture = now.posture;
         }
     }
     if (key0 >= 0) CollectHits(ctx, obj);
@@ -1308,7 +1330,19 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
         static uint32_t pair = mem::AllocHostContiguous(8, 16);
         W32(pair, obj), W32(pair + 4, R32(obj + 0xBC));
         uint32_t eax = ctx.eax;
-        const uint32_t id = uint32_t(Posture(speed));
+        uint32_t id = remote_posture ? remote_posture : uint32_t(Posture(speed));
+        // lan_posture (diagnostic): a file in the game's folder with a posture id (hex) every puppet is held in
+        static uint32_t forced = 0;
+        static int64_t read_at = 0;
+        if (Now() - read_at > 1000) {
+            read_at = Now(), forced = 0;
+            if (FILE* f = std::fopen("lan_posture", "r")) {
+                unsigned v = 0;
+                if (std::fscanf(f, "%x", &v) == 1) forced = v;
+                std::fclose(f);
+            }
+        }
+        if (forced) id = forced;
         g_own_posture = true;
         kernel::CallGuest(ctx, 0x341C0, {id, 0, 0, 0, 0, 0, pair});
         g_own_posture = false;
@@ -1320,6 +1354,17 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
     // a puppet: the AI's own frame ran (it spawns the body and animates it; 0x37C10 gives it no target), then moved
     std::lock_guard<std::mutex> lock(g_lock);
     int key = PuppetKey(slot);
+    static const bool puppet_trace = [] { const char* e = std::getenv("NF_LAN_TRACE"); return e && *e == '1'; }();
+    if (puppet_trace) {  // each puppet slot's state, every 5 s
+        static int64_t at[10] = {};
+        if (slot < 10 && Now() >= at[slot] + 5000) {
+            at[slot] = Now();
+            const Remote* r = key >= 0 && g_remotes.count(uint16_t(key)) ? &g_remotes[uint16_t(key)] : nullptr;
+            LOGR("nightfire: LAN: puppet slot %d: key %d:%d, %s, %zu states, newest %lld ms old", slot, key >> 8, key & 0xFF,
+                 dead ? "dead" : "alive", r ? r->samples.size() : size_t(0),
+                 r && !r->samples.empty() ? (long long)(Now() + g_offset.load() - r->samples.back().time) : -1LL);
+        }
+    }
     if (key < 0 || dead) return;
     Body b;
     if ((key >> 8) == kOpen) {  // an open place: kept out of sight, high above the map's middle
@@ -1332,15 +1377,17 @@ X86_FUNC(sub_00031530) {  // an NPC's or bot's think (cdecl: the object)
     // its player's view: the upper body aimed along it (the game's own aim, 0x12220 as a player's at 0xACA77: the
     // target, the range 1000, the speed 0.2, bone 5; the spine turns to it in the pose, 0x15060), a point 20 m out
     // from its eyes (the object's place is its middle, the eyes about 0.45 above, lower by its crouch)
-    Look& look = g_looks[obj];
-    look.crouch = b.crouch, look.when = Now();
-    if (!look.target) look.target = mem::AllocHostContiguous(16, 16);
-    const float up = b.pitch * 1.5707964f;
-    const float eye[3] = {b.pos[0], b.pos[1] + 0.45f - b.crouch, b.pos[2]};
-    SetF(look.target, eye[0] + std::sin(b.yaw) * std::cos(up) * 20);
-    SetF(look.target + 4, eye[1] + std::sin(up) * 20);
-    SetF(look.target + 8, eye[2] + std::cos(b.yaw) * std::cos(up) * 20);
-    kernel::CallGuest(ctx, 0x12220, {obj, look.target, std::bit_cast<uint32_t>(1000.0f), std::bit_cast<uint32_t>(0.2f), 0, 5});
+    if (!b.posture) {  // a player's (a host's AI bot's own posture plays its moves: no view or crouch)
+        Look& look = g_looks[obj];
+        look.crouch = b.crouch, look.when = Now();
+        if (!look.target) look.target = mem::AllocHostContiguous(16, 16);
+        const float up = b.pitch * 1.5707964f;
+        const float eye[3] = {b.pos[0], b.pos[1] + 0.45f - b.crouch, b.pos[2]};
+        SetF(look.target, eye[0] + std::sin(b.yaw) * std::cos(up) * 20);
+        SetF(look.target + 4, eye[1] + std::sin(up) * 20);
+        SetF(look.target + 8, eye[2] + std::cos(b.yaw) * std::cos(up) * 20);
+        kernel::CallGuest(ctx, 0x12220, {obj, look.target, std::bit_cast<uint32_t>(1000.0f), std::bit_cast<uint32_t>(0.2f), 0, 5});
+    }
     static bool said = false;
     if (!said) said = true, LOGR("nightfire: LAN: slot %d is client %d's player %d", slot, key >> 8, (key & 0xFF) + 1);
     static const bool trace = [] {
@@ -1477,7 +1524,7 @@ std::vector<Named> LobbyBots(std::vector<Listed>& listed) {
     for (size_t i = 0; i < bots.size(); i++) {
         uint32_t rec = kBotRecords + uint32_t(i) * kBotRecordSize;
         std::memset(&kernel::G<uint8_t>(rec), 0, 0xF);
-        std::memcpy(&kernel::G<char>(rec), bots[i].name, 14);
+        PutName(rec, bots[i].name);
         kernel::G<uint8_t>(rec + 0xF) = BotTeam(bots[i].team);
         kernel::G<uint8_t>(rec + 0x10) = bots[i].character;
     }
@@ -1653,12 +1700,14 @@ X86_FUNC(sub_00088EA0) {
     }
     __imp__sub_00088EA0(ctx, base);
     if (added) {
-        {  // the lobby opened in the call: the host's bots it kept are the setup's from before
+        {  // the lobby opened in the call and kept the setup the game packed then (0x75DD0): the host's own bots
+            // first, then the network's players added above; only the host's are its AI bots (the setup from
+            // before the call had no count yet, the game makes it in the call: a bot set up there was lost)
             std::lock_guard<std::mutex> lock(g_lock);
             if (g_bot_cfg_saved) {
-                std::memcpy(g_bot_cfg, keep.data(), kBotSetupSize);
-                if (!g_bot_cfg[0]) g_bot_cfg[1] = uint8_t(std::min<uint32_t>(bots, kMostBots));
+                g_bot_cfg[1] = uint8_t(std::max(0, int(g_bot_cfg[1]) - added));
                 g_send_now = true;
+                LOGR("nightfire: LAN lobby: %u of the host's own AI bots", g_bot_cfg[1]);
             }
         }
         std::memcpy(kernel::HostPtr(kBotSetup), keep.data(), kBotSetupSize);

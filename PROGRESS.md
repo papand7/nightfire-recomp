@@ -41,8 +41,20 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
   bends the way the character faces). Tested with two copies (Skyrail; the client's X crouches with controller
   scheme 7, the keyboard off): the puppet kneels on the host, looks up and down with its player; the host's shots
   aimed at a standing chest hit zone 4 standing and passed over the crouched puppet, aimed lower they hit it.
-- Not done: strafing puppets still face the way they move (their legs; the upper body now aims along the view). The
-  host's AI bots send no crouch (their actors are not players').
+- The host's AI bots: each sends its own posture id (its data's +0x466, the one 0x341C0 set: run 1E, walk 08, dives,
+  rolls, ducks), and its puppet on the clients plays the same id instead of one guessed from its speed.
+- Two older bugs found testing them, both fixed:
+  - A bot set up in the menus never came into a LAN match: after the scenario's Continue (0x88EA0 hook) the setup
+    kept for the lobby was replaced by the copy from before the call, whose count byte the game only fills in the
+    call (0 wanted). The lobby's own copy (made in the call: the host's bots, then the network players added for
+    the team check) is kept now, less those added.
+  - A match's bot records (0x245282, 0x12 bytes) are the bots' settings, not names (a menu-made bot: 08 00 02 00 64
+    00 01 64 64 01 00 00 00 01 ...; byte 4 its health, +0xE in use, +0xF team, +0x10 character). LAN play wrote each
+    puppet's name over them, so a puppet's health was its name's fifth letter: names of four letters or fewer
+    ("Open", "Bob", the host's bot's settings-as-name) were never spawned and stood frozen at their spawn on the
+    other copies. Names are padded to five letters (PutName); the host's own bots keep their whole settings
+    record and are named "Bot N".
+- Not done: strafing puppets still face the way they move (their legs; the upper body aims along the view).
 
 ## 2026-11-10: ragdolls (optional, off by default)
 
