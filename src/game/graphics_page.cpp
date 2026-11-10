@@ -82,7 +82,8 @@ constexpr uint32_t kFps = 0x1000FC61, kPauseBg = 0x1000FC62, kHideHud = 0x1000FC
                    kWheel = 0x1000FC6E;
 // More Settings' second set: aiming, Discord, resetting
 constexpr uint32_t kAchievements = 0x1000FC6F, kMoreNext = 0x1000FC70, kAdsZoom = 0x1000FD31, kDiscord = 0x1000FD32,
-                   kReset = 0x1000FD33, kMoreBack = 0x1000FD34, kMovement = 0x1000FD35, kGameplayBlood = 0x1000FD36, kShafts = 0x1000FD37;
+                   kReset = 0x1000FD33, kMoreBack = 0x1000FD34, kMovement = 0x1000FD35, kGameplayBlood = 0x1000FD36, kShafts = 0x1000FD37,
+                   kRagdolls = 0x1000FD38;
 
 const std::vector<MenuRow> kGfxRows = {
     {kQuality, nf::kMenuChoice, "Graphics Quality", "Low to Ultra set the rows below at once; changing one makes it Custom."},
@@ -156,11 +157,12 @@ const std::vector<MenuRow> kMoreRows = {
     {kMenuColors, nf::kMenuChoice, "Menu Colours", "The menu backgrounds as the game has them, or blue as on the PC version. Text and Bond stay.", 10},
     {kCoop, nf::kMenuChoice, "Co-op", "A second player in the story missions: split screen, network, friendly fire.", 11},
     {kAchievements, nf::kMenuChoice, "Achievements", "The 19 achievements: which are unlocked, and how far along the medal ones are.", 12},
-    {kMoreNext, nf::kMenuChoice, "Gameplay & More", "Tighter movement, blood, aiming, Discord and defaults.", 13},
+    {kMoreNext, nf::kMenuChoice, "Gameplay & More", "Tighter movement, blood, ragdolls, aiming, Discord and defaults.", 13},
 };
 const std::vector<MenuRow> kMore2Rows = {
     {kGameplayBlood, nf::kMenuChoice, "Blood", "Blood at character impacts and red at the view edges when you are hurt. Applies immediately.", 6},
     {kMovement, nf::kMenuChoice, "Tighter Movement", "Quicker starts and direction changes, less floaty jumps with original jump height. Single-player and multiplayer: the host decides for everyone. Network co-op: set before hosting.", 4},
+    {kRagdolls, nf::kMenuChoice, "Ragdolls", "Enemies go limp when they die and fall with the shot, onto the ground and against walls, instead of the death animations. Off in network play.", 7},
     {kAds, nf::kMenuChoice, "Aim Down Sights", "L (right mouse) raises the gun and zooms in, not the red crosshair. Blur: the background too.", 0},
     {kAdsZoom, nf::kMenuChoice, "Aim Zoom", "How far aiming down the sights zooms in (scopes keep their own).", 1},
     {kMotion, nf::kMenuChoice, "Weapon Sway", "A very light head bob and weapon sway as you move and turn.", 2},
@@ -979,6 +981,7 @@ void EnterMore2(X86Context& ctx, uint32_t player) {
     Choice(ctx, player, kAds, {{"Off", 0}, {"On", 1}}, nf::aim_down_sights ? 1 : 0);
     ShowOptions(ctx, player, kAdsZoom, kAdsZooms, float(nf::ads_zoom));
     ShowOptions(ctx, player, kMotion, kOffOn, nf::view_motion ? 1.0f : 0.0f);
+    ShowOptions(ctx, player, kRagdolls, kOffOn, nf::ragdolls ? 1.0f : 0.0f);
     Choice(ctx, player, kDiscord, {{"Off", 0}, {s.discord_app_id.empty() ? "On (No App Id Set)" : "On", 1}}, s.discord ? 1 : 0);
     Choice(ctx, player, kReset, {{"Reset...", 0}}, 0);
     Choice(ctx, player, kMoreBack, {{"Open", 0}}, 0);
@@ -994,10 +997,11 @@ void KeepMore2(X86Context& ctx, uint32_t player) {
     if (ads <= 1) nf::aim_down_sights = ads > 0;
     nf::ads_zoom = uint32_t(ReadOption(ctx, player, kAdsZoom, kAdsZooms));
     nf::view_motion = ReadOption(ctx, player, kMotion, kOffOn) > 0;
+    nf::ragdolls = ReadOption(ctx, player, kRagdolls, kOffOn) > 0;
     if (discord <= 1) app::Get().discord = discord == 1;
     app::Save();
-    LOGR("nightfire: More Settings (page 2) kept: aim down sights %d, aim zoom %u%%, weapon sway %d, Discord %d",
-         nf::aim_down_sights, nf::ads_zoom, nf::view_motion, app::Get().discord);
+    LOGR("nightfire: More Settings (page 2) kept: aim down sights %d, aim zoom %u%%, weapon sway %d, ragdolls %d, Discord %d",
+         nf::aim_down_sights, nf::ads_zoom, nf::view_motion, nf::ragdolls, app::Get().discord);
 }
 // Reset to Defaults: the settings file's and the game's settings as they first were, and the graphics style; the
 // key bindings and the wheel's, the display (mode, size, monitor, renderer), the language, the host address and the
@@ -1020,7 +1024,7 @@ void ResetAll() {
         nf::view_motion = true, nf::foot_ik = true, nf::coop = false, nf::coop_friendly_fire = false;
         nf::coop_side = false, nf::coop_leash = true, nf::coop_respawn = true, nf::fov_percent = 100;
         nf::draw_distance = 100, nf::modern_menus = true, nf::modern_buttons = true, nf::rounded_font = false;
-        nf::perf_overlay = false, nf::ads_zoom = 130, nf::tight_movement = false;
+        nf::perf_overlay = false, nf::ads_zoom = 130, nf::tight_movement = false, nf::ragdolls = false;
         app::Save();
     }
     gpu::GraphicsStyle st, cur = Current();

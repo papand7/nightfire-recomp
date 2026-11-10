@@ -72,6 +72,11 @@ bool CanChangeMovement();
 bool NetGuest();
 bool NetMovement(bool& enabled);  // true when a LAN client follows the host
 extern bool foot_ik;         // the characters' feet on the ground on slopes and steps (src/game/foot_ik.cpp)
+extern bool ragdolls;        // dead enemies fall limp (src/game/ragdoll.cpp); off by default and in network play
+bool RagdollsOn();
+bool Ragdoll(X86Context& ctx, uint32_t obj, uint32_t skel, uint32_t parents);  // from the pose hook: a body laid
+void RagdollHit(uint32_t obj, uint32_t hit);  // a hit on a character (its killing shot's push)
+void RagdollTest(X86Context& ctx);             // NF_RAGDOLL_TEST=1: the nearest enemy killed every 4 s
 extern bool coop;            // story co-op: a second player on controller 2, split screen (src/game/coop_test.cpp)
 extern bool coop_side;      // story co-op: the views side by side (else one above the other)
 extern bool coop_leash;     // story co-op: player 2 brought back beside player 1 when far

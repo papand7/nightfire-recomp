@@ -33,6 +33,7 @@ bool AnyScoped() {
 X86_EXTERN_FUNC(__imp__sub_000DAC20);
 X86_FUNC(sub_000DAC20) {  // the frame's 2D pass
     nf::HitTest(ctx);
+    nf::RagdollTest(ctx);
     nf::PhotoBeforePass(ctx);  // photo mode's free camera for the pass (src/game/photo_mode.cpp)
     __imp__sub_000DAC20(ctx, base);
     nf::PhotoAfterPass();

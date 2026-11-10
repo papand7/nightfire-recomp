@@ -44,6 +44,8 @@ wheel support. Everything is set from the game's own menus. For **Windows**, wit
   frames per second, and **DLAA** for the smoothest edges at full sharpness.
 - **Effects:** ambient occlusion, contact shadows, bloom, ice and wet-floor reflections, light from muzzle flashes
   and fire, fog, depth of field, optional motion blur and blood.
+- **Ragdolls** (optional, Gameplay & More): enemies go limp when they die and fall with the shot, onto the ground
+  and against walls, instead of the death animations.
 - **Movies** upscaled sharp, in 4:3 or stretched.
 - **Any resolution, ultrawide** screens, field of view, vsync and a frame rate cap.
 - Crisp text and HUD at high resolutions, and today's Xbox button pictures.

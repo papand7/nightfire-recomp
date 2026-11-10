@@ -2,6 +2,26 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-10: ragdolls (optional, off by default)
+
+- src/game/ragdoll.cpp, from foot IK's pose hook (0xDD290; the bone math now shared in src/game/bones.h): a human
+  enemy whose health ([obj+0xBC]+0x90) is gone keeps its bones' world matrices from that frame, and 17 joints (pelvis,
+  chest, head, shoulders, elbows, wrists, hips, knees, ankles, toes) become Verlet points: the torso and head held as
+  one piece, the limbs' lengths, knees and elbows not folding flat, knees not backward. Each game frame ([0x1F65BC])
+  the level is met through the game's ray 0x2C4E0 (the way a point moved, else the ground under it), the contact planes
+  held inside every solver pass (held only after it, the torso and floor fought and the body crawled), no bounce, and
+  static friction. Every bone is then its kept matrix moved with its joint (torso by its points' frame, limb bones
+  aimed at the next joint, the rest carried by their parents). A body sleeps when its pelvis and head go nowhere in
+  half a second (2.5-3 s after death in Chain Reaction). It starts moving as the living pose moved a frame before,
+  plus the killing shot's push (hit_feedback.cpp hands the hit over).
+- Some models leave bone 33 (a hand) unsolved: its matrix sits near the world origin. Such points are left out
+  (a body without its torso points is left to the game); before that the hand fell forever and dragged the body.
+- Visual only (nothing of the game's state written), but off in network play all the same: the game may read bone
+  matrices (attach queries) and lockstep copies must agree.
+- Test: `.local/ragdoll_test.py <tag> [level]` (NF_RAGDOLL_TEST=1): the nearest enemy brought 4 m in front of player 1
+  and killed every 4 s, a screenshot a second; NF_RAGDOLL_TRACE=1 logs each body. The made-up hit through 0x3D900
+  takes no health (no projectile), so the test sets the health to 0 itself.
+
 ## 2026-11-09: HD textures without playing; hd_pack on Linux and macOS
 
 - Level files hold the game's textures in records: "KXT" at +0, +8 size, +12 width, +16 height, +20 format code

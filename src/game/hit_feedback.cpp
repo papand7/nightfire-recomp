@@ -109,6 +109,7 @@ X86_FUNC(sub_0003D900) {
         }
     }
     if (R32(hit + 0x4C)) nf::BloodHit(ctx, R32(who), hit);
+    if (after <= 0) nf::RagdollHit(R32(who), hit);
     uint32_t proj = R32(hit + 0x4C), owner = proj ? R32(proj + 0xBC) : 0;
     int player = PlayerOf(owner ? R32(owner + 0x24) : 0);
     if (player < 0 || PlayerOf(R32(who)) == player) return;  // not a player's shot, or their own
