@@ -150,6 +150,31 @@ void AimDownSights(uint32_t count) {
         SetF(c + kAimSlot, 0);
     }
 }
+// NF_ADS_FIRE=1 (diagnostic): while player 1 aims, its current weapon is fired every 60 frames from its eye straight
+// along its view (the spawner 0x211F0, as a shot), and the bullet's direction logged beside the view's forward
+// direction: a difference is the aim going wrong. Its shots hit whatever is there (no ammo needed).
+void AimFireTest(X86Context& ctx) {
+    static const bool on = [] { const char* e = std::getenv("NF_ADS_FIRE"); return e && *e == '1'; }();
+    static uint32_t frame = 0;
+    if (!on || !g_players[0].aiming || ++frame % 60) return;
+    const uint32_t obj = kernel::R32(0x1F6654), actor = obj ? kernel::R32(obj + kActor) : 0;
+    if (!actor || !R32(obj + kWeaponState)) return;
+    const uint32_t entry = Weapon(obj);
+    const float yaw = GetF(obj + 0x40), pitch = GetF(actor + 0x838) * 1.5707964f;  // (the pitch as the mouse sets it)
+    const float fwd[3] = {std::sin(yaw) * std::cos(pitch), std::sin(pitch), std::cos(yaw) * std::cos(pitch)};
+    static uint32_t vec = mem::AllocHostContiguous(32, 16);
+    const float eye[3] = {GetF(obj + 0x24), GetF(obj + 0x28) + 1.5f, GetF(obj + 0x2C)};
+    std::memcpy(kernel::HostPtr(vec), eye, 12);
+    std::memcpy(kernel::HostPtr(vec + 12), fwd, 12);
+    // the game's own fire (0xBAE50, EAX = the shooter): it makes each shot's origin and direction, and the spawner logs
+    // them (NF_SHOT_TRACE): compare with the view's forward
+    const X86Context saved = ctx;
+    ctx.eax = obj;
+    kernel::CallGuest(ctx, 0xBAE50, {entry});
+    ctx = saved;
+    LOGR("nightfire: ADS fire: the game's fire called; view forward %+.4f %+.4f %+.4f (pitch %.2f deg), eye %.2f %.2f %.2f",
+         fwd[0], fwd[1], fwd[2], pitch * 57.29578f, eye[0], eye[1], eye[2]);
+}
 bool AimingDownSights() { return g_players[0].aiming || g_players[0].t > 0; }
 }  // namespace nf
 

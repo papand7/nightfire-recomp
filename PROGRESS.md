@@ -2,6 +2,16 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-10: aim down sights: shot direction checked (not yet the cause of the misses)
+
+- NF_ADS_FIRE=1 (aim.cpp AimFireTest): while player 1 aims, the game's own fire (0xBAE50) is called every 60 frames.
+  NF_SHOT_TRACE now logs each shot's origin beside its direction and the eye position.
+- Measured at 0 pitch (Exchange, weapon 5, aimed half the time): every shot's direction equals the view's forward
+  (-0.8387 0 -0.5446 both), and its origin equals the camera position (104.954 25.670 108.825). So the shots go along
+  the view centre; the earlier "0.8 m low" idea was wrong (the feet-plus-1.5 eye I had used was not the camera).
+- Not yet tested: aim at a pitch other than 0 (mouse up or down), and whether the sight picture, the view sway and
+  the gun's lag move the picture away from the camera the bullets use. Needs a manual look or the pitch test.
+
 ## 2026-11-10: the online browser (Netplay's Online row)
 
 - The game fetches api.php?a=list&game=nightfire&format=lines (new: one tab-separated line a server) on a background

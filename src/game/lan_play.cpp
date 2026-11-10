@@ -1560,9 +1560,12 @@ X86_FUNC(sub_000211F0) {
         std::memcpy(d, kernel::HostPtr(dir), 12);
         std::memcpy(&yaw, kernel::HostPtr(shooter + 0x40), 4);
         std::memcpy(&pitch, kernel::HostPtr(R32(shooter + 0xBC) + 0x838), 4);
-        LOGR("nightfire: shot: dir %+.4f %+.4f %+.4f (yaw %.2f deg, up %.2f deg), view yaw %.2f deg, pitch %.2f deg",
-             d[0], d[1], d[2], std::atan2(d[0], d[2]) * 57.29578f, std::asin(std::clamp(d[1], -1.0f, 1.0f)) * 57.29578f,
-             yaw * 57.29578f, pitch * 57.29578f);
+        float o[3] = {0, 0, 0};
+        if (origin) std::memcpy(o, kernel::HostPtr(origin), 12);
+        LOGR("nightfire: shot: dir %+.4f %+.4f %+.4f (yaw %.2f deg, up %.2f deg), view yaw %.2f deg, pitch %.2f deg, "
+             "origin %.3f %.3f %.3f, eye %.3f %.3f %.3f", d[0], d[1], d[2], std::atan2(d[0], d[2]) * 57.29578f,
+             std::asin(std::clamp(d[1], -1.0f, 1.0f)) * 57.29578f, yaw * 57.29578f, pitch * 57.29578f, o[0], o[1], o[2],
+             GetF(shooter + kPos), GetF(shooter + kPos + 4) + 1.5f, GetF(shooter + kPos + 8));
     }
     __imp__sub_000211F0(ctx, base);
     nf::ThrowSpawned(entry, ctx.eax);

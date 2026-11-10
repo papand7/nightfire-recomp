@@ -130,6 +130,7 @@ void MouseAsStick();
 float SprintFactor(int player);  // default.xbe: Shift held, a walk's speed times it (src/game/controls.cpp)
 void AimDownSights(uint32_t count);  // default.xbe: after its pad reader (src/game/aim.cpp)
 bool AimingDownSights();  // player 1, or the gun still on its way back
+void AimFireTest(X86Context& ctx);  // NF_ADS_FIRE=1 (diagnostic, src/game/aim.cpp)
 // LAN play from the menus (src/game/lan_play.cpp): hosts found on this network, hosting, joining, leaving
 struct LanServer {
     std::string label;  // "PC - map, players"
