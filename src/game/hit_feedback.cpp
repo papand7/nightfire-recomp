@@ -179,6 +179,11 @@ void BloodHit(X86Context& ctx, uint32_t victim, uint32_t hit) {
         }
     }
     ctx = saved;
+    // blood that stays: a spatter on the surfaces round the hit and a pool under it (the renderer's, kept for a minute and
+    // a half); only for us, never the game's state
+#ifndef XBE_HEADLESS  // the headless harness has no renderer
+    if (visible) gpu::AddBloodStain(pos, normal, 1.0f);
+#endif
     static unsigned logged = 0;
     if (logged++ < 6) LOGR("blood: impact at %.2f %.2f %.2f, %d world particles", pos[0], pos[1], pos[2], made);
 }
