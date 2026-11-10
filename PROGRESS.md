@@ -2,6 +2,18 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-10: performance baseline at Low (The Exchange, this PC)
+
+- `.local/perf_run.py <tag> 07000005` (the menus to The Exchange, 40 s standing, XBE_PERF's log). Low preset
+  (AA, AO, bloom, anisotropic off), Original style, SMAA off: 60 fps (the game's own vblank pacing), about 2,080 draw
+  calls a frame, the frame's own work 2.6-3.0 ms of 16.7 ms (`frame work` line, new in the capped build), GPU frame
+  0.9-1.3 ms, draw submission 3.3-3.8 ms. So at Low this PC is not limited by the frame itself; the cost is the
+  draw-call count (about 2,000 a frame: most are the scenery).
+- Phoenix Base (07000026) by the same route: no level loaded (0 draws), not measured.
+- Diagnostics added (SDK app/main.cpp, main_sdl.cpp, app.h): `frame work: X ms` every 10 s (capped runs), and
+  `NF_UNCAPPED=1` (no pacing; reaching the level needs the menus' timing, so it is not used for numbers yet).
+- Next: batch the scenery's draws (about 2,000 a frame) and measure on a weaker machine, where the frame may be limited.
+
 ## 2026-11-10: LAN play over slow networks: smoother players, reliable hits and deaths, crouch and aim (protocol NFL2)
 
 - What was already there: each copy moves its own players itself (no input delay, nothing to predict or correct) and
