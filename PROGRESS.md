@@ -2677,3 +2677,18 @@ and PGR2's 5659 in Ghidra, re-derive the layout, sign, rescan both xbes; then se
 - Game (`src/game/audio3d.cpp`, called from the 2D-pass hook): 13 rays every 4th frame for the room (roofed and size), 2 rays per 3D voice (6 voices a frame) for walls. DirectSound positions are the world with z negated.
 - Diagnostics: `NF_AUDIO_TRACE=1`, `XBE_AUDIO_RECORD=<file.wav>`, the `dsound:` log line shows room, behind and wall per voice. `.local/a3d_tail.py` compares gun tails. Measured: the room reads indoor 1.0 under the Exchange gate arch, 0 in open snow; the wall rays muffle voices behind the ridge. The reverb itself is not yet confirmed by ear.
 - The game has no F1 window (GameInfo::settings_window false), so the setting is in the menus: More Settings page 2 has "3D Sound" (slot 12) and one "Hit Effects" row (Off, Hurt, Numbers, Both) in place of the two separate rows. Built, not yet seen on screen.
+
+## 2026-11-11: draw-call cost (The Exchange, Low, `.local/perf_run.py`)
+
+- XBE_PERF now splits a draw's CPU time by step. About 2,080 draws a frame, 4.2-5.0 ms in all (machine loaded):
+  assemble 0.6, vertex shader 0.1, textures 0.9, pipeline 0.3, constants 0.6, state 0.7, geometry (vertex copies)
+  0.75 ms. No step dominates: about 2.3 us a draw spread over the whole path.
+- 748 draws a frame (36%) have exactly the previous draw's pipeline, textures, samplers and constants. Their
+  descriptor push is now left out (DrawStateCache::pushed, reset with the rest by ForgetDrawState): 750 pushes a
+  frame fewer, no measurable time saved (a push is cheap).
+- Fixed: without XBE_PERF every draw was still added to perf_seen_, which only LogPerf empties, so it grew for the
+  whole session (memory and rehash hitches). Now only while logging.
+- Caching static meshes still needs a cheap way to know the game has not rewritten them (no write tracking on guest
+  memory); merging the repeated draws into one needs their vertices put together, deferred past the side passes
+  (mask, glow, ray-traced capture) that reuse each draw. Both are larger changes; the frame is not draw-bound here
+  (the render thread works beside the game; GPU about 1 ms).
