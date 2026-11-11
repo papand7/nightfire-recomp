@@ -12,7 +12,8 @@
 // never in it).
 // 17 joints become points that fall (Verlet; the motion they had the frame before carries on), hold their distances
 // (the hips, chest, head, shoulders and hip joints as one piece, the limbs' bones) and stop at the floor the body died
-// on, with friction. The level stops them too: each point's move is traced in the world (the game's ray 0x73F40: out,
+// on, with friction. They are kept in the world, so the body stays where it fell whatever its entity does; the level
+// stops them too: each point's move is traced (the game's ray 0x73F40: out,
 // start, end, the entity passed through ([edict+8]), the mask (solid and player clip), 0, 0; trace_t +4 started inside, +8 the fraction, +0x1C
 // where it stopped, +0x30 the surface's normal), through the model's place in it (the rows at [m+0x170], [m+0x180],
 // [m+0x190], [m+0x1A0] where it stands, [m+0x164] its scale). Which way round those rows turn the model is told by
@@ -21,7 +22,8 @@
 // (Entity::Damage's direction, src/bond/hit_feedback.cpp) pushes the body, the chest most. Each bone is then its kept pose moved
 // as its joint moved: the torso's turned with the frame of its points, each limb bone aimed from its joint at the
 // next, the rest (hands, fingers, toes, the weapon's tag) carried with their parents. A body that lies still (or
-// after 8 s) sleeps: its last pose drawn as it is.
+// after 8 s) sleeps: its last pose drawn as it is, looking under its hips twice a second to fall again if what held
+// it went.
 // AUF_RAGDOLL=0/1 overrides the setting; AUF_RAGDOLL_TEST=1 makes every character go limp after 2 s (to look at
 // without a fight); AUF_RAGDOLL_TRACE=1 logs each body's start and sleep.
 #include "bond/addr.h"
@@ -172,6 +174,9 @@ struct Body {
     V last_t{};  // where the living model stood the frame before (its walk tells the axes)
     bool has_t = false;
     uint32_t rays = 0, hits = 0;
+    float check = 0;  // asleep: time to the next look under it
+    std::array<bool, kNPoints> contact{};  // the plane each point last met
+    std::array<V, kNPoints> plane_at{}, plane_n{};
 };
 std::unordered_map<uint32_t, Body> g_bodies;
 std::unordered_map<uint32_t, Skeleton> g_skeletons;  // by mesh
@@ -301,18 +306,19 @@ void Start(Body& b, const Skeleton& s, uint32_t pose, uint32_t n, const World& w
     b.limp = true, b.asleep = false, b.age = 0, b.still = 0;
     b.kept.resize(n);
     for (uint32_t i = 0; i < n; i++) b.kept[i] = ReadPose(pose + i * 0x20);
+    // the points live in the world: the body stays where it fell whatever its entity does after
     b.floor = 1e9f;
-    for (uint32_t i = 0; i < n; i++) b.floor = std::min(b.floor, b.kept[i].p.z);
+    for (uint32_t i = 0; i < n; i++) b.floor = std::min(b.floor, ToWorld(w, b.kept[i].p).z);
     for (int i = 0; i < kNPoints; i++) {
-        b.p[i] = b.kept[s.bone[kPoints[i]]].p;
-        b.prev[i] = b.has_last ? b.last[i] : b.p[i];
+        b.p[i] = ToWorld(w, b.kept[s.bone[kPoints[i]]].p);
+        b.prev[i] = b.has_last ? ToWorld(w, b.last[i]) : b.p[i];
     }
     for (int i = 0; i < kNPoints; i++)
         for (int j = 0; j < kNPoints; j++) b.rest[i * kNPoints + j] = Len(b.p[i] - b.p[j]);
     b.out = b.kept;
     // the killing shot's push: the chest and head most, the legs least
     if (auto hit = g_hits.find(b.entity); hit != g_hits.end() && dt > 0) {
-        const V push = Unturn(w, hit->second, Axes()) * (kPush / w.s);
+        const V push = hit->second * kPush;
         for (int i = 0; i < kNPoints; i++) {
             const float k = i < 3 ? 1.0f : i < kTorso ? 0.8f : i < 9 ? 0.7f : 0.35f;
             b.prev[i] = b.prev[i] - push * (k * dt);
@@ -338,27 +344,19 @@ int PointOf(Name n) {
     return -1;
 }
 
-void Step(X86Context& ctx, Body& b, float dt, const World& w) {
+void Step(X86Context& ctx, Body& b, float dt) {
     const float g = kGravity * dt * dt;
-    float moved = 0;
+    const std::array<V, kNPoints> before = b.p;  // where the points stood when the step began
     for (int i = 0; i < kNPoints; i++) {
         V v = (b.p[i] - b.prev[i]) * 0.99f;
         b.prev[i] = b.p[i];
         b.p[i] = b.p[i] + v + V{0, 0, -g};
     }
-    for (int it = 0; it < 8; it++) {
-        for (int i = 0; i < kTorso; i++)
-            for (int j = i + 1; j < kTorso; j++) Stick(b, i, j);
-        for (const Limb& l : kLimbs) Stick(b, PointOf(l.from), PointOf(l.to));
-        // the hand and foot keep their distance to the torso a little (elbows and knees fold, not flat through it)
-        for (Name a : {kRHand, kLHand, kRFoot, kLFoot}) Stick(b, PointOf(a), 0, 0.05f);
-        for (int i = 0; i < kNPoints; i++)
-            if (b.p[i].z < b.floor - 300.0f) b.p[i].z = b.floor - 300.0f;  // a last stop, should the level have a hole
-    }
-    // the level: each point's move this step, traced (from a little above when it starts in the ground); a point that met something stays just off it and slides
+    // the level: each point's move this step, traced (from a little above when it starts in the ground); what it
+    // meets becomes its contact, a plane it stays its thickness above while the joints are held together below
     const uint32_t pass = b.edict ? kernel::R32(b.edict + 8) : 1023;
     for (int i = 0; i < kNPoints; i++) {
-        const V from = ToWorld(w, b.prev[i]), move = ToWorld(w, b.p[i]) - from;
+        const V from = b.prev[i], move = b.p[i] - from;
         if (Len(move) < 1e-3f) continue;
         // the ray reaches the point's thickness further along its way down, so it rests on its skin, not its joint
         const V to = from + move + V{0, 0, -kRadius[i]};
@@ -366,17 +364,47 @@ void Step(X86Context& ctx, Body& b, float dt, const World& w) {
         b.rays++;
         // a point that starts in the ground (a foot on it): down to it from a little above instead
         if (h.inside) h = Ray(ctx, to + V{0, 0, 24}, to, pass), b.rays++;
-        if (!h.ok) continue;
-        b.hits++;
-        const V n = Norm(Unturn(w, h.n, Axes()));
-        const V stop = ToModel(w, h.at) + n * (kRadius[i] / w.s);
-        const V slide = b.p[i] - b.prev[i];
-        const V along = slide - n * Dot(slide, n);
-        b.p[i] = stop;
-        b.prev[i] = stop - along * 0.25f;  // friction
+        if (h.ok) {
+            b.hits++;
+            b.contact[i] = true, b.plane_at[i] = h.at, b.plane_n[i] = h.n;
+        } else if (b.contact[i] && Dot(b.p[i] - b.plane_at[i], b.plane_n[i]) > kRadius[i] * 2) {
+            b.contact[i] = false;  // left it
+        }
     }
-    for (int i = 0; i < kNPoints; i++) moved = std::max(moved, Len(b.p[i] - b.prev[i]));
-    b.still = moved < 0.02f ? b.still + dt : 0;
+    auto keep_off = [&](int i) {
+        if (!b.contact[i]) return;
+        const float d = Dot(b.p[i] - b.plane_at[i], b.plane_n[i]) - kRadius[i];
+        if (d < 0) b.p[i] = b.p[i] - b.plane_n[i] * d;
+    };
+    for (int it = 0; it < 8; it++) {
+        for (int i = 0; i < kTorso; i++)
+            for (int j = i + 1; j < kTorso; j++) Stick(b, i, j);
+        for (const Limb& l : kLimbs) Stick(b, PointOf(l.from), PointOf(l.to));
+        // the hand and foot keep their distance to the torso a little (elbows and knees fold, not flat through it)
+        for (Name a : {kRHand, kLHand, kRFoot, kLFoot}) Stick(b, PointOf(a), 0, 0.05f);
+        for (int i = 0; i < kNPoints; i++) {
+            keep_off(i);
+            if (b.p[i].z < b.floor - 300.0f) b.p[i].z = b.floor - 300.0f;  // a last stop, should the level have a hole
+        }
+    }
+    // friction: what slides along a contact keeps only part of it
+    int resting = 0;
+    for (int i = 0; i < kNPoints; i++) {
+        if (!b.contact[i] || Dot(b.p[i] - b.plane_at[i], b.plane_n[i]) > kRadius[i] + 0.5f) continue;
+        const V n = b.plane_n[i], slide = b.p[i] - b.prev[i];
+        b.prev[i] = b.p[i] - (slide - n * Dot(slide, n)) * 0.25f;
+        resting += n.z > 0.5f;
+    }
+    // the step's real movement; a body whose points barely move rests
+    float moved = 0;
+    for (int i = 0; i < kNPoints; i++) moved = std::max(moved, Len(b.p[i] - before[i]) / std::max(dt, 1e-3f));
+    b.still = moved < 4.0f ? b.still + dt : 0;  // under 4 units a second
+    if (Trace() && int(b.age + dt) != int(b.age)) {
+        int fast = 0;
+        for (int i = 1; i < kNPoints; i++)
+            if (Len(b.p[i] - before[i]) > Len(b.p[fast] - before[fast])) fast = i;
+        LOGR("ragdoll: at %.0f s the fastest point %d at %.1f units a second, %d resting", b.age, fast, moved, resting);
+    }
     b.age += dt;
     if ((b.still > 0.6f && b.age > 1.0f) || b.age > 8.0f) {
         b.asleep = true;
@@ -396,15 +424,17 @@ void Frame(const std::array<V, kNPoints>& p, V& a, V& bb, V& c) {
     bb = Cross(c, a);
 }
 
-void Drive(Body& b, const Skeleton& s) {
+void Drive(Body& b, const Skeleton& s, const World& w) {
     const size_t n = b.kept.size();
+    std::array<V, kNPoints> pm;  // the points where the model is now
+    for (int i = 0; i < kNPoints; i++) pm[i] = ToModel(w, b.p[i]);
     std::array<V, kNPoints> p0;
     for (int i = 0; i < kNPoints; i++) p0[i] = b.kept[s.bone[kPoints[i]]].p;
     V a0, b0, c0, a1, b1, c1;
     Frame(p0, a0, b0, c0);
-    Frame(b.p, a1, b1, c1);
+    Frame(pm, a1, b1, c1);
     const Q torso = Mul(FromFrame(a1, b1, c1), Conj(FromFrame(a0, b0, c0)));
-    const V hip0 = p0[0], hip1 = b.p[0];
+    const V hip0 = p0[0], hip1 = pm[0];
     std::vector<int> done(n, 0);  // 0 not yet, 1 placed
     auto place = [&](int bone, const Pose& to) {
         b.out[bone] = to;
@@ -418,8 +448,8 @@ void Drive(Body& b, const Skeleton& s) {
     for (const Limb& l : kLimbs) {
         const int bone = s.bone[l.bone], i = PointOf(l.from), j = PointOf(l.to);
         const Pose& was = b.kept[bone];
-        const Q turn = Mul(Arc(Rot(torso, p0[j] - p0[i]), b.p[j] - b.p[i]), torso);
-        place(bone, {b.p[i], Normalize(Mul(turn, was.q))});
+        const Q turn = Mul(Arc(Rot(torso, p0[j] - p0[i]), pm[j] - pm[i]), torso);
+        place(bone, {pm[i], Normalize(Mul(turn, was.q))});
     }
     // the rest with their parents, parents first
     for (int pass = 0; pass < 16; pass++) {
@@ -499,12 +529,25 @@ X86_FUNC(sub_00146D60) {
                 }
         Start(b, s, pose, n, w, dt);
     }
+    if (new_frame && b.asleep && !auf::MenuUp() && (b.check -= dt) <= 0) {
+        // asleep on something that went (a vehicle, a crate moved): nothing under the hips, it falls again
+        b.check = 0.5f;
+        const X86Context saved = ctx;
+        const uint32_t pass = b.edict ? kernel::R32(b.edict + 8) : 1023;
+        const Hit under = Ray(ctx, b.p[0], b.p[0] + V{0, 0, -kRadius[0] * 3}, pass);
+        ctx = saved;
+        if (!under.ok && !under.inside) {
+            b.asleep = false, b.still = 0, b.age = std::min(b.age, 4.0f);
+            b.contact.fill(false);
+            if (Trace()) LOGR("ragdoll: nothing under a body: it wakes");
+        }
+    }
     if (new_frame && !b.asleep && !auf::MenuUp() && dt > 0) {
         const X86Context saved = ctx;  // the rays call into the game
-        Step(ctx, b, dt, w);
+        Step(ctx, b, dt);
         ctx = saved;
-        Drive(b, s);
     }
+    if (new_frame) Drive(b, s, w);  // every frame, asleep too: the model may move under the body
     // the ragdoll's pose for the skinning only, the game's back after it
     std::vector<uint8_t> game(n * 0x20);
     std::memcpy(game.data(), &kernel::G<uint8_t>(pose), game.size());

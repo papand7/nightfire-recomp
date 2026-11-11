@@ -44,7 +44,10 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
   (-21.8), the other rests on the ledge (+1.9); before, one fell through.
 - The killing shot: Entity::Damage's direction ([esp+0x14]) is kept per victim (RagdollNoteHit) and pushes the body,
   the chest most (160 units a second). Not seen yet: no kill reached in a test.
-- Bodies still settle only at the 8 s limit (a little jitter on the ground).
+- Settling: the points now live in the world (the body stays where it fell whatever its entity does after); what a
+  ray meets is kept as a contact plane, held inside the constraint loop with no more rays (the rigid torso no longer
+  pushes points back into the floor each frame), with friction along it. Bodies rest in about 2 s, not 8. A sleeping
+  body looks under its hips twice a second and falls again when what held it went (a vehicle).
 
 ### 2026-11-11 - Aim down sights, weapon sway, hit feedback, ragdolls (bond_eng.xbe)
 - src/bond/aim.cpp: the left trigger (right mouse) with a gun that has no scope no longer starts manual aim (bit 0x1000
