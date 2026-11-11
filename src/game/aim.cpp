@@ -383,14 +383,14 @@ void SightTunerFrame(X86Context& ctx, uint32_t obj, int held) {
         if (input::KeyDown(0x28)) g_tune[held][1] -= step;  // down
         if (input::KeyDown(0x24)) g_tune[held][2] -= step;  // Home: nearer (seen: + is farther)
         if (input::KeyDown(0x23)) g_tune[held][2] += step;  // End: farther
-        // the turns: 0.1 degree a frame (Shift 0.02). [ ] about the up axis, ; ' up and down, - = the roll
+        // the turns: 0.1 degree a frame (Shift 0.02). J L about the up axis, I K up and down, U O the roll
         const float turn = (input::KeyDown(0x10) ? 0.02f : 0.1f) * kDeg;
-        if (input::KeyDown(0xDB)) g_tune[held][3] -= turn;
-        if (input::KeyDown(0xDD)) g_tune[held][3] += turn;
-        if (input::KeyDown(0xBA)) g_tune[held][4] -= turn;
-        if (input::KeyDown(0xDE)) g_tune[held][4] += turn;
-        if (input::KeyDown(0xBD)) g_tune[held][5] -= turn;
-        if (input::KeyDown(0xBB)) g_tune[held][5] += turn;
+        if (input::KeyDown('J')) g_tune[held][3] -= turn;
+        if (input::KeyDown('L')) g_tune[held][3] += turn;
+        if (input::KeyDown('I')) g_tune[held][4] -= turn;
+        if (input::KeyDown('K')) g_tune[held][4] += turn;
+        if (input::KeyDown('U')) g_tune[held][5] -= turn;
+        if (input::KeyDown('O')) g_tune[held][5] += turn;
         if (pressed(3)) for (float& v : g_tune[held]) v = 0;
     }
     if (pressed(2)) {
@@ -411,8 +411,8 @@ void SightTunerUi() {
     std::snprintf(line, sizeof line,
                   "SIGHT TUNER  weapon %d   left/right %+.1f mm   up/down %+.1f mm   farther %+.1f mm   "
                   "turn %+.2f   tilt %+.2f   roll %+.2f deg\n"
-                  ", and . pick any weapon (the variants too)   Arrows move   Home/End nearer/farther   [ ] turn   ; ' tilt   "
-                  "- = roll   (Shift finer)   Enter save all   Delete reset\n"
+                  ", and . pick any weapon (the variants too)   Arrows move   Home/End nearer/farther   J L turn   I K tilt   "
+                  "U O roll   (Shift finer)   Enter save all   Delete reset\n"
                   "Put the sights on the red dot: that is where the shots go.%s",
                   w, g_tune[w][0] * 1000, g_tune[w][1] * 1000, g_tune[w][2] * 1000, g_tune[w][3] / kDeg,
                   g_tune[w][4] / kDeg, g_tune[w][5] / kDeg,
