@@ -4,10 +4,10 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Status
 - Vulkan port: SDK branch vulkan-port (9dbcdf3) contains NightFire's Vulkan backend adapted as the only host renderer; DX renderer sources, interfaces, fallback, and libraries are excluded. This checkout has no game assets, so it has not been built or Windows-smoke-tested.
-- Vulkan visual port: SDK branch `visual-port` has FXAA, gamma, scaling, sharpening, anisotropic filtering, texture replacement, SMAA 1x, PNG texture packs/dumps (2e5d161), Retro/Noir color grades (ea96fec), SDR bloom (349fd1d), and vignette/animated film grain (b569525).
-  - Present in Agent Under Fire: FXAA, SMAA, render scaling/filtering, sharpening, gamma, anisotropic filtering, texture replacement, Retro/Noir grade, SDR bloom, vignette and film grain. Vulkan MSAA is unsupported.
-  - Still to adapt in the shared renderer: Enhanced/Toon scene treatment, temporal AA/upscalers, HDR tone mapping and multilevel HDR bloom, motion blur and depth of field. These need renderer-owned passes and checks against this game's output.
-  - Game-data dependent, not portable as-is: toon/outline styles, AO/contact shadows, ray-traced/global illumination, reflections/water, light shafts, muzzle/fire lighting, fog, snow/footprints, particles and persistent blood. Nightfire's versions depend on its depth, lights, materials, weather and game hooks; identify Agent Under Fire equivalents before implementation.
+- Vulkan visual port: SDK branch `visual-port` has FXAA, gamma, scaling, sharpening, anisotropic filtering, texture replacement, SMAA 1x, PNG texture packs/dumps (2e5d161), five screen-space styles (0b65310), SDR bloom (349fd1d), vignette and animated film grain (b569525).
+  - Present in Agent Under Fire: FXAA, SMAA, render scaling/filtering, sharpening, gamma, anisotropic filtering, texture replacement, Enhanced Color, screen-space Toon, Retro, Noir, SDR bloom, vignette and film grain. Vulkan MSAA is unsupported.
+  - Still to adapt in the shared renderer: temporal AA/upscalers, HDR tone mapping and multilevel HDR bloom, motion blur and depth of field. These need renderer-owned passes and checks against this game's output.
+  - Game-data dependent: the full ray-traced Enhanced look and depth/normal-aware Toon outlines, AO/contact shadows, global illumination, reflections/water, light shafts, muzzle/fire lighting, fog, snow/footprints, particles and persistent blood. Nightfire's versions depend on its depth, lights, materials, weather and game hooks; identify Agent Under Fire equivalents before implementation.
   Not built or Windows-smoke-tested; this checkout has no game assets.
 - Milestone: 1 - plays headless. default.xbe's movies, START, bond_eng.xbe's title, menus, briefing and first mission;
   DRIVING.XBE's five levels and back. No trap in 200 s of the first mission. On Windows the first mission plays to its end; Harry (2026-10-30, D3D12): plays with the driving fix, no obvious visual bugs on a first look.
@@ -28,6 +28,11 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Every library 1.0.4039. Sections include a DSOUND section though the library table does not list it.
 
 ## Log
+
+### 2026-11-11 - Enhanced Color and screen-space Toon styles added
+- Expanded the F1 style selector to Enhanced Color, Toon (Screen), Retro and Noir. Enhanced Color adjusts contrast/saturation; Toon posterizes brightness and outlines neighboring color changes. These do not port Nightfire's ray-traced lighting or geometry-aware Toon edges.
+- SDK commit: 0b65310. `git -C sdk diff --check` passes. No build or visual check: this checkout has no game assets.
+- Next: continue with remaining renderer-owned temporal/HDR effects, then inspect Agent Under Fire scene data for the game-dependent features.
 
 ### 2026-11-11 - Vignette and animated film grain added
 - Added optional vignette and film-grain controls to the Vulkan finished-frame pass and persisted them in graphics settings. The grain phase changes each presented frame. Strength is quantized to 64 steps in the packed pass settings.
