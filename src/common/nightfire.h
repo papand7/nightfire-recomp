@@ -78,7 +78,9 @@ std::vector<OnlineServer> OnlineServers();
 bool OnlineSearching();
 void TeleportTest();                              // NF_TELEPORT_AHEAD=m (diagnostic): player 1 moved that far ahead, once
 bool CollectingTextures();                        // NF_COLLECT_TEXTURES=1 (src/game/texture_collect.cpp)
-void CollectTextures(X86Context& ctx);            // the pads' frame: the level files' textures dumped
+void CollectTextures(X86Context& ctx);            // the pads' frame: the level files' textures, then the movies, dumped
+void CollectMovieFrame(uint32_t header);          // texture_bound: a collected movie's frame dumped (menu_colors.cpp)
+extern const char* collect_movie;                 // the movie being collected (texture_collect.cpp), else null
 void NoteMainMenu();                              // the pads' frame: the main menu seen (src/game/start.cpp)
 bool CanChangeMovement();
 bool NetGuest();
@@ -118,6 +120,8 @@ float FovScale();             // fov_percent as a factor, 0.5 to 1.5
 // a menu has the controller (each exe's hooks.cpp): the mouse then plays A, B and the d-pad (MenuMouse)
 bool MenuUp();
 bool MenuMovie(uint32_t header);  // menu_colors: the background movies blue (src/common/menu_colors.cpp)
+uint32_t MenuMovieMode();         // what MenuMovie last did to a frame: 0 nothing, 1 blue, 3 blue with Bond kept
+void RecolorMovie(uint32_t* bgra, uint32_t w, uint32_t h, uint32_t mode);  // the same on a movie pack's picture
 // the menu up's widgets as its menu file lays them out (640 x 480, the console's 2D) and the one focused, for the
 // mouse (default.xbe: src/game/pc_settings_item.cpp; Driving.xbe's EA menus have none: false)
 struct MenuWidget {

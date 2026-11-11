@@ -18,6 +18,7 @@
 
 #include "app/app.h"
 #include "core/log.h"
+#include "gpu/movie_pack.h"
 #include "gpu/texture.h"
 #include "common/nightfire.h"
 #include "kernel/kernel.h"
@@ -43,22 +44,45 @@ float Smooth(float a, float b, float x) {
     return t * t * (3 - 2 * t);
 }
 
+// chroma about the grey (u, v: Cb and Cr less 128), `amount` of the way to blue; false when it is not warm
+bool TurnUV(float& u, float& v, float amount) {
+    if (v <= 0 || u >= v * 0.4f) return false;  // not warm: already blue or grey
+    float c = std::cos(kTurn) * kKeep, s = std::sin(kTurn) * kKeep;
+    float nu = u * c - v * s, nv = u * s + v * c;
+    u += (nu - u) * amount, v += (nv - v) * amount;
+    return true;
+}
+
 // a YUY2 pair's chroma (bytes 1 and 3), `amount` of the way to blue
 void Turn(uint8_t* uv, float amount) {
     float u = uv[0] - 128.0f, v = uv[2] - 128.0f;
-    if (v <= 0 || u >= v * 0.4f) return;  // not warm: already blue or grey
-    float c = std::cos(kTurn) * kKeep, s = std::sin(kTurn) * kKeep;
-    float nu = u * c - v * s, nv = u * s + v * c;
-    nu = u + (nu - u) * amount, nv = v + (nv - v) * amount;
-    uv[0] = uint8_t(std::clamp(nu + 128.5f, 0.0f, 255.0f));
-    uv[2] = uint8_t(std::clamp(nv + 128.5f, 0.0f, 255.0f));
+    if (!TurnUV(u, v, amount)) return;
+    uv[0] = uint8_t(std::clamp(u + 128.5f, 0.0f, 255.0f));
+    uv[2] = uint8_t(std::clamp(v + 128.5f, 0.0f, 255.0f));
 }
+
+// how far a pixel of the main menu's movie turns (movie pixels x, y; its chroma u, v): Bond keeps his colours, only
+// the strong orange behind him turns
+float BondAmount(float x, float y, float u, float v) {
+    if (y >= kBondBottom) return 1;
+    float in = Smooth(float(kBondX - kBondEdge), float(kBondX), x) * (1 - Smooth(float(kBondRight), float(kBondRight + kBondEdge), x));
+    // the wooden column behind his head (right of his face, above his hand) turned all the same
+    in *= 1 - Smooth(484, 494, x) * (1 - Smooth(562, 572, x)) * (1 - Smooth(218, 232, y));
+    if (in <= 0) return 1;
+    return 1 - in * (1 - Smooth(50, 62, std::sqrt(u * u + v * v)));
+}
+
+// the recolouring MenuMovie would do now: 0 none, 1 blue, 3 blue with Bond kept (the main menu)
+uint32_t g_mode = 0;
 }  // namespace
 
 namespace nf {
+const char* collect_movie = nullptr;
 
 // GameInfo::texture_bound: true when the movie's texels were changed
 bool MenuMovie(uint32_t header) {
+    g_mode = 0;
+    if (collect_movie) return false;  // the movie pack collects the game's own colours
     if ((!app::Get().menu_colors && !modern_menus) || !MenuUp()) return false;  // the modern menus are blue always
     uint32_t format = kernel::R32(header + 12), size = kernel::R32(header + 16);
     if ((format >> 8 & 0xFF) != kYuy2 || !size || (size & 0xFFF) + 1 != kWidth || (size >> 12 & 0xFFF) + 1 != kHeight)
@@ -67,31 +91,53 @@ bool MenuMovie(uint32_t header) {
     if (pitch < kWidth * 2 || !mem::IsCommitted(data) || !mem::IsCommitted(data + pitch * kHeight - 1)) return false;
     auto* bytes = static_cast<uint8_t*>(kernel::HostPtr(data));
     auto done = g_done.find(data);
-    if (done != g_done.end() && done->second == Sum(bytes, pitch * kHeight)) return false;
+    if (done != g_done.end() && done->second == Sum(bytes, pitch * kHeight)) {
+        uint32_t page = 0, focused = 0;
+        std::vector<MenuWidget> widgets;
+        g_mode = !kDriving && MenuGeometry(page, widgets, focused) && page == kMainMenu ? 3 : 1;
+        return false;
+    }
     uint32_t page = 0, focused = 0;
     std::vector<MenuWidget> widgets;
     bool bond = !kDriving && MenuGeometry(page, widgets, focused) && page == kMainMenu;
+    g_mode = bond ? 3 : 1;
     for (uint32_t y = 0; y < kHeight; y++) {
         uint8_t* row = bytes + y * pitch;
         for (uint32_t x = 0; x < kWidth; x += 2) {
             uint8_t* p = row + x * 2;
-            float amount = 1;
-            if (bond && y < kBondBottom) {
-                float in = Smooth(float(kBondX - kBondEdge), float(kBondX), float(x)) *
-                           (1 - Smooth(float(kBondRight), float(kBondRight + kBondEdge), float(x)));
-                // the wooden column behind his head (right of his face, above his hand) turned all the same
-                in *= 1 - Smooth(484, 494, float(x)) * (1 - Smooth(562, 572, float(x))) * (1 - Smooth(218, 232, float(y)));
-                if (in > 0) {  // Bond's side: the background's strong orange only
-                    float u = p[1] - 128.0f, v = p[3] - 128.0f;
-                    amount = 1 - in * (1 - Smooth(50, 62, std::sqrt(u * u + v * v)));
-                }
-            }
+            const float amount = bond ? BondAmount(float(x), float(y), p[1] - 128.0f, p[3] - 128.0f) : 1.0f;
             if (amount > 0) Turn(p + 1, amount);
         }
     }
     g_done[data] = Sum(bytes, pitch * kHeight);
     return true;
 }
+uint32_t MenuMovieMode() { return g_mode; }
+
+void CollectMovieFrame(uint32_t header) {
+    if (collect_movie) gpu::MovieCollect(header, collect_movie);
+}
+
+// an upscaled frame of a movie pack (gpu::MovieShow) turned as MenuMovie turned the game's: each pixel to Cb and Cr
+// (BT.601 studio range, as the renderers decode YUY2), turned, and back; Bond's place scaled from the 640 x 480 frame
+void RecolorMovie(uint32_t* bgra, uint32_t w, uint32_t h, uint32_t mode) {
+    if (!(mode & 1) || !w || !h) return;
+    const bool bond = mode & 2;
+    const float sx = float(kWidth) / float(w), sy = float(kHeight) / float(h);
+    for (uint32_t y = 0; y < h; y++)
+        for (uint32_t x = 0; x < w; x++) {
+            uint32_t& c = bgra[size_t(y) * w + x];
+            const float b = float(c & 0xFF), g = float(c >> 8 & 0xFF), r = float(c >> 16 & 0xFF);
+            const float Y = 16 + (65.738f * r + 129.057f * g + 25.064f * b) / 256;
+            float u = (-37.945f * r - 74.494f * g + 112.439f * b) / 256, v = (112.439f * r - 94.154f * g - 18.285f * b) / 256;
+            const float amount = bond ? BondAmount(float(x) * sx, float(y) * sy, u, v) : 1.0f;
+            if (amount <= 0 || !TurnUV(u, v, amount)) continue;
+            const float k = 1.164383f * (Y - 16);
+            auto u8 = [](float f) { return uint32_t(std::clamp(f + 0.5f, 0.0f, 255.0f)); };
+            c = (c & 0xFF000000u) | u8(k + 1.596027f * v) << 16 | u8(k - 0.391762f * u - 0.812968f * v) << 8 | u8(k + 2.017232f * u);
+        }
+}
+
 // NF_TITLE_LOG=1: the big pictures bound while a menu is up, logged once each (to find the title screen's)
 void TitleLog(uint32_t header) {
     static const bool on = std::getenv("NF_TITLE_LOG") != nullptr;

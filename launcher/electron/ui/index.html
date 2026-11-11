@@ -117,7 +117,8 @@
     <section id="page-textures" class="page">
       <div class="page-head"><h2>HD Textures</h2></div>
       <p class="lead">An HD texture pack is made on this PC from your copy of the game: each texture is upscaled 4x by
-        Real-ESRGAN on your GPU, with normal and height maps for the PBR materials and relief if you choose them.</p>
+        Real-ESRGAN on your GPU, with normal and height maps for the PBR materials and relief if you choose them. The
+        menus' background movies are upscaled 2x with them, frame by frame.</p>
       <div class="grid">
         <div class="card">
           <div class="card-head"><span class="num">01</span> Collect the textures</div>
@@ -125,8 +126,8 @@
             <p class="muted">The game saves each texture it draws while this is on. Play the levels you want in HD, then
               turn it off.</p>
             <p class="muted">Or collect them all at once: the game starts, reads every mission and multiplayer map
-              from your disc, saves their textures and closes by itself (about half a minute). Leave its window alone
-              until it closes.</p>
+              from your disc and saves their textures, then plays the eight menu movies once each and saves their
+              frames, and closes by itself (about nine minutes). Leave its window alone until it closes.</p>
             <div id="collect-msg" class="msg"></div>
             <div class="row"><button class="btn" id="btn-collect">Collect all textures now</button></div>
             <label class="switch-row"><span>Save the game's textures while playing</span><input type="checkbox" class="switch" id="dump"></label>
@@ -135,6 +136,12 @@
               <div><b id="n-pack">0</b><span>in the HD pack</span></div>
               <div><b id="n-maps">0</b><span>with PBR maps</span></div>
             </div>
+            <div class="stats">
+              <div><b id="n-mdumped">0</b><span>movie frames collected</span></div>
+              <div><b id="n-mpack">0</b><span>movie frames in the pack</span></div>
+            </div>
+            <p class="muted">The movie frames take a few hours on the GPU (about a second each, some 14,000 of them) and
+              about 3 GB. Making the pack can be stopped and started again: what is done stays done.</p>
           </div>
         </div>
         <div class="card">

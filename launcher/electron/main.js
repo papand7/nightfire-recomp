@@ -173,9 +173,15 @@ ipcMain.handle('settings:save', async (_, patch) => {
 function countPng(dir, filter) {
     try { return fs.readdirSync(dir).filter(n => /\.png$/i.test(n) && (!filter || filter(n))).length; } catch { return 0; }
 }
+function countFiles(dir, re) {
+    try { return fs.readdirSync(dir).filter(n => re.test(n)).length; } catch { return 0; }
+}
 ipcMain.handle('textures:info', async () => {
-    const dir = playDir(), tex = path.join(dir, 'mods', 'textures');
+    const dir = playDir(), tex = path.join(dir, 'mods', 'textures'), mov = path.join(dir, 'mods', 'movies');
     return {
+        // the menu movies' frames (the same Collect and hd_pack run): collected, and upscaled into the pack
+        movieDumped: countFiles(path.join(mov, 'dump'), /^[0-9a-f]{16}\.png$/i),
+        moviePack: countFiles(mov, /^[0-9a-f]{16}\.jpg$/i),
         dumped: countPng(path.join(tex, 'dump')),
         pack: countPng(tex, n => !/_(n|r)\.png$/i.test(n)),
         maps: countPng(tex, n => /_n\.png$/i.test(n)),
@@ -202,8 +208,8 @@ ipcMain.handle('textures:run', async (_, o) => {
     return { ok: true };
 });
 ipcMain.handle('textures:cancel', async () => { if (pack) pack.kill(); if (collect) collect.kill(); });
-// the game started with NF_COLLECT_TEXTURES=1 reads its level files and saves every texture in them, then quits (about
-// half a minute; nothing to play)
+// the game started with NF_COLLECT_TEXTURES=1 reads its level files and saves every texture in them, then plays the
+// eight menu movies once each and saves their frames, then quits (about nine minutes; nothing to play)
 ipcMain.handle('textures:collect', async () => {
     if (collect || pack) return { ok: false, message: 'Another texture job is running.' };
     if (await gameRunning()) return { ok: false, message: 'Close the game first.' };

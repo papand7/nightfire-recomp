@@ -10,6 +10,8 @@
 #include <toml++/toml.hpp>
 #endif
 
+#include "gpu/movie_pack.h"
+#include "kernel/kernel.h"
 #include "app/app.h"
 #include "core/input.h"
 #include "core/log.h"
@@ -98,9 +100,11 @@ void Init() {
 }
 
 // skip_intro: default.xbe's EA (07370048) and MGM (07380048) logo movies reported missing, which the game passes
-// over; the language select's background (07350048) and the story's movies stay
+// over; the language select's background (07350048) and the story's movies stay. Not while collecting (the movie
+// pack takes them too)
 bool HideFile(const std::string& path) {
-    if (!nf::skip_intro) return false;
+    static const bool collecting = std::getenv("NF_COLLECT_TEXTURES") != nullptr;
+    if (!nf::skip_intro || collecting) return false;
     std::string n;
     for (char c : path) n += char(std::tolower(static_cast<unsigned char>(c)));
     for (const char* logo : {"\\25_fps\\07370048.xmv", "\\25_fps\\07380048.xmv",   // PAL
@@ -219,10 +223,18 @@ constexpr void (*SaveKeys)(void*) = nullptr;
 }  // namespace
 
 // GameInfo::texture_bound: the fonts (src/common/fonts.cpp), the button pictures (src/common/buttons.cpp)
+// The menu movies (YUY2 frames): collected for the HD pack, or shown from it (gpu::MovieShow, recoloured as MenuMovie
+// recolours the game's frame)
 bool TextureBound(uint32_t header, uint32_t palette) {
     nf::FontPicture(header);
     nf::TitleLog(header);
-    if (nf::MenuMovie(header) || nf::TitlePicture(header)) return true;
+    const bool yuy2 = header && (kernel::R32(header + 12) >> 8 & 0xFF) == 0x24;
+    if (yuy2) nf::CollectMovieFrame(header);
+    static const bool collecting = std::getenv("NF_COLLECT_TEXTURES") != nullptr;
+    const uint64_t movie = yuy2 && !collecting ? gpu::MovieKey(header) : 0;  // before MenuMovie turns it
+    const bool turned = nf::MenuMovie(header);
+    if (movie) gpu::MovieShow(header, movie, nf::MenuMovieMode(), nf::RecolorMovie);
+    if (turned || nf::TitlePicture(header)) return true;
     return nf::ButtonPictures(header, palette);
 }
 

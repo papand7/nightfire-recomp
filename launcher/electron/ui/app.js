@@ -378,6 +378,8 @@ async function loadTextures() {
     $('n-dumped').textContent = info.dumped;
     $('n-pack').textContent = info.pack;
     $('n-maps').textContent = info.maps;
+    $('n-mdumped').textContent = info.movieDumped;
+    $('n-mpack').textContent = info.moviePack;
     const gr = f.graphics;
     $('dump').checked = !!gr.dump_textures;
     $('use-pack').checked = gr.texture_pack !== false;
@@ -385,13 +387,13 @@ async function loadTextures() {
     $('btn-collect').disabled = !info.game || info.collecting || info.running;
     $('btn-collect').textContent = info.collecting ? 'Collecting...' : 'Collect all textures now';
     const ready = info.tool && !info.running && !info.collecting;
-    $('btn-pack').disabled = !ready || !info.dumped;
+    $('btn-pack').disabled = !ready || (!info.dumped && !info.movieDumped);
     $('btn-pack').hidden = info.running;
     $('btn-pack-stop').hidden = !info.running;
     $('pack-progress').hidden = !info.running;
     $('btn-pack-folder').onclick = () => nf.open(info.folder);
     if (!info.tool) setMsg($('pack-msg'), 'Install the game first: the pack maker comes with it.', false);
-    else if (!info.dumped && !info.running) setMsg($('pack-msg'), 'Nothing collected yet: press Collect all textures now, or turn on saving the textures and play.', false);
+    else if (!info.dumped && !info.movieDumped && !info.running) setMsg($('pack-msg'), 'Nothing collected yet: press Collect all textures now, or turn on saving the textures and play.', false);
     else if (!info.running && $('pack-msg').classList.contains('bad')) setMsg($('pack-msg'), '');
 }
 async function saveGraphics(patch, text) {
@@ -423,7 +425,7 @@ $('btn-collect').onclick = async () => {
     loadTextures();
 };
 nf.onCollect(ev => {
-    setMsg($('collect-msg'), ev.code === 0 ? 'Done: the textures are collected. Now make the pack below.' : `The game stopped before it finished (exit ${ev.code}).`, ev.code === 0);
+    setMsg($('collect-msg'), ev.code === 0 ? 'Done: the textures and movie frames are collected. Now make the pack below.' : `The game stopped before it finished (exit ${ev.code}).`, ev.code === 0);
     loadTextures();
 });
 nf.onPack(ev => {

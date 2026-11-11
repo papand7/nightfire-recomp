@@ -2698,3 +2698,24 @@ and PGR2's 5659 in Ghidra, re-derive the layout, sign, rescan both xbes; then se
   copy it saves. The render thread gets the State as deltas (render_thread.cpp Op::State), so "state unchanged since
   the last draw" is cheap to know there, but a draw's pipeline, sky, mask, glow and displacement steps all read its
   vertices, so skipping them for a repeated draw is a rewrite of Draw() (about 400 lines), not a fast path.
+
+## 2026-11-11: AI-upscaled menu movies, made with the HD texture pack
+
+- Collect (`NF_COLLECT_TEXTURES=1`, the launcher's Collect button): after the level files, the front end's eight
+  movies (EA and MGM logos 07370048/07380048, menus 07330048, 07350048, 07390048, 073a0048, 073b0048, 073f0048) are
+  played once each through the game's own player, `0xDCCD0(id, flag, volume)` (it formats `%08x.xmv` at 0x161D84;
+  `[0x2AE288]` is the id playing, 0 once it ends). Every frame bound (texture_bound, YUY2) is saved by
+  `gpu::MovieCollect` to `mods/movies/dump/<key>.png` (key = TextureKey, as texture packs) with `<movie>.txt` its order;
+  a writer thread encodes, so the player's timing is not disturbed. MenuMovie's recolouring and skip_intro's hiding of
+  the logos are off while collecting. Measured: 490 s, 12,183 distinct frames (13,989 shown, 30 a second), 3.5 GB.
+- hd_pack: after the textures, `mods/movies/dump/*.png` are upscaled 4x by Real-ESRGAN x4plus, halved to 1280x960 and
+  written as `mods/movies/<key>.jpg` (q90, new `app::EncodeJpeg`), 100 frames a batch (hard links into the work
+  folder); each collected frame is deleted once written. x4plus: 1.3 s a frame on an RTX 5060 (about 5 hours for all);
+  realesr-animevideov3 gave all-black frames on this GPU, so it is not used.
+- Runtime (`sdk/runtime/gpu/movie_pack.cpp`, with GraphicsStyle::texture_pack): TextureBound hashes a YUY2 frame before
+  MenuMovie recolours it, and `MovieShow` sets the pack's picture as the texture's replacement (single level, quiet:
+  `Replacement::movie`), read 12 frames ahead on two worker threads in the movie's order and recoloured as MenuMovie
+  recolours the game's (`nf::RecolorMovie`, the same turn and Bond mask in BGRA). Measured with a stand-in pack:
+  1,795 of 1,800 frames came from the pack (the misses: a movie's first frames).
+- Launcher: the HD Textures page counts the movie frames collected and in the pack; Collect takes about nine minutes.
+- Not yet: the Android package does not carry mods/movies.
