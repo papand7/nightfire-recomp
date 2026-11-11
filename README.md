@@ -9,6 +9,13 @@ wheel support. Everything is set from the game's own menus. For **Windows**, wit
 *The Exchange in each look: Original, Enhanced with ray traced lighting, Toon and Noir.*
 
 <table>
+<tr><td><img src="docs/images/gameplay-current.webp" alt="NightFire gameplay in a snowy mountain fortress"></td>
+<td><img src="docs/images/aim-down-sights.webp" alt="Aiming through the pistol's iron sights"></td></tr>
+</table>
+
+*Fresh gameplay captures: a snowy fortress and per-weapon aim-down-sights.*
+
+<table>
 <tr><th>Original</th><th>Remastered</th></tr>
 <tr><td><img src="docs/images/exchange_original.jpg" alt="The Exchange, Original"></td>
 <td><img src="docs/images/exchange_remastered.jpg" alt="The Exchange, Remastered"></td></tr>
