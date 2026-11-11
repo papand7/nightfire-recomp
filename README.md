@@ -123,11 +123,11 @@ The **NightFire PC Launcher** sets everything up:
 - **Your music:** a folder of your songs becomes the game's soundtrack.
 
 **Download** it from the [latest release](https://github.com/papand7/nightfire-recomp/releases/latest):
-- **Windows:** `NightFireLauncher.exe`. Just run it.
-- **Linux (beta):** `NightFireLauncher-x86_64.AppImage`. Make it executable (`chmod +x`) and run it. If your system
+- **Windows:** `007Remastered.exe`. Just run it.
+- **Linux (beta):** `007Remastered-x86_64.AppImage`. Make it executable (`chmod +x`) and run it. If your system
   is missing something the game needs, the launcher tells you the one command to install it. It needs a graphics card
   with Vulkan (Mesa or NVIDIA drivers). HD texture packs work; DLSS is Windows-only for now.
-- **macOS (beta, Apple Silicon only):** `NightFireLauncher-macOS-arm64.dmg`. Open it and drag the launcher to
+- **macOS (beta, Apple Silicon only):** `007Remastered-macOS-arm64.dmg`. Open it and drag the launcher to
   Applications. It is not signed, so the first time right-click it and choose **Open**. This is the first macOS
   build: the launcher installs CMake and Ninja itself and asks macOS for Apple's command line developer tools
   (**Install the requirements**). The game draws with Vulkan through MoltenVK, shipped with it, and its shaders

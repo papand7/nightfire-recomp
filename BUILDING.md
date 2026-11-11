@@ -64,11 +64,11 @@ SDL's source at the release the runtime uses (`gradle.properties`); the app refu
 
 To build the launcher: `launcher\electron\build_service.bat` (the builder service), then in `launcher\electron`
 `npm install` and `npm start` to run it, or `npm run dist -- -c.directories.output=C:\Temp\nf-launcher` for the
-portable `NightFireLauncher.exe` (an output folder outside the repository: electron-builder fails on one under `out\`
+portable `007Remastered.exe` (an output folder outside the repository: electron-builder fails on one under `out\`
 while its files are in use).
 
 On Linux: `bash launcher/electron/build_service.sh`, then in `launcher/electron` `npm install` and `npm start`, or
-`npm run dist:linux` for `out/launcher-electron/NightFireLauncher-x86_64.AppImage`. The Linux launcher builds with the
+`npm run dist:linux` for `out/launcher-electron/007Remastered-x86_64.AppImage`. The Linux launcher builds with the
 system's clang, CMake and Ninja when they are new enough (else it downloads LLVM's, CMake's and Ninja's Linux
 releases, pinned in `launcher/toolchain.json`'s `linux` section) and names the packages to install when the system
 lacks git, the C++ library or the window's and sound's development files. Put the AppImage and your `.iso` in one

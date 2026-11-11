@@ -61,12 +61,12 @@
       ]
     },
     "portable": {
-      "artifactName": "NightFireLauncher.exe",
-      "unpackDirName": "NightFireLauncher"
+      "artifactName": "007Remastered.exe",
+      "unpackDirName": "007Remastered"
     },
     "mac": {
       "icon": "../icon-512.png",
-      "artifactName": "NightFireLauncher-macOS-arm64.dmg",
+      "artifactName": "007Remastered-macOS-arm64.dmg",
       "category": "public.app-category.games",
       "target": [
         "dmg"
@@ -88,7 +88,7 @@
         "AppImage"
       ],
       "category": "Game",
-      "artifactName": "NightFireLauncher-x86_64.AppImage",
+      "artifactName": "007Remastered-x86_64.AppImage",
       "extraResources": [
         {
           "from": "../../out/launcher-svc/NightFireLauncherService",

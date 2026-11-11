@@ -92,14 +92,14 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.GAME_SHORT }}Launcher-Linux
-          path: out/launcher-electron/${{ env.GAME_SHORT }}Launcher-x86_64.AppImage
+          path: out/launcher-electron/007Remastered-x86_64.AppImage
 
       - name: Attach to the release
         if: startsWith(github.ref, 'refs/tags/v') || inputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
-        run: gh release upload "$TAG" "out/launcher-electron/${GAME_SHORT}Launcher-x86_64.AppImage" --clobber
+        run: gh release upload "$TAG" "out/launcher-electron/007Remastered-x86_64.AppImage" --clobber
 
   mac-launcher:
     runs-on: macos-15
@@ -135,29 +135,29 @@ jobs:
       - name: Sign ad hoc and make the disk image
         run: |
           OUT=out/launcher-electron
-          APP="$OUT/mac-arm64/NightFire Launcher.app"
+          APP="$OUT/mac-arm64/007 Remastered.app"
           codesign --force --deep --sign - "$APP"
           codesign --verify --deep --strict --verbose=2 "$APP"
           STAGE="$OUT/dmg-stage"
           mkdir -p "$STAGE"
           cp -R "$APP" "$STAGE/"
           ln -s /Applications "$STAGE/Applications"
-          hdiutil create -volname "NightFire Launcher" -srcfolder "$STAGE" -ov -format UDZO "$OUT/${GAME_SHORT}Launcher-macOS-arm64.dmg"
+          hdiutil create -volname "007 Remastered" -srcfolder "$STAGE" -ov -format UDZO "$OUT/007Remastered-macOS-arm64.dmg"
           # the app inside the finished image: still validly signed, as a download will have it
-          hdiutil attach "$OUT/${GAME_SHORT}Launcher-macOS-arm64.dmg" -mountpoint /tmp/nfdmg -nobrowse -quiet
-          codesign --verify --deep --strict --verbose=2 "/tmp/nfdmg/NightFire Launcher.app"
-          codesign -dv "/tmp/nfdmg/NightFire Launcher.app" 2>&1 | head -6
+          hdiutil attach "$OUT/007Remastered-macOS-arm64.dmg" -mountpoint /tmp/nfdmg -nobrowse -quiet
+          codesign --verify --deep --strict --verbose=2 "/tmp/nfdmg/007 Remastered.app"
+          codesign -dv "/tmp/nfdmg/007 Remastered.app" 2>&1 | head -6
           hdiutil detach /tmp/nfdmg -quiet
           ls -la "$OUT"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.GAME_SHORT }}Launcher-macOS
-          path: out/launcher-electron/${{ env.GAME_SHORT }}Launcher-*.dmg
+          name: 007Remastered-macOS
+          path: out/launcher-electron/007Remastered-*.dmg
 
       - name: Attach to the release
         if: startsWith(github.ref, 'refs/tags/v') || inputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
-        run: gh release upload "$TAG" out/launcher-electron/${GAME_SHORT}Launcher-*.dmg --clobber
+        run: gh release upload "$TAG" out/launcher-electron/007Remastered-*.dmg --clobber
