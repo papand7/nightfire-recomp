@@ -112,7 +112,7 @@ bool SaveTune() {
 struct Tuner {
     int weapon = -1;            // the weapon held
     int64_t saved_at = -100000;  // when Enter saved (the panel says so a while)
-    bool was[4] = {};            // PageUp, PageDown, Enter, Delete last frame
+    bool was[4] = {};            // (unused, unused,) Enter, Delete last frame
 } g_tuner;
 
 struct Player {
@@ -283,9 +283,8 @@ X86_FUNC(sub_000B7190) {  // a player's zoom eased (cdecl: the object)
 }
 
 namespace {
-// The sight tuner (nf::sight_tuner, debug): player 1 aims all the time; PageUp/PageDown give and hold the next or the
-// weapon before (0xBA5E0 gives it, the weapon state's +0x53 asks for it, as NF_ADS_WEAPONS does; the scoped and thrown
-// ones skipped: they have no sights of ours); the arrow keys move the held weapon (0.5 mm a frame, Shift 0.1 mm), Enter
+// The sight tuner (nf::sight_tuner, debug): player 1 aims all the time and is given every weapon with sights of ours
+// once a level (0xBA5E0; the scoped and thrown ones have none), switched with the game's own keys; the arrow keys move the held weapon (0.5 mm a frame, Shift 0.1 mm), Enter
 // saves every weapon's place to sight_offsets.txt (applied from then on), Delete puts the held one back. The keys do not
 // reach the game meanwhile (input::HoldBackToolKeys).
 int64_t NowMs() {
@@ -304,21 +303,18 @@ void SightTunerFrame(X86Context& ctx, uint32_t obj, int held) {
     input::HoldBackToolKeys(true);
     g_tuner.weapon = held;
     const bool focused = input::GameFocused();
-    const bool now[4] = {focused && input::KeyDown(0x21), focused && input::KeyDown(0x22), focused && input::KeyDown(0x0D),
-                         focused && input::KeyDown(0x2E)};
+    const bool now[4] = {false, false, focused && input::KeyDown(0x0D), focused && input::KeyDown(0x2E)};
     auto pressed = [&](int k) { return now[k] && !g_tuner.was[k]; };
-    if (pressed(0) || pressed(1)) {  // the weapon after (PageDown) or before (PageUp)
-        const int dir = pressed(1) ? 1 : -1;
-        for (int n = 1; n < 64; n++) {
-            const int idx = ((held < 0 ? 0 : held) + dir * n + 64) % 64;
-            if (!Usable(idx)) continue;
-            const uint32_t eax = ctx.eax;
-            kernel::CallGuest(ctx, 0xBA5E0, {R32(obj + kActor), uint32_t(idx), 999});
-            ctx.eax = eax;
-            kernel::G<int8_t>(R32(obj + kWeaponState) + 0x53) = int8_t(idx);
-            LOGR("nightfire: sight tuner: weapon %d", idx);
-            break;
-        }
+    // every weapon given once a level (0xBA5E0: the actor, the index, ammo), switched with the game's own keys
+    static uint32_t given_for = 0;
+    if (given_for != R32(obj + kActor)) {
+        given_for = R32(obj + kActor);
+        const uint32_t eax = ctx.eax;
+        int n = 0;
+        for (int idx = 0; idx < 64; idx++)
+            if (Usable(idx)) kernel::CallGuest(ctx, 0xBA5E0, {R32(obj + kActor), uint32_t(idx), 999}), n++;
+        ctx.eax = eax;
+        LOGR("nightfire: sight tuner: %d weapons given", n);
     }
     if (held >= 0 && held < 64 && focused) {
         const float step = (input::KeyDown(0x10) ? 0.1f : 0.5f) / 1000.0f;  // Shift: finer
@@ -347,7 +343,7 @@ void SightTunerUi() {
     char line[256];
     std::snprintf(line, sizeof line,
                   "SIGHT TUNER  weapon %d   left/right %+.1f mm   up/down %+.1f mm   farther %+.1f mm\n"
-                  "PageUp/PageDown weapon   Arrows move   Home/End nearer/farther   (Shift finer)   Enter save all   Delete reset\n"
+                  "Switch weapon as usual   Arrows move   Home/End nearer/farther   (Shift finer)   Enter save all   Delete reset\n"
                   "Put the sights on the red dot: that is where the shots go.%s",
                   w, g_tune[w][0] * 1000, g_tune[w][1] * 1000, g_tune[w][2] * 1000,
                   NowMs() - g_tuner.saved_at < 2500 ? "\nSaved to sight_offsets.txt" : "");

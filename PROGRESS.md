@@ -4,8 +4,9 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## 2026-11-11: the sight tuner (debug)
 
-- settings.toml `sight_tuner = true` (also in the F1 window's options): player 1 aims all the time; PageUp/PageDown give and
-  hold the next/previous weapon (scoped and thrown skipped); arrows move the held gun, Home/End nearer/farther, Shift
+- settings.toml `sight_tuner = true` (also in the F1 window's options): player 1 aims all the time and is given every weapon with
+  sights of ours once a level (41 in The Exchange; scoped and thrown skipped), switched with the game's own keys (PageUp/
+  PageDown switching was taken out: the user asked); arrows move the held gun, Home/End nearer/farther, Shift
   finer (0.5 mm a frame, 0.1 with Shift); Enter saves every weapon's correction to sight_offsets.txt beside the exe
   ("index x_mm y_mm z_mm"; +x left, +y up, +z farther), Delete resets the held weapon. A panel shows the values and a red
   dot at the true centre (where the shots go). The keys are held back from the game (input::HoldBackToolKeys).
