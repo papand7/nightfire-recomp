@@ -18,6 +18,8 @@ bool skip_intro = false;
 bool uncapped = true;
 bool auto_aim = false;
 bool hit_flash = true;
+bool aim_down_sights = true;
+bool weapon_sway = true;
 uint32_t fov_percent = 100;
 
 float FovScale() {
@@ -66,6 +68,7 @@ void Init() {
     if (const char* e = std::getenv("AUF_SKIP_INTRO"); e && *e) auf::skip_intro = *e == '1';
     if (const char* e = std::getenv("AUF_AUTO_AIM"); e && *e) auf::auto_aim = *e == '1';
     if (const char* e = std::getenv("AUF_HIT_FLASH"); e && *e) auf::hit_flash = *e == '1';
+    if (const char* e = std::getenv("AUF_ADS"); e && *e) auf::aim_down_sights = *e == '1';
     if (const char* e = std::getenv("AUF_FOV"); e && *e) auf::fov_percent = uint32_t(std::atoi(e));
     if (auf::skip_intro) LOGR("auf: the logo movies are skipped (skip_intro)");
     if (kDrv) gpu::g_draw_filter = DrivingFlashFilter;  // here, not a static initializer: those never ran in the Windows exe
@@ -192,6 +195,9 @@ const app::GameInfo app::kGame = {
                {"driving.xbe", "AgentUnderFireDriving"}},
     .options = {{"skip_intro", &auf::skip_intro, nullptr, "Skip intro movies", "Starts without the EA, MGM and logo movies"},
                 {"auto_aim", &auf::auto_aim, nullptr, "Auto-aim", "The game's aim assist, on foot and on mounted guns. Off by default"},
+                {"aim_down_sights", &auf::aim_down_sights, nullptr, "Aim down sights",
+                 "The left trigger (right mouse) raises the gun to the middle and zooms in a little, instead of the game's manual aim. Scopes stay as they are"},
+                {"weapon_sway", &auf::weapon_sway, nullptr, "Weapon sway", "The gun trails your turns a little and settles back"},
                 {"hit_flash", &auf::hit_flash, nullptr, "Hit flash", "The white flash on screen when Bond is hit. On by default; off for those it troubles"},
                 {"uncapped", &auf::uncapped, nullptr, "High frame rate",
                  "Paced by the frame rate cap instead of the console's 30 on foot; driving at 60 steps a second instead of 50 at the same speed, with frames in between above that. Vertical sync off gets the most. Takes effect at the next start"},
@@ -209,6 +215,7 @@ const app::GameInfo app::kGame = {
     .hud_aspect = 4.0f / 3.0f,            // the game lays out its 2D for 4:3: kept in the middle of a wider frame
     .squeeze_screen_programs = true,      // DRIVING.XBE draws its HUD and menus through vertex programs
     .sharpen_2d = true,                   // text and HUD pictures enlarged sharp (Settings::sharp_2d turns it off)
+    .hit_feedback = true,                 // src/bond/hit_feedback.cpp
     .pal_console = !auf::kUsa,                  // a PAL disc (region 4)
     .mouse_look = true,                   // the mouse looks and aims
     .mouse_direct = true,                 // src/bond/mouse.cpp, src/driving/mouse.cpp
