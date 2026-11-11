@@ -2,6 +2,12 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-11: menu parallax
+
+- The modern menu layer (panel, rows, text, focus glow) leans up to 6 px sideways and 4 px vertically against the
+  pointer, eased (src/common/modern_menu.cpp). The movie behind is the game's own texture and does not move. Menus
+  render correctly in the mm_test grid; the amount of shift is not measured on screen.
+
 ## 2026-11-11: camera shake on a hit (not yet seen on screen)
 
 - A hit on a player (hit_feedback.cpp Bleed) shakes the camera by about 6 cm for a hit of 40 health: a decaying offset

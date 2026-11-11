@@ -356,6 +356,23 @@ void ModernMenuUi(double) {
             v.col = (v.col & ~IM_COL32_A_MASK) | (uint32_t(float(a) * ct) << IM_COL32_A_SHIFT);
         }
     }
+    // parallax: the menu layer (panel, rows, text) leans a few pixels toward the mouse, eased, over the movie behind
+    static float par_x = 0, par_y = 0;
+    if (io.MousePos.x >= 0 && io.MousePos.y >= 0 && io.MousePos.x <= io.DisplaySize.x && io.MousePos.y <= io.DisplaySize.y) {
+        const float tx = std::clamp((io.MousePos.x / io.DisplaySize.x - 0.5f) * 2.0f, -1.0f, 1.0f);
+        const float ty = std::clamp((io.MousePos.y / io.DisplaySize.y - 0.5f) * 2.0f, -1.0f, 1.0f);
+        par_x += (tx - par_x) * std::min(1.0f, io.DeltaTime * 6.0f);
+        par_y += (ty - par_y) * std::min(1.0f, io.DeltaTime * 6.0f);
+    } else {
+        par_x += (0 - par_x) * std::min(1.0f, io.DeltaTime * 6.0f);
+        par_y += (0 - par_y) * std::min(1.0f, io.DeltaTime * 6.0f);
+    }
+    const float shift_x = -par_x * 6.0f * s, shift_y = -par_y * 4.0f * s;  // the menu moves against the pointer
+    if (std::fabs(shift_x) > 0.05f || std::fabs(shift_y) > 0.05f)
+        for (int k = content_from; k < dl->VtxBuffer.Size; k++) {
+            dl->VtxBuffer[k].pos.x += shift_x;
+            dl->VtxBuffer[k].pos.y += shift_y;
+        }
     // more above or below: a fade
     if (scroll > 1) dl->AddRectFilledMultiColor({0, top - 4 * s}, {pw, top + 40 * s}, IM_COL32(5, 14, 36, 230),
                                                 IM_COL32(5, 14, 36, 230), IM_COL32(5, 14, 36, 0), IM_COL32(5, 14, 36, 0));
