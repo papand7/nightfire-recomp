@@ -2746,3 +2746,9 @@ f_movies\pack (a partial pack).
   inside its range. Windows unchanged. Checked on Windows only (boots with no commit failures); the Mac build needs
   a test on a Mac.
 
+## 2026-11-11: sight defaults from the tuner
+
+- Harry tuned the weapons (sight_offsets.txt, kept as .local/sight_offsets.user.txt): 2, 4, 6, 12, 20, 22 baked into
+  SightOf (aim.cpp); 8 read 0.0. The tuner's file stays a correction on top of the defaults, so it should be removed
+  once these are in a build (else they apply twice).
+- Weapon 13 was not baked: x -209 mm, a gun at an angle that a shift cannot fix (the tuner has no rotation).

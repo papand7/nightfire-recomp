@@ -53,22 +53,25 @@ struct Sight {
 };
 Sight SightOf(int idx) {
     switch (idx) {
-        case 1: case 2: return {0.264f, 0.135f, kZoom, false};                  // the P2K
+        case 1: return {0.264f, 0.135f, kZoom, false};                          // the P2K
+        case 2: return {0.2665f, 0.1285f, kZoom, false};                        // tuned: +2.5 mm, -6.5 mm
         case 3: return {0.270f, 0.129f, kZoom, false};
-        case 4: return {0.266f, 0.128f, kZoom, false};
+        case 4: return {0.2665f, 0.128f, kZoom, false};                         // tuned: +0.5 mm
         case 5: return {0.266f, 0.128f, kZoom, false};
-        case 6: return {0.268f, 0.108f, kZoom, false};                          // 6-9 silenced: the rear notch
+        case 6: return {0.266f, 0.108f, kZoom, false};                          // 6-9 silenced: the rear notch (6 tuned: -2 mm)
         case 7: case 9: return {0.266f, 0.108f, kZoom, false};
         case 8: return {0.267f, 0.108f, kZoom, false};
-        case 10: case 11: case 12: return {0.215f, 0.070f, kZoom, false};
+        case 10: case 11: return {0.215f, 0.070f, kZoom, false};
+        case 12: return {0.214f, 0.074f, kZoom, false};                         // tuned: -1 mm, +4 mm
         case 13: return {0.222f, 0.090f, kZoom, false};
         case 14: case 15: return {0.358f, 0.100f, kZoom, false};
         case 16: return {0.359f, 0.102f, kZoom, false};
         case 18: return {0.233f, 0.121f, kZoom, false};
         case 19: return {0.200f, 0.073f, kZoom, false};
-        case 20: return {0.253f, 0.143f, kZoom, false};
+        case 20: return {0.2585f, 0.146f, kZoom, false};                        // tuned: +5.5 mm, +3 mm
         case 21: return {0.254f, 0.144f, kZoom, false};
-        case 22: case 23: return {0.250f, 0.084f, kZoom, false};
+        case 22: return {0.2515f, 0.0855f, kZoom, false};                       // tuned: +1.5 mm, +1.5 mm
+        case 23: return {0.250f, 0.084f, kZoom, false};
         case 24: case 25: return {0.230f, 0.076f, 3.0f, true};                // the rifle with a scope
         case 28: case 29: return {0.206f, 0.041f, kZoom, false};                // the receiver's top
         case 42: case 43: return {0.0f, 0.0f, 2.0f, true};
