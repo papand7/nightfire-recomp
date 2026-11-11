@@ -1,7 +1,7 @@
 {
   "name": "nightfire-launcher",
   "productName": "NightFire Launcher",
-  "version": "1.5.13",
+  "version": "1.5.14",
   "description": "007: NightFire PC port launcher: builds the game from your own disc image, its settings, its HD textures",
   "main": "main.js",
   "private": true,
