@@ -160,7 +160,8 @@ const std::vector<MenuRow> kMoreRows = {
     {kMoreNext, nf::kMenuChoice, "Gameplay & More", "Tighter movement, blood, ragdolls, aiming, Discord and defaults.", 13},
 };
 constexpr uint32_t kCrossStyle = 0x1000FD3E, kCrossColor = 0x1000FD3F, kCrossSize = 0x1000FD40;  // the crosshair (app/crosshair.cpp)
-constexpr uint32_t kHurtFx = 0x1000FD41, kDamageNumbers = 0x1000FD42;  // app/blood.cpp, app/hit_marker.cpp
+// Hit Effects: hurt_effects (app/blood.cpp) and damage_numbers (app/hit_marker.cpp) as one row, Off, Hurt, Numbers, Both
+constexpr uint32_t kHurtFx = 0x1000FD41, kSound3d = 0x1000FD42;  // 3D Sound: audio_3d (xdk/dsound.cpp)
 const std::vector<MenuRow> kMore2Rows = {
     {kGameplayBlood, nf::kMenuChoice, "Blood", "Blood at character impacts and red at the view edges when you are hurt. Applies immediately.", 6},
     {kMovement, nf::kMenuChoice, "Tighter Movement", "Quicker starts and direction changes, less floaty jumps with original jump height. Single-player and multiplayer: the host decides for everyone. Network co-op: set before hosting.", 4},
@@ -173,8 +174,8 @@ const std::vector<MenuRow> kMore2Rows = {
     {kMotion, nf::kMenuChoice, "Weapon Sway", "A very light head bob and weapon sway as you move and turn.", 2},
     {kDiscord, nf::kMenuChoice, "Discord", "Your Discord status shows the mission you play (with Discord running on this PC).", 3},
     {kReset, nf::kMenuChoice, "Reset to Defaults", "Graphics and game settings as they first were. Key bindings and codenames are kept.", 5},
-    {kHurtFx, nf::kMenuChoice, "Hurt Effects", "Red edges pulsing at low health, and the view shaken by a hit.", 11},
-    {kDamageNumbers, nf::kMenuChoice, "Damage Numbers", "The damage a hit did, a number floating up from the hit mark.", 12},
+    {kHurtFx, nf::kMenuChoice, "Hit Effects", "Hurt: red edges pulsing at low health and the view shaken by a hit. Numbers: the damage a hit did, floating up from the hit mark.", 11},
+    {kSound3d, nf::kMenuChoice, "3D Sound", "Sounds placed by their direction (duller behind you), muffled through walls, with an echo indoors.", 12},
     {kMoreBack, nf::kMenuChoice, "First Page", "Performance, HUD, keyboard and mouse, language and more.", 13},
 };
 // Achievements (More Settings' row): two sets, the missions' twelve and the other seven, each row an achievement, its
@@ -1013,8 +1014,9 @@ void EnterMore2(X86Context& ctx, uint32_t player) {
     ShowOptions(ctx, player, kAdsZoom, kAdsZooms, float(nf::ads_zoom));
     ShowOptions(ctx, player, kMotion, kOffOn, nf::view_motion ? 1.0f : 0.0f);
     ShowOptions(ctx, player, kRagdolls, kOffOn, nf::ragdolls ? 1.0f : 0.0f);
-    ShowOptions(ctx, player, kHurtFx, kOffOn, app::Get().hurt_effects ? 1.0f : 0.0f);
-    ShowOptions(ctx, player, kDamageNumbers, kOffOn, app::Get().damage_numbers ? 1.0f : 0.0f);
+    Choice(ctx, player, kHurtFx, {{"Off", 0}, {"Hurt", 1}, {"Numbers", 2}, {"Both", 3}},
+           (app::Get().hurt_effects ? 1 : 0) | (app::Get().damage_numbers ? 2 : 0));
+    ShowOptions(ctx, player, kSound3d, kOffOn, app::Get().audio_3d ? 1.0f : 0.0f);
     Choice(ctx, player, kCrossStyle, {{"Game", 0}, {"Dot", 1}, {"Cross", 2}, {"Ring", 3}, {"Cross and dot", 4}},
            app::Get().crosshair_style);
     Choice(ctx, player, kCrossColor, {{"White", 0}, {"Green", 1}, {"Red", 2}, {"Yellow", 3}, {"Cyan", 4}, {"Amber", 5}},
@@ -1036,8 +1038,9 @@ void KeepMore2(X86Context& ctx, uint32_t player) {
     nf::ads_zoom = uint32_t(ReadOption(ctx, player, kAdsZoom, kAdsZooms));
     nf::view_motion = ReadOption(ctx, player, kMotion, kOffOn) > 0;
     nf::ragdolls = ReadOption(ctx, player, kRagdolls, kOffOn) > 0;
-    app::Get().hurt_effects = ReadOption(ctx, player, kHurtFx, kOffOn) > 0;
-    app::Get().damage_numbers = ReadOption(ctx, player, kDamageNumbers, kOffOn) > 0;
+    if (const uint32_t hit = ChoiceValue(ctx, player, kHurtFx); hit <= 3)
+        app::Get().hurt_effects = hit & 1, app::Get().damage_numbers = hit & 2;
+    app::Get().audio_3d = ReadOption(ctx, player, kSound3d, kOffOn) > 0;
     {
         const uint32_t style = ChoiceValue(ctx, player, kCrossStyle), color = ChoiceValue(ctx, player, kCrossColor),
                        size = ChoiceValue(ctx, player, kCrossSize);
