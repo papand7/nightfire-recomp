@@ -55,9 +55,16 @@ wheel support. Everything is set from the game's own menus. For **Windows**, wit
 
 *Water in Phoenix Base, and an explosion with sparks, debris and smoke in The Exchange.*
 
+**Sound**
+- **3D sound** (on by default, Gameplay & More): sounds come from their direction and are duller behind you,
+  muffled through walls, and echo indoors by the size of the room.
+
 **Controls**
 - **Mouse aiming** like a PC shooter, with the keyboard's keys shown in the game's prompts.
-- **Aim down sights**, sprint, hold-to-crouch, keys 1-9 for weapons, weapon sway and hit markers.
+- **Aim down sights**, each weapon's sights lined up on the centre (the scoped weapons keep their scopes), sprint,
+  hold-to-crouch, keys 1-9 for weapons, weapon sway and hit markers.
+- **Crosshairs** of your own (dot, cross, ring, cross and dot) in six colours and three sizes, and **Hit Effects**:
+  red edges and a shake when you are hurt, damage numbers on your hits, or both.
 - Every key rebindable in the game's **Key Bindings** page.
 - Xbox, PlayStation and Switch **controllers**, with rumble.
 - **Touch controls** on a touch screen (Windows): an on-screen stick, buttons and look, turned on under the F1
@@ -115,10 +122,11 @@ The **NightFire PC Launcher** sets everything up:
   with Vulkan (Mesa or NVIDIA drivers). HD texture packs work; DLSS is Windows-only for now.
 - **macOS (beta, Apple Silicon only):** `NightFireLauncher-macOS-arm64.dmg`. Open it and drag the launcher to
   Applications. It is not signed, so the first time right-click it and choose **Open**. This is the first macOS
-  build (1.5.13, a test release): the launcher installs CMake and Ninja itself and asks macOS for Apple's command
-  line developer tools (**Install the requirements**). The game draws with Vulkan through MoltenVK, shipped with it,
-  and its shaders compile through glslang. It has not been run on a Mac yet, so expect problems and please report
-  them. Ray tracing and DLSS are off on the Mac; the HD texture pack tool is built but untested.
+  build: the launcher installs CMake and Ninja itself and asks macOS for Apple's command line developer tools
+  (**Install the requirements**). The game draws with Vulkan through MoltenVK, shipped with it, and its shaders
+  compile through glslang. The first report from a Mac (a crash at start on Apple Silicon's 16 KB memory pages) is
+  fixed; expect more problems and please report them with the game's log. Ray tracing and DLSS are off on the Mac;
+  the HD texture pack tool is built but untested.
 
 Building it yourself instead: see [BUILDING.md](BUILDING.md).
 
