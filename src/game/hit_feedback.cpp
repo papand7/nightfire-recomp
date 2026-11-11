@@ -122,7 +122,7 @@ X86_FUNC(sub_0003D900) {
         LOGR("hit feedback: player %d hit (%s), health %.1f -> %.1f, mark at %.2f %.2f", player + 1,
              kind == 2 ? "kill" : kind == 1 ? "head" : "body", before, after, x, y);
     }
-    app::HitMarker(x, y, kind);
+    app::HitMarker(x, y, kind, before - after);
 }
 
 namespace {
@@ -232,7 +232,7 @@ void HitTest(X86Context& ctx) {
         int kind = int(frame / 60 % 3);
         app::BloodSpray(x, y, kind == 2 ? 1.0f : kind == 1 ? 0.8f : 0.45f);
         if (kind == 2) Bleed(p, 30.0f);
-        app::HitMarker(x, y, kind);
+        app::HitMarker(x, y, kind, 25.0f * (kind + 1));
     }
 }
 }  // namespace nf

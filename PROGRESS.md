@@ -2,6 +2,12 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-11: damage numbers on hit markers (off by default; not yet seen on screen)
+
+- Settings `damage_numbers` (settings.toml, default false): the damage a hit did floats up from its hit marker, red
+  for a kill, for 0.9 s. app::HitMarker takes the damage (hit_feedback.cpp passes health before - after).
+- Built, not confirmed: burst screenshots with NF_HIT_TEST=1 showed no marks, so the number is unverified.
+
 ## 2026-11-10: aim down sights: shot direction checked (not yet the cause of the misses)
 
 - NF_ADS_FIRE=1 (aim.cpp AimFireTest): while player 1 aims, the game's own fire (0xBAE50) is called every 60 frames.
