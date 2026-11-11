@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 
 #include <imgui.h>
 
@@ -39,6 +40,10 @@ constexpr uint32_t kWeapons = 0x18CFA0, kWeaponSize = 0x10C, kWeaponFlags = 0x68
 constexpr uint32_t kActor = 0xBC, kWeaponState = 0xB8, kWeaponIndex = 0x52, kPlayerIndex = 0x8DE;
 constexpr uint32_t kZoomTarget = 0x864, kZoomMost = 0x868, kGun = 0x778, kGunPos = 0x24, kHud = 0x770;
 constexpr float kZoom = 1.3f;  // the view's angle divided by this (iron sights: nf::ads_zoom's percent in its place)
+// the weapons by the game's own names (its text, read from a running game 2026-11-11; the model each draws, +0xDC):
+// 10-12 the Kowloon Type 40 (model 0x51), 13 the same two at once (flag 0x40000), 28-29 the Frinesi Automatic 12,
+// 50-51 the Phoenix Samurai
+constexpr int kDualKowloon = 13;
 // each weapon's sights brought to the middle of the view (its model's frame: +x left, +y up): the gun's place at the
 // hip (0xBCAA0) moved by its sight's place on screen there, at the model's depth. Each weapon its own: models that
 // shared one (the silenced pistols, 18 and 19) sat up to 100 px apart. Measured from aimed NF_ADS_CAL shots
@@ -253,9 +258,11 @@ X86_FUNC(sub_000BA8F0) {  // a player's weapon update (cdecl: the object)
     if (i >= 0) {
         Player& p = g_players[i];
         // the game's scoped weapons keep its scope; the thrown ones (52-56: the grenades, NF_ADS_WEAPONS shots
-        // 2026-11-05) have no sights: L is the game's own aim for both
+        // 2026-11-05) and the dual-wield Kowloon (13: two guns, no sights to line up) have none: L is the game's own
+        // aim for them. The Phoenix Samurai (50, 51: flagged scoped, but its zoom shows the gun) aims down its sights
         int idx = kernel::G<int8_t>(R32(obj + kWeaponState) + kWeaponIndex);
-        p.scoped = (R32(Weapon(obj) + kWeaponFlags) & kScoped) || (idx >= 52 && idx <= 56);
+        p.scoped = ((R32(Weapon(obj) + kWeaponFlags) & kScoped) && idx != 50 && idx != 51) || (idx >= 52 && idx <= 56) ||
+                   idx == kDualKowloon;
         if (p.scoped) p.aiming = false;
     }
     __imp__sub_000BA8F0(ctx, base);
@@ -294,9 +301,25 @@ int64_t NowMs() {
     using namespace std::chrono;
     return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
+// a weapon the tuner offers: one with sights of ours (not the game's scoped ones but the Samurai, not the thrown ones
+// or the dual-wield Kowloon), whose model this level has loaded: drawing one it has not crashes (0x118F0, the gun's
+// instance null). The model: the entry's +0xDC, as 0x11440 resolves it (0x11350 swaps it for a level's own, EAX in and
+// out; 0x6B500 the loaded model or 0)
 bool Usable(int idx) {
     const uint32_t w = kWeapons + uint32_t(idx) * kWeaponSize;
-    return kernel::G<uint16_t>(w) && !(R32(w + kWeaponFlags) & kScoped) && !(idx >= 52 && idx <= 56);
+    return kernel::G<uint16_t>(w) && (!(R32(w + kWeaponFlags) & kScoped) || idx == 50 || idx == 51) &&
+           !(idx >= 52 && idx <= 56) && idx != kDualKowloon;
+}
+bool Loaded(X86Context& ctx, int idx) {
+    const uint32_t model = R32(kWeapons + uint32_t(idx) * kWeaponSize + 0xDC);
+    if (!model) return false;
+    const X86Context saved = ctx;
+    ctx.eax = model;
+    kernel::CallGuest(ctx, 0x11350, {});
+    const uint32_t mine = ctx.eax;
+    const uint32_t found = kernel::CallGuest(ctx, 0x6B500, {mine});
+    ctx = saved;
+    return found != 0;
 }
 void SightTunerFrame(X86Context& ctx, uint32_t obj, int held) {
     if (!nf::sight_tuner) {
@@ -315,10 +338,18 @@ void SightTunerFrame(X86Context& ctx, uint32_t obj, int held) {
         given_for = R32(obj + kActor);
         const uint32_t eax = ctx.eax;
         int n = 0;
-        for (int idx = 0; idx < 64; idx++)
-            if (Usable(idx)) kernel::CallGuest(ctx, 0xBA5E0, {R32(obj + kActor), uint32_t(idx), 999}), n++;
+        std::string here, missing;
+        for (int idx = 0; idx < 64; idx++) {
+            if (!Usable(idx)) continue;
+            if (!Loaded(ctx, idx)) {
+                missing += " " + std::to_string(idx);
+                continue;
+            }
+            kernel::CallGuest(ctx, 0xBA5E0, {R32(obj + kActor), uint32_t(idx), 999}), n++;
+            here += " " + std::to_string(idx);
+        }
         ctx.eax = eax;
-        LOGR("nightfire: sight tuner: %d weapons given", n);
+        LOGR("nightfire: sight tuner: %d weapons given:%s; not in this level:%s", n, here.c_str(), missing.c_str());
         for (int idx = 0; idx < 0x48; idx++) {  // the whole table, to see what is left out and why
             const uint32_t w = kWeapons + uint32_t(idx) * kWeaponSize;
             if (kernel::G<uint16_t>(w))
@@ -333,7 +364,7 @@ void SightTunerFrame(X86Context& ctx, uint32_t obj, int held) {
         const int dir = pressed(5) ? 1 : 63;
         for (int tries = 1, idx = held < 0 ? 0 : held; tries <= 64; tries++) {
             idx = (idx + dir) % 64;
-            if (!Usable(idx)) continue;
+            if (!Usable(idx) || !Loaded(ctx, idx)) continue;
             kernel::G<int8_t>(R32(obj + kWeaponState) + 0x53) = int8_t(idx);
             break;
         }
@@ -397,7 +428,7 @@ X86_FUNC(sub_000BD740) {  // the first person gun placed (cdecl: the object)
             for (int tries = 0; tries < 64 && state; tries++) {
                 idx = (idx + 1) % 64;
                 uint32_t w = kWeapons + idx * kWeaponSize;
-                if (!kernel::G<uint16_t>(w)) continue;  // no weapon there
+                if (!kernel::G<uint16_t>(w) || !Loaded(ctx, int(idx))) continue;  // no weapon there, or not in this level
                 if (const char* only = std::getenv("NF_ADS_ONLY")) {  // NF_ADS_ONLY=,2,3,: those weapons alone
                     char key[8];
                     std::snprintf(key, sizeof key, ",%u,", idx);

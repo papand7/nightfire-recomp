@@ -2752,3 +2752,10 @@ f_movies\pack (a partial pack).
   SightOf (aim.cpp); 8 read 0.0. The tuner's file stays a correction on top of the defaults, so it should be removed
   once these are in a build (else they apply twice).
 - Weapon 13 was not baked: x -209 mm, a gun at an angle that a shift cannot fix (the tuner has no rotation).
+- Weapon names (the game's text, read from a running game): 10-12 Kowloon Type 40 (model 0x51), 13 the dual-wield
+  Kowloon (flag 0x40000, same model): no aim down sights now (L the game's own aim), out of the tuner. 28-29 Frinesi
+  Automatic 12, 50-51 Phoenix Samurai (flagged scoped, but now aims down its sights and is in the tuner).
+- Drawing a weapon whose model the level has not loaded crashes (0x118F0): the tuner (and NF_ADS_WEAPONS) only gives
+  and picks weapons whose model (+0xDC, swapped per level by 0x11350 with EAX in and out) 0x6B500 finds. Levels:
+  07000001-03 have 28-29 (and 14-15, 18-19); 07000011-13 have 16, 24-25, 28-29, 42-43; 07000014-16 (space) 50-51 and
+  20-21; 07000006 has 10-12, 20-25.
