@@ -88,9 +88,11 @@ Sight SightOf(int idx) {
 constexpr float kEase = 0.125f;                        // of the way in or out a frame
 
 // each weapon's own correction (metres, +x left, +y up), from the sight tuner: sight_offsets.txt beside the exe,
-// a line a weapon: "index x_mm y_mm z_mm" (z: + farther from the eye; an old line without z reads as 0); read once,
-// written by the tuner's Enter
-float g_tune[64][3] = {};
+// a line a weapon: "index x_mm y_mm z_mm yaw pitch roll" (z: + farther from the eye; the turns in degrees, added to
+// the gun's own at +0x40, +0x3C, +0x44, which 0xB7EB0 sets before the gun is placed; a line without them reads as 0);
+// read once, written by the tuner's Enter
+float g_tune[64][6] = {};
+constexpr float kDeg = 0.017453293f;
 std::filesystem::path TunePath() { return app::ExeDir() / "sight_offsets.txt"; }
 void LoadTune() {
     static bool loaded = false;
@@ -100,9 +102,11 @@ void LoadTune() {
         char line[128];
         while (std::fgets(line, sizeof line, f)) {
             int idx;
-            float x = 0, y = 0, z = 0;
-            if (std::sscanf(line, "%d %f %f %f", &idx, &x, &y, &z) >= 3 && idx >= 0 && idx < 64)
+            float x = 0, y = 0, z = 0, yaw = 0, pitch = 0, roll = 0;
+            if (std::sscanf(line, "%d %f %f %f %f %f %f", &idx, &x, &y, &z, &yaw, &pitch, &roll) >= 3 && idx >= 0 && idx < 64) {
                 g_tune[idx][0] = x / 1000.0f, g_tune[idx][1] = y / 1000.0f, g_tune[idx][2] = z / 1000.0f;
+                g_tune[idx][3] = yaw * kDeg, g_tune[idx][4] = pitch * kDeg, g_tune[idx][5] = roll * kDeg;
+            }
         }
         std::fclose(f);
         LOGR("nightfire: sight offsets read from %s", TunePath().string().c_str());
@@ -112,8 +116,10 @@ bool SaveTune() {
     FILE* f = std::fopen(TunePath().string().c_str(), "w");
     if (!f) return false;
     for (int i = 0; i < 64; i++)
-        if (g_tune[i][0] != 0 || g_tune[i][1] != 0 || g_tune[i][2] != 0)
-            std::fprintf(f, "%d %.1f %.1f %.1f\n", i, g_tune[i][0] * 1000, g_tune[i][1] * 1000, g_tune[i][2] * 1000);
+        if (g_tune[i][0] != 0 || g_tune[i][1] != 0 || g_tune[i][2] != 0 || g_tune[i][3] != 0 || g_tune[i][4] != 0 ||
+            g_tune[i][5] != 0)
+            std::fprintf(f, "%d %.1f %.1f %.1f %.2f %.2f %.2f\n", i, g_tune[i][0] * 1000, g_tune[i][1] * 1000,
+                         g_tune[i][2] * 1000, g_tune[i][3] / kDeg, g_tune[i][4] / kDeg, g_tune[i][5] / kDeg);
     std::fclose(f);
     return true;
 }
@@ -377,7 +383,15 @@ void SightTunerFrame(X86Context& ctx, uint32_t obj, int held) {
         if (input::KeyDown(0x28)) g_tune[held][1] -= step;  // down
         if (input::KeyDown(0x24)) g_tune[held][2] -= step;  // Home: nearer (seen: + is farther)
         if (input::KeyDown(0x23)) g_tune[held][2] += step;  // End: farther
-        if (pressed(3)) g_tune[held][0] = g_tune[held][1] = g_tune[held][2] = 0;
+        // the turns: 0.1 degree a frame (Shift 0.02). [ ] about the up axis, ; ' up and down, - = the roll
+        const float turn = (input::KeyDown(0x10) ? 0.02f : 0.1f) * kDeg;
+        if (input::KeyDown(0xDB)) g_tune[held][3] -= turn;
+        if (input::KeyDown(0xDD)) g_tune[held][3] += turn;
+        if (input::KeyDown(0xBA)) g_tune[held][4] -= turn;
+        if (input::KeyDown(0xDE)) g_tune[held][4] += turn;
+        if (input::KeyDown(0xBD)) g_tune[held][5] -= turn;
+        if (input::KeyDown(0xBB)) g_tune[held][5] += turn;
+        if (pressed(3)) for (float& v : g_tune[held]) v = 0;
     }
     if (pressed(2)) {
         if (SaveTune()) g_tuner.saved_at = NowMs(), LOGR("nightfire: sight tuner: saved to %s", TunePath().string().c_str());
@@ -393,12 +407,15 @@ void SightTunerUi() {
     dl->AddCircleFilled(c, 3.5f, IM_COL32(0, 0, 0, 200));
     dl->AddCircleFilled(c, 2.5f, IM_COL32(255, 40, 40, 255));
     const int w = g_tuner.weapon;
-    char line[256];
+    char line[512];
     std::snprintf(line, sizeof line,
-                  "SIGHT TUNER  weapon %d   left/right %+.1f mm   up/down %+.1f mm   farther %+.1f mm\n"
-                  ", and . pick any weapon (the variants too)   Arrows move   Home/End nearer/farther   (Shift finer)   Enter save all   Delete reset\n"
+                  "SIGHT TUNER  weapon %d   left/right %+.1f mm   up/down %+.1f mm   farther %+.1f mm   "
+                  "turn %+.2f   tilt %+.2f   roll %+.2f deg\n"
+                  ", and . pick any weapon (the variants too)   Arrows move   Home/End nearer/farther   [ ] turn   ; ' tilt   "
+                  "- = roll   (Shift finer)   Enter save all   Delete reset\n"
                   "Put the sights on the red dot: that is where the shots go.%s",
-                  w, g_tune[w][0] * 1000, g_tune[w][1] * 1000, g_tune[w][2] * 1000,
+                  w, g_tune[w][0] * 1000, g_tune[w][1] * 1000, g_tune[w][2] * 1000, g_tune[w][3] / kDeg,
+                  g_tune[w][4] / kDeg, g_tune[w][5] / kDeg,
                   NowMs() - g_tuner.saved_at < 2500 ? "\nSaved to sight_offsets.txt" : "");
     const ImVec2 at(vp->Pos.x + 24, vp->Pos.y + vp->Size.y * 0.72f);
     const ImVec2 size = ImGui::CalcTextSize(line);
@@ -494,6 +511,11 @@ X86_FUNC(sub_000BD740) {  // the first person gun placed (cdecl: the object)
     SetF(gun + kGunPos, GetF(gun + kGunPos) + sight.x * s);
     SetF(gun + kGunPos + 4, GetF(gun + kGunPos + 4) + (p.optic ? -50.0f : sight.y * s));  // an optic: out of sight
     SetF(gun + kGunPos + 8, GetF(gun + kGunPos + 8) + near * s);  // the tuner's farther (+) or nearer (-)
+    if (held_idx >= 0 && held_idx < 64 && !sight.optic) {  // the tuner's turns, eased in with the aim
+        SetF(gun + 0x40, GetF(gun + 0x40) + g_tune[held_idx][3] * s);
+        SetF(gun + 0x3C, GetF(gun + 0x3C) + g_tune[held_idx][4] * s);
+        SetF(gun + 0x44, GetF(gun + 0x44) + g_tune[held_idx][5] * s);
+    }
 }
 
 X86_EXTERN_FUNC(__imp__sub_000B6190);
