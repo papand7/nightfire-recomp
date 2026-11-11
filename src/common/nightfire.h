@@ -90,6 +90,7 @@ extern bool ragdolls;        // dead enemies fall limp (src/game/ragdoll.cpp); o
 bool RagdollsOn();
 bool Ragdoll(X86Context& ctx, uint32_t obj, uint32_t skel, uint32_t parents);  // from the pose hook: a body laid
 void RagdollHit(uint32_t obj, uint32_t hit);  // a hit on a character (its killing shot's push)
+void AudioFrame(X86Context& ctx);  // 3D sound: the room and the walls, each frame (src/game/audio3d.cpp)
 void RagdollTest(X86Context& ctx);             // NF_RAGDOLL_TEST=1: the nearest enemy killed every 4 s
 extern bool coop;            // story co-op: a second player on controller 2, split screen (src/game/coop_test.cpp)
 extern bool coop_side;      // story co-op: the views side by side (else one above the other)

@@ -2671,3 +2671,8 @@ addresses not made functions" at 0x40290-0x403A0 are NV2A method headers in D3D 
 
 Next: Plan 1, the 4831 pass. Name D3D, DSOUND, XPP (XInitDevices 0x15753D first) in default.xbe against PGR1's 3948
 and PGR2's 5659 in Ghidra, re-derive the layout, sign, rescan both xbes; then settle push buffers and boot.
+
+## 3D sound (Settings::audio_3d, on by default; F1 > General)
+- Mixer (`sdk/runtime/xdk/dsound.cpp`, `audio/reverb.h`): equal-power pan, a little quieter and duller behind, a low-pass and gain drop through walls, a Freeverb-style reverb fed by the effects (not the music/speech streams) whose wetness and length follow the room.
+- Game (`src/game/audio3d.cpp`, called from the 2D-pass hook): 13 rays every 4th frame for the room (roofed and size), 2 rays per 3D voice (6 voices a frame) for walls. DirectSound positions are the world with z negated.
+- Diagnostics: `NF_AUDIO_TRACE=1`, `XBE_AUDIO_RECORD=<file.wav>`, the `dsound:` log line shows room, behind and wall per voice. `.local/a3d_tail.py` compares gun tails. Measured: the room reads indoor 1.0 under the Exchange gate arch, 0 in open snow; the wall rays muffle voices behind the ridge. The reverb itself is not yet confirmed by ear.

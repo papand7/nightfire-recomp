@@ -45,6 +45,7 @@ X86_FUNC(sub_000DAC20) {  // the frame's 2D pass
         if (health < 50 && ++seen % 600 == 1) LOGR("nightfire: low health: actor %08X, health %.1f, shown %.2f", actor, health, health / 100.0f), logx::Flush();
     }
     nf::RagdollTest(ctx);
+    nf::AudioFrame(ctx);
     nf::PhotoBeforePass(ctx);  // photo mode's free camera for the pass (src/game/photo_mode.cpp)
     __imp__sub_000DAC20(ctx, base);
     nf::PhotoAfterPass();
