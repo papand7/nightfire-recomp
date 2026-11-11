@@ -2692,3 +2692,9 @@ and PGR2's 5659 in Ghidra, re-derive the layout, sign, rescan both xbes; then se
   memory); merging the repeated draws into one needs their vertices put together, deferred past the side passes
   (mask, glow, ray-traced capture) that reuse each draw. Both are larger changes; the frame is not draw-bound here
   (the render thread works beside the game; GPU about 1 ms).
+- Upper bound for caching static meshes: the vertex copy into the stream is 0.52 of the 4.1 ms (measured by leaving
+  it out). Guest memory is a file-mapping view (kernel/memory.cpp), so Windows' write watch (MEM_WRITE_WATCH) is not
+  available to tell when a mesh changed; only hashing the bytes each draw would do, which costs a good part of the
+  copy it saves. The render thread gets the State as deltas (render_thread.cpp Op::State), so "state unchanged since
+  the last draw" is cheap to know there, but a draw's pipeline, sky, mask, glow and displacement steps all read its
+  vertices, so skipping them for a repeated draw is a rewrite of Draw() (about 400 lines), not a fast path.
