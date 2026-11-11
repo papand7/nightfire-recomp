@@ -4,7 +4,7 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Status
 - Vulkan port: SDK branch vulkan-port (9dbcdf3) contains NightFire's Vulkan backend adapted as the only host renderer; DX renderer sources, interfaces, fallback, and libraries are excluded. This checkout has no game assets, so it has not been built or Windows-smoke-tested.
-- Vulkan visual port: SDK branch `visual-port` has FXAA, gamma, scaling, sharpening, anisotropic filtering, texture replacement, SMAA 1x, PNG texture packs/dumps (2e5d161), five screen-space styles (0b65310), SDR bloom (349fd1d), vignette and animated film grain (b569525), YUY2 movie upscaling (b129368), exposure/contrast/saturation/temperature controls (5162dbf), plus optional Vulkan ray-query capability detection (1f6e61a; no ray-traced effects yet).
+- Vulkan visual port: SDK branch `visual-port` has FXAA, gamma, scaling, sharpening, anisotropic filtering, texture replacement, SMAA 1x, PNG texture packs/dumps (2e5d161), five screen-space styles (0b65310), SDR bloom (349fd1d), vignette and animated film grain (b569525), YUY2 movie upscaling (b129368), exposure/contrast/saturation/temperature controls (5162dbf), plus optional Vulkan ray-query setup and geometry-capture layout (1f6e61a, f9dd919; no ray-traced effects yet).
   - Present in Agent Under Fire: FXAA, SMAA, render scaling/filtering, sharpening, gamma, anisotropic filtering, texture replacement, Enhanced Color, screen-space Toon, Retro, Noir, SDR bloom, vignette, film grain, YUY2 movie scaling, and screen color adjustments. Vulkan MSAA is unsupported.
   - Still to adapt in the shared renderer: temporal AA/upscalers (requires depth, jitter and motion vectors), HDR tone mapping and multilevel HDR bloom, motion blur and depth of field. These need renderer-owned passes and checks against this game's output.
   - Game-data dependent: the full ray-traced Enhanced look and depth/normal-aware Toon outlines, AO/contact shadows, global illumination, reflections/water, light shafts, muzzle/fire lighting, fog, snow/footprints, particles and persistent blood. Nightfire's versions depend on its depth, lights, materials, weather and game hooks; identify Agent Under Fire equivalents before implementation.
@@ -29,6 +29,10 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-11 - Vulkan geometry-capture layout prepared
+- Reserved a vertex-stage storage-buffer descriptor for captured scene vertices and a 16-byte vertex push-constant range in the shared Vulkan pipeline layout. Ordinary draws still leave both unused.
+- SDK commit: f9dd919. `git diff --check` passes. This prepares the capture shader interface; there is still no geometry capture, acceleration-structure build, or visible RT effect. No build/GPU validation was done.
+- Next: add a capture variant of eligible Agent Under Fire vertex shaders and populate the per-frame buffer.
 ### 2026-11-11 - Ray-query device capability detection
 - The Vulkan backend now checks for acceleration-structure, ray-query and deferred-host-operations extensions plus required device features, enables them only when all are supported, loads their optional entry points, and logs availability. Unsupported GPUs keep the existing renderer path.
 - SDK commit: 1f6e61a. `git diff --check` passes. This is capability groundwork only: no geometry capture or ray-traced image effect is implemented, and no build/GPU validation has been done.
