@@ -14,13 +14,17 @@
         case 0x2A9F98: return 0x2AA7D8; \
         case 0x2F6AC0: return 0x2F7300; \
         case 0x329390: return 0x329BD0; \
+        case 0x330400: return 0x330C40; \
+        case 0x330404: return 0x330C44; \
         case 0x346788: return 0x346FC8; \
         case 0x3467B8: return 0x346FF8; \
         case 0x346DB0: return 0x3475F0; \
         case 0x3B22D5: return 0x3B2B15; \
         case 0x3B2414: return 0x3B2C54; \
         case 0x3B2418: return 0x3B2C58; \
+        case 0x3B241C: return 0x3B2C5C; \
         case 0x3B2420: return 0x3B2C60; \
         case 0x3B2428: return 0x3B2C68; \
         case 0x3B2D08: return 0x3B3548; \
+        case 0x435220: return 0x435A60; \
 

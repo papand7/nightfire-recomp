@@ -34,6 +34,20 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-11 - Aim down sights, weapon sway, hit feedback, ragdolls (bond_eng.xbe)
+- src/bond/aim.cpp: the left trigger (right mouse) with a gun that has no scope no longer starts manual aim (bit 0x1000
+  taken from the player's buttons before 0xBB990); the view zooms 1.35x (0xB55C0), the view-model offset (0x27C40) puts
+  the P2K's sights on the middle (x -3.3, y -3.5; AUF_ADS_SIGHT=x,y tunes it) and the crosshair (0x51320) hides. Fists
+  (vtable 0x1E5FC8) and gadgets are left alone. Checked in Trouble in Paradise. Weapon sway (the gun trails turns) is in
+  the same offset; synthetic mouse input did not turn the view, so it is not seen in play yet.
+- src/bond/hit_feedback.cpp + SDK app::HitMarker (NightFire's, without damage numbers): Entity::Damage 0xAC040 keeps
+  player 1 as each victim's attacker, the actors' handler 0x77A10 marks a hit or a kill. Not seen yet (no enemy reached).
+- src/bond/ragdoll.cpp (off by default, option ragdolls): the dead-actor list [0x330400], the pose [m+0x5C] (position
+  + quaternion, model space) swapped in around the skinning 0x146D60 only; 17 Verlet points, a rigid torso, limbs aimed
+  joint to joint, the floor at the lowest bone at death. AUF_RAGDOLL_TEST=1 drops every character after 2 s: the opening
+  cutscene's guards fall and lie flat. Not yet: walls (gi.trace [0x32917C]), the killing shot's push.
+- Each build: tools/map_bond.py fre ger in WSL (it needs GNU objdump), then build.bat.
+
 ### 2026-11-11 - First Windows build and in-game check of the visual port
 - The PAL disc (En/Fr/De) was extracted into assets (27 files, 3.2 GB) through kernel::Disc; build.bat built all five exes.
   The visual port compiled after the earlier Vulkan fixes (SMAA blend shaders, TAA views, alpha-test state, push cast).

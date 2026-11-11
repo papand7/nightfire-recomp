@@ -33,7 +33,7 @@
 
 namespace {
 constexpr uint32_t kTrigger = 0x1000;
-constexpr float kZoom = 1.35f, kEase = 0.15f, kSightX = 0.0f, kSightY = 0.0f;
+constexpr float kZoom = 1.35f, kEase = 0.15f, kSightX = -3.3f, kSightY = -3.5f;  // the P2K's sights on the middle (x left, y up negative)
 constexpr uint32_t kFrameSeconds = A(0x3B2420), kHud = A(0x2F6AC0);
 
 float g_aim[4];   // 0 hip, 1 down the sights
