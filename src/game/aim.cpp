@@ -115,7 +115,7 @@ bool SaveTune() {
 struct Tuner {
     int weapon = -1;            // the weapon held
     int64_t saved_at = -100000;  // when Enter saved (the panel says so a while)
-    bool was[4] = {};            // (unused, unused,) Enter, Delete last frame
+    bool was[6] = {};            // (unused, unused,) Enter, Delete, comma, full stop last frame
 } g_tuner;
 
 struct Player {
@@ -306,7 +306,8 @@ void SightTunerFrame(X86Context& ctx, uint32_t obj, int held) {
     input::HoldBackToolKeys(true);
     g_tuner.weapon = held;
     const bool focused = input::GameFocused();
-    const bool now[4] = {false, false, focused && input::KeyDown(0x0D), focused && input::KeyDown(0x2E)};
+    const bool now[6] = {false, false, focused && input::KeyDown(0x0D), focused && input::KeyDown(0x2E),
+                         focused && input::KeyDown(0xBC), focused && input::KeyDown(0xBE)};
     auto pressed = [&](int k) { return now[k] && !g_tuner.was[k]; };
     // every weapon given once a level (0xBA5E0: the actor, the index, ammo), switched with the game's own keys
     static uint32_t given_for = 0;
@@ -318,6 +319,24 @@ void SightTunerFrame(X86Context& ctx, uint32_t obj, int held) {
             if (Usable(idx)) kernel::CallGuest(ctx, 0xBA5E0, {R32(obj + kActor), uint32_t(idx), 999}), n++;
         ctx.eax = eax;
         LOGR("nightfire: sight tuner: %d weapons given", n);
+        for (int idx = 0; idx < 0x48; idx++) {  // the whole table, to see what is left out and why
+            const uint32_t w = kWeapons + uint32_t(idx) * kWeaponSize;
+            if (kernel::G<uint16_t>(w))
+                LOGR("nightfire: weapon table %2d: id %u, flags %08X, zoom %.2f, base %d: %s", idx, kernel::G<uint16_t>(w),
+                     R32(w + kWeaponFlags), GetF(w + kWeaponZoom), kernel::G<uint8_t>(w + 4),
+                     Usable(idx) ? "in the tuner" : (R32(w + kWeaponFlags) & kScoped) ? "left out: scoped" : "left out: thrown");
+        }
+    }
+    // comma and full stop: the weapon before and after in the table, every one (the game's own switch reaches only the
+    // base weapons, not the variants such as the silenced ones), asked for as a pickup does
+    if (pressed(4) || pressed(5)) {
+        const int dir = pressed(5) ? 1 : 63;
+        for (int tries = 1, idx = held < 0 ? 0 : held; tries <= 64; tries++) {
+            idx = (idx + dir) % 64;
+            if (!Usable(idx)) continue;
+            kernel::G<int8_t>(R32(obj + kWeaponState) + 0x53) = int8_t(idx);
+            break;
+        }
     }
     if (held >= 0 && held < 64 && focused) {
         const float step = (input::KeyDown(0x10) ? 0.1f : 0.5f) / 1000.0f;  // Shift: finer
@@ -332,7 +351,7 @@ void SightTunerFrame(X86Context& ctx, uint32_t obj, int held) {
     if (pressed(2)) {
         if (SaveTune()) g_tuner.saved_at = NowMs(), LOGR("nightfire: sight tuner: saved to %s", TunePath().string().c_str());
     }
-    for (int k = 0; k < 4; k++) g_tuner.was[k] = now[k];
+    for (int k = 0; k < 6; k++) g_tuner.was[k] = now[k];
 }
 // its panel (from nf::GameUi): the true centre (where the shots go) and the held weapon's place
 void SightTunerUi() {
@@ -346,7 +365,7 @@ void SightTunerUi() {
     char line[256];
     std::snprintf(line, sizeof line,
                   "SIGHT TUNER  weapon %d   left/right %+.1f mm   up/down %+.1f mm   farther %+.1f mm\n"
-                  "Switch weapon as usual   Arrows move   Home/End nearer/farther   (Shift finer)   Enter save all   Delete reset\n"
+                  ", and . pick any weapon (the variants too)   Arrows move   Home/End nearer/farther   (Shift finer)   Enter save all   Delete reset\n"
                   "Put the sights on the red dot: that is where the shots go.%s",
                   w, g_tune[w][0] * 1000, g_tune[w][1] * 1000, g_tune[w][2] * 1000,
                   NowMs() - g_tuner.saved_at < 2500 ? "\nSaved to sight_offsets.txt" : "");
