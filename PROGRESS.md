@@ -2734,3 +2734,15 @@ and PGR2's 5659 in Ghidra, re-derive the layout, sign, rescan both xbes; then se
   hd_pack --movies and the runtime are kept. The collected frames are in .local/rt_run/mods/movies/dump (3.5 GB) and
   D:
 f_movies\pack (a partial pack).
+
+## 2026-11-11: Mac (Apple Silicon): guest memory commit failed, then a crash
+
+- Log (pastebin, M1 Pro, macOS 25.6): about 170 `memory: commit B0101000+1000 failed` lines at start-up, then
+  `crash: signal 10 at ... guest B0104000` (signal 10 is SIGBUS on macOS).
+- Cause: Apple Silicon uses 16 KB pages, and the guest memory code commits and decommits in 4 KB steps. `mprotect`
+  and `madvise` refuse a range that does not start and end on a 16 KB page, so every 4 KB-offset commit failed, and
+  the page the game then touched was still PROT_NONE.
+- Fix (kernel/memory.cpp): a commit takes in the whole host pages it touches; a decommit only the whole host pages
+  inside its range. Windows unchanged. Checked on Windows only (boots with no commit failures); the Mac build needs
+  a test on a Mac.
+
