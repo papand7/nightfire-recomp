@@ -4,6 +4,7 @@
         case 0xAE770: return 0xAE5D0; \
         case 0x14B654: return 0x14B594; \
         case 0x1E5FC8: return 0x1E6308; \
+        case 0x205408: return 0x205768; \
         case 0x2A8124: return 0x2A8444; \
         case 0x2A8128: return 0x2A8448; \
         case 0x2A8144: return 0x2A8464; \
@@ -20,6 +21,10 @@
         case 0x346788: return 0x346AA8; \
         case 0x3467B8: return 0x346AD8; \
         case 0x346DB0: return 0x3470D0; \
+        case 0x357B80: return 0x357EA0; \
+        case 0x358780: return 0x358AA0; \
+        case 0x3587C4: return 0x358AE4; \
+        case 0x3587FC: return 0x358B1C; \
         case 0x3B22D5: return 0x3B25F5; \
         case 0x3B2414: return 0x3B2734; \
         case 0x3B2418: return 0x3B2738; \

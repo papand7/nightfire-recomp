@@ -18,6 +18,7 @@ extern bool skip_intro;
 extern bool uncapped;         // on foot paced by the frame rate cap, not the console's 30 (src/bond/framerate.cpp); driving at 60, not 50 (src/driving/hooks.cpp)
 extern bool hit_flash;        // the white flash when Bond is hit, on by default (src/bond/hooks.cpp)
 extern bool auto_aim;         // the game's auto-aim, off by default (src/bond/mouse.cpp, src/driving/mouse.cpp)
+extern bool photo_mode;        // F10 frees the camera (src/bond/photo_mode.cpp)
 extern bool ragdolls;          // dead enemies go limp and fall (src/bond/ragdoll.cpp), off by default
 extern bool weapon_sway;       // the gun trails the view's turns (src/bond/aim.cpp)
 extern bool aim_down_sights;  // L raises the gun to the middle and zooms a little, not manual aim (src/bond/aim.cpp)

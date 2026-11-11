@@ -34,6 +34,14 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-12 - Photo mode (bond_eng.xbe)
+- src/bond/photo_mode.cpp (option photo_mode, on): F10 on foot pauses ([0x3B2428], set here if it came during play)
+  and flies player 1's camera: mouse, W A S D, Space and C, Shift and Ctrl. The camera matrix 0x15D5A0 makes the view,
+  culling and PVS from is written (refdef 0x357B80, view [0x358780] 0); the HUD and pause menu ([0x3587FC]), the gun
+  ([0x3587C4]) and the pause screen's figure (0x41A60) are hidden, the pause menu's input and tick (0x33920) skipped.
+  F12 takes the picture; F10 again puts all back. Checked in Trouble in Paradise: flies, nothing 2D drawn, play resumes.
+- Not yet: field of view and depth of field controls, split screen (off with more than one player).
+
 ### 2026-11-11 - Ragdolls meet the level and the killing shot
 - Each point's move is traced through the game's ray 0x73F40 (mask 0x10001, Quake III's MASK_DEADSOLID; the body's own
   entity [edict+8] passed through) in world space from the model's rows [m+0x170..0x1A0] and scale [m+0x164]. Walking

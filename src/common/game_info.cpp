@@ -21,6 +21,7 @@ bool hit_flash = true;
 bool aim_down_sights = true;
 bool weapon_sway = true;
 bool ragdolls = false;
+bool photo_mode = true;
 uint32_t fov_percent = 100;
 
 float FovScale() {
@@ -198,6 +199,7 @@ const app::GameInfo app::kGame = {
                 {"auto_aim", &auf::auto_aim, nullptr, "Auto-aim", "The game's aim assist, on foot and on mounted guns. Off by default"},
                 {"aim_down_sights", &auf::aim_down_sights, nullptr, "Aim down sights",
                  "The left trigger (right mouse) raises the gun to the middle and zooms in a little, instead of the game's manual aim. Scopes stay as they are"},
+                {"photo_mode", &auf::photo_mode, nullptr, "Photo mode (F10)", "F10 stops the game and frees the camera: mouse to look, W A S D to move, Space and C up and down, Shift faster, Ctrl slower; F12 takes the picture, F10 again goes back"},
                 {"ragdolls", &auf::ragdolls, nullptr, "Ragdolls", "Enemies go limp and fall when they die, in place of the death animations. Only their look; off by default"},
                 {"weapon_sway", &auf::weapon_sway, nullptr, "Weapon sway", "The gun trails your turns a little and settles back"},
                 {"hit_flash", &auf::hit_flash, nullptr, "Hit flash", "The white flash on screen when Bond is hit. On by default; off for those it troubles"},
