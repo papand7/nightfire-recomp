@@ -34,6 +34,18 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-11 - Ragdolls meet the level and the killing shot
+- Each point's move is traced through the game's ray 0x73F40 (mask 0x10001, Quake III's MASK_DEADSOLID; the body's own
+  entity [edict+8] passed through) in world space from the model's rows [m+0x170..0x1A0] and scale [m+0x164]. Walking
+  characters confirmed the rows are the model's axes (p.x r0 + p.y r1 + p.z r2; votes 17 to -15, logged once).
+- A ray starting in the ground (a foot on it) is cast again from 24 units above; each point keeps the body's thickness
+  (torso 7, head 5, limbs 2-6) off what it meets, so bodies lie on the floor, not half in it. The death floor stays only
+  as a last stop 300 below. AUF_RAGDOLL_TEST: one guard slides off the doorway ledge and lands on the floor below
+  (-21.8), the other rests on the ledge (+1.9); before, one fell through.
+- The killing shot: Entity::Damage's direction ([esp+0x14]) is kept per victim (RagdollNoteHit) and pushes the body,
+  the chest most (160 units a second). Not seen yet: no kill reached in a test.
+- Bodies still settle only at the 8 s limit (a little jitter on the ground).
+
 ### 2026-11-11 - Aim down sights, weapon sway, hit feedback, ragdolls (bond_eng.xbe)
 - src/bond/aim.cpp: the left trigger (right mouse) with a gun that has no scope no longer starts manual aim (bit 0x1000
   taken from the player's buttons before 0xBB990); the view zooms 1.35x (0xB55C0), the view-model offset (0x27C40) puts

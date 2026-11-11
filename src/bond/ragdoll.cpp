@@ -12,7 +12,13 @@
 // never in it).
 // 17 joints become points that fall (Verlet; the motion they had the frame before carries on), hold their distances
 // (the hips, chest, head, shoulders and hip joints as one piece, the limbs' bones) and stop at the floor the body died
-// on (the lowest of its bones then, model space being upright), with friction. Each bone is then its kept pose moved
+// on, with friction. The level stops them too: each point's move is traced in the world (the game's ray 0x73F40: out,
+// start, end, the entity passed through ([edict+8]), the mask (solid and player clip), 0, 0; trace_t +4 started inside, +8 the fraction, +0x1C
+// where it stopped, +0x30 the surface's normal), through the model's place in it (the rows at [m+0x170], [m+0x180],
+// [m+0x190], [m+0x1A0] where it stands, [m+0x164] its scale). Which way round those rows turn the model is told by
+// the characters walking: they go the way their toes point (logged once; AUF_RAGDOLL_AXES=0/1 sets it). The floor at
+// death (its lowest bone, model space being upright) stays only as a last stop far below. The shot that killed it
+// (Entity::Damage's direction, src/bond/hit_feedback.cpp) pushes the body, the chest most. Each bone is then its kept pose moved
 // as its joint moved: the torso's turned with the frame of its points, each limb bone aimed from its joint at the
 // next, the rest (hands, fingers, toes, the weapon's tag) carried with their parents. A body that lies still (or
 // after 8 s) sleeps: its last pose drawn as it is.
@@ -30,13 +36,18 @@
 
 #include "common/auf.h"
 #include "core/log.h"
+#include "bond/ragdoll.h"
 #include "kernel/kernel.h"
+#include "kernel/memory.h"
 #include "xdk/hle.h"
 
 namespace {
 constexpr uint32_t kDeadList = A(0x330400), kDeadCount = A(0x330404), kNameHashes = A(0x435220);
 constexpr uint32_t kFrameSeconds = A(0x3B2420), kFrame = A(0x3B241C);
 constexpr float kGravity = 515.0f;  // sv_gravity's default, units a second squared
+constexpr uint32_t kRay = A(0x73F40);
+constexpr uint32_t kMask = 0x10001;  // solid and player clip: Quake III's MASK_DEADSOLID, what a corpse meets
+constexpr float kPush = 160.0f;      // units a second the killing shot gives the chest
 
 struct V {
     float x = 0, y = 0, z = 0;
@@ -112,6 +123,9 @@ constexpr Name kPoints[] = {kHip, kUpTorso, kHead, kRBicep, kRForearm, kRHand, k
                             kRThigh, kRCalf, kRFoot, kRToe, kLThigh, kLCalf, kLFoot, kLToe};
 constexpr int kNPoints = int(std::size(kPoints));
 constexpr int kTorso = 7;  // the first seven points move as one piece
+// how far each point (a joint inside the body) stays off a surface: the body's thickness there
+constexpr float kRadius[] = {7, 7, 5, 4, 3, 3, 4, 3, 3, 6, 4, 3, 2, 6, 4, 3, 2};
+static_assert(std::size(kRadius) == std::size(kPoints));
 // the limbs' bones: the bone (by name) aimed from its point at the next
 struct Limb {
     Name bone, from, to;
@@ -154,11 +168,74 @@ struct Body {
     std::array<float, kNPoints * kNPoints> rest{};
     std::vector<Pose> out;  // the pose drawn
     uint32_t mesh = 0;
+    uint32_t edict = 0, entity = 0;
+    V last_t{};  // where the living model stood the frame before (its walk tells the axes)
+    bool has_t = false;
+    uint32_t rays = 0, hits = 0;
 };
 std::unordered_map<uint32_t, Body> g_bodies;
 std::unordered_map<uint32_t, Skeleton> g_skeletons;  // by mesh
 uint32_t g_frame = ~0u;
-std::unordered_set<uint32_t> g_dead;
+std::unordered_map<uint32_t, uint32_t> g_dead;  // model -> its entity
+std::unordered_map<uint32_t, V> g_hits;          // entity -> the direction of the last shot that hurt it (world)
+
+// the model's place in the world
+struct World {
+    V r[3], t;
+    float s = 1;
+};
+World WorldOf(uint32_t m) {
+    auto f = [&](uint32_t at) { return *reinterpret_cast<const float*>(&kernel::G<uint32_t>(m + at)); };
+    World w;
+    for (int i = 0; i < 3; i++) w.r[i] = {f(0x170 + i * 0x10), f(0x174 + i * 0x10), f(0x178 + i * 0x10)};
+    w.t = {f(0x1A0), f(0x1A4), f(0x1A8)};
+    const float sc = f(0x164);
+    w.s = sc > 0.01f && sc < 100.0f ? sc : 1.0f;
+    return w;
+}
+int g_axes = -1;        // 0: the rows are the model's axes in the world (p.x r0 + p.y r1 + p.z r2), 1: their transpose
+float g_votes[2] = {};
+int Axes() {
+    static const int forced = [] {
+        const char* e = std::getenv("AUF_RAGDOLL_AXES");
+        return e && *e ? (*e == '1' ? 1 : 0) : -1;
+    }();
+    return forced >= 0 ? forced : g_axes >= 0 ? g_axes : 0;
+}
+V Turn(const World& w, V v, int axes) {
+    return axes == 0 ? w.r[0] * v.x + w.r[1] * v.y + w.r[2] * v.z : V{Dot(w.r[0], v), Dot(w.r[1], v), Dot(w.r[2], v)};
+}
+V Unturn(const World& w, V v, int axes) {
+    return axes == 0 ? V{Dot(w.r[0], v), Dot(w.r[1], v), Dot(w.r[2], v)} : w.r[0] * v.x + w.r[1] * v.y + w.r[2] * v.z;
+}
+V ToWorld(const World& w, V p) { return w.t + Turn(w, p * w.s, Axes()); }
+V ToModel(const World& w, V q) { return Unturn(w, q - w.t, Axes()) * (1 / w.s); }
+
+struct Hit {
+    bool ok = false, inside = false;  // inside: the ray started in something solid
+    V at, n;
+};
+// the game's ray from a to b (world), passing through the entity numbered pass
+Hit Ray(X86Context& ctx, V a, V b, uint32_t pass) {
+    static const uint32_t scratch = mem::AllocHostContiguous(0xC0, 16);
+    const uint32_t out = scratch, start = scratch + 0x80, end = scratch + 0x90;
+    auto setv = [](uint32_t at, V v) {
+        float* f = reinterpret_cast<float*>(&kernel::G<uint32_t>(at));
+        f[0] = v.x, f[1] = v.y, f[2] = v.z, f[3] = 0;
+    };
+    setv(start, a), setv(end, b);
+    std::memset(&kernel::G<uint8_t>(out), 0, 0x80);
+    kernel::CallGuest(ctx, kRay, {out, start, end, pass, kMask, 0, 0});
+    const float* f = reinterpret_cast<const float*>(&kernel::G<uint32_t>(out));
+    Hit h;
+    const float fraction = f[2];
+    h.inside = kernel::R32(out + 4) != 0;
+    if (h.inside || !(fraction >= 0) || fraction >= 1.0f) return h;  // started inside, or nothing met
+    h.at = {f[7], f[8], f[9]};
+    h.n = Norm({f[12], f[13], f[14]});
+    h.ok = std::isfinite(h.at.x) && std::isfinite(h.at.y) && std::isfinite(h.at.z);
+    return h;
+}
 
 bool Enabled() {
     static const int env = [] {
@@ -213,14 +290,14 @@ void Refresh() {
     for (uint32_t i = 0; list && i < n; i++) {
         const uint32_t e = kernel::R32(list + i * 4), edict = e ? kernel::R32(e + 0xC) : 0;
         const uint32_t model = edict && kernel::R32(edict + 0x108) ? kernel::R32(edict + 0x10C) : 0;
-        if (model) g_dead.insert(model);
+        if (model) g_dead[model] = e;
     }
     // bodies not drawn for a while are gone (removed, or another level)
     for (auto it = g_bodies.begin(); it != g_bodies.end();)
         it = frame - it->second.frame > 120 ? g_bodies.erase(it) : std::next(it);
 }
 
-void Start(Body& b, const Skeleton& s, uint32_t pose, uint32_t n) {
+void Start(Body& b, const Skeleton& s, uint32_t pose, uint32_t n, const World& w, float dt) {
     b.limp = true, b.asleep = false, b.age = 0, b.still = 0;
     b.kept.resize(n);
     for (uint32_t i = 0; i < n; i++) b.kept[i] = ReadPose(pose + i * 0x20);
@@ -233,6 +310,16 @@ void Start(Body& b, const Skeleton& s, uint32_t pose, uint32_t n) {
     for (int i = 0; i < kNPoints; i++)
         for (int j = 0; j < kNPoints; j++) b.rest[i * kNPoints + j] = Len(b.p[i] - b.p[j]);
     b.out = b.kept;
+    // the killing shot's push: the chest and head most, the legs least
+    if (auto hit = g_hits.find(b.entity); hit != g_hits.end() && dt > 0) {
+        const V push = Unturn(w, hit->second, Axes()) * (kPush / w.s);
+        for (int i = 0; i < kNPoints; i++) {
+            const float k = i < 3 ? 1.0f : i < kTorso ? 0.8f : i < 9 ? 0.7f : 0.35f;
+            b.prev[i] = b.prev[i] - push * (k * dt);
+        }
+        g_hits.erase(hit);
+        if (Trace()) LOGR("ragdoll: pushed by the killing shot");
+    }
     if (Trace()) LOGR("ragdoll: %u bones go limp, floor %.1f", n, b.floor);
 }
 
@@ -251,7 +338,7 @@ int PointOf(Name n) {
     return -1;
 }
 
-void Step(Body& b, float dt) {
+void Step(X86Context& ctx, Body& b, float dt, const World& w) {
     const float g = kGravity * dt * dt;
     float moved = 0;
     for (int i = 0; i < kNPoints; i++) {
@@ -266,19 +353,38 @@ void Step(Body& b, float dt) {
         // the hand and foot keep their distance to the torso a little (elbows and knees fold, not flat through it)
         for (Name a : {kRHand, kLHand, kRFoot, kLFoot}) Stick(b, PointOf(a), 0, 0.05f);
         for (int i = 0; i < kNPoints; i++)
-            if (b.p[i].z < b.floor) {
-                b.p[i].z = b.floor;
-                V slide = b.p[i] - b.prev[i];
-                b.prev[i].x = b.p[i].x - slide.x * 0.4f;  // friction on the ground
-                b.prev[i].y = b.p[i].y - slide.y * 0.4f;
-            }
+            if (b.p[i].z < b.floor - 300.0f) b.p[i].z = b.floor - 300.0f;  // a last stop, should the level have a hole
+    }
+    // the level: each point's move this step, traced (from a little above when it starts in the ground); a point that met something stays just off it and slides
+    const uint32_t pass = b.edict ? kernel::R32(b.edict + 8) : 1023;
+    for (int i = 0; i < kNPoints; i++) {
+        const V from = ToWorld(w, b.prev[i]), move = ToWorld(w, b.p[i]) - from;
+        if (Len(move) < 1e-3f) continue;
+        // the ray reaches the point's thickness further along its way down, so it rests on its skin, not its joint
+        const V to = from + move + V{0, 0, -kRadius[i]};
+        Hit h = Ray(ctx, from, to, pass);
+        b.rays++;
+        // a point that starts in the ground (a foot on it): down to it from a little above instead
+        if (h.inside) h = Ray(ctx, to + V{0, 0, 24}, to, pass), b.rays++;
+        if (!h.ok) continue;
+        b.hits++;
+        const V n = Norm(Unturn(w, h.n, Axes()));
+        const V stop = ToModel(w, h.at) + n * (kRadius[i] / w.s);
+        const V slide = b.p[i] - b.prev[i];
+        const V along = slide - n * Dot(slide, n);
+        b.p[i] = stop;
+        b.prev[i] = stop - along * 0.25f;  // friction
     }
     for (int i = 0; i < kNPoints; i++) moved = std::max(moved, Len(b.p[i] - b.prev[i]));
     b.still = moved < 0.02f ? b.still + dt : 0;
     b.age += dt;
     if ((b.still > 0.6f && b.age > 1.0f) || b.age > 8.0f) {
         b.asleep = true;
-        if (Trace()) LOGR("ragdoll: a body sleeps after %.1f s", b.age);
+        if (Trace()) {
+            float low = 1e9f;
+            for (const V& q : b.p) low = std::min(low, q.z);
+            LOGR("ragdoll: a body sleeps after %.1f s, %u rays %u hits, lowest %.1f (floor at death %.1f), edict %08X", b.age, b.rays, b.hits, low, b.floor, b.edict);
+        }
     }
 }
 
@@ -356,17 +462,47 @@ X86_FUNC(sub_00146D60) {
         if (new_frame) b.seen_alive += dt;
         dead = b.seen_alive > 2.0f;
     }
+    const World w = WorldOf(model);
     if (!dead) {
         if (b.limp) b = Body{}, b.frame = frame;  // the same model alive again (reused)
+        if (new_frame && dt > 0) {  // walking: the way it goes against the way its toes point, in both readings
+            const V moved = w.t - b.last_t;
+            const float speed = Len(V{moved.x, moved.y, 0}) / dt;
+            if (b.has_t && speed > 40.0f && speed < 500.0f && g_axes < 0) {
+                const V toes = (ReadPose(pose + s.bone[kRToe] * 0x20).p - ReadPose(pose + s.bone[kRFoot] * 0x20).p) +
+                               (ReadPose(pose + s.bone[kLToe] * 0x20).p - ReadPose(pose + s.bone[kLFoot] * 0x20).p);
+                const V go = Norm({moved.x, moved.y, 0});
+                for (int k = 0; k < 2; k++) {
+                    const V f = Turn(w, V{toes.x, toes.y, 0}, k);
+                    g_votes[k] += Dot(go, Norm({f.x, f.y, 0}));
+                }
+                if (std::abs(g_votes[0] - g_votes[1]) > 30.0f) {
+                    g_axes = g_votes[0] > g_votes[1] ? 0 : 1;
+                    LOGR("ragdoll: the model rows read as %s (votes %.0f, %.0f)", g_axes ? "columns" : "rows", g_votes[0], g_votes[1]);
+                }
+            }
+            b.last_t = w.t, b.has_t = true;
+        }
         if (new_frame) {
             for (int i = 0; i < kNPoints; i++) b.last[i] = ReadPose(pose + s.bone[kPoints[i]] * 0x20).p;
             b.has_last = true;
         }
         return __imp__sub_00146D60(ctx, base);
     }
-    if (!b.limp || b.kept.size() != n) Start(b, s, pose, n);
+    if (!b.limp || b.kept.size() != n) {
+        if (auto d = g_dead.find(model); d != g_dead.end()) b.entity = d->second, b.edict = kernel::R32(d->second + 0xC);
+        else  // a test body: its edict by its model ([0x329390], 0x2E0 each)
+            for (uint32_t e = kernel::R32(A(0x329390)), k = 0; e && k < 1024; k++)
+                if (kernel::R32(e + k * 0x2E0 + 0x108) && kernel::R32(e + k * 0x2E0 + 0x10C) == model) {
+                    b.edict = e + k * 0x2E0;
+                    break;
+                }
+        Start(b, s, pose, n, w, dt);
+    }
     if (new_frame && !b.asleep && !auf::MenuUp() && dt > 0) {
-        Step(b, dt);
+        const X86Context saved = ctx;  // the rays call into the game
+        Step(ctx, b, dt, w);
+        ctx = saved;
         Drive(b, s);
     }
     // the ragdoll's pose for the skinning only, the game's back after it
@@ -376,4 +512,12 @@ X86_FUNC(sub_00146D60) {
     kernel::G<uint32_t>(model + 0x2B4) = 0;  // the skin's frame guard: made again from this pose
     __imp__sub_00146D60(ctx, base);
     std::memcpy(&kernel::G<uint8_t>(pose), game.data(), game.size());
+}
+
+// the direction of a shot that hurt an entity (world, any length), from Entity::Damage
+void RagdollNoteHit(uint32_t entity, float x, float y, float z) {
+    if (!entity || !Enabled()) return;
+    const V d{x, y, z};
+    if (Len(d) > 1e-4f && std::isfinite(x) && std::isfinite(y) && std::isfinite(z)) g_hits[entity] = Norm(d);
+    if (g_hits.size() > 256) g_hits.clear();
 }

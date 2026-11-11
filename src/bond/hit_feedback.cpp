@@ -6,12 +6,13 @@
 // posts EV_Killed at 0 or below. Glass and props have their own handler, so only characters reach 0x77A10. The
 // attacker is kept by victim from 0xAC040 for the handler: a player is an entity with a client (+0x10) whose gentity
 // is in the array [0x329390] (0x2E0 an entry) at index 0 (player 1).
-// AUF_HIT_TEST=1 logs each hit the handler sees.
+// Its direction ([esp+0x14]) goes to the ragdolls (RagdollNoteHit). AUF_HIT_TEST=1 logs each hit the handler sees.
 #include "bond/addr.h"
 #include <cstdlib>
 #include <cstring>
 
 #include "app/app.h"
+#include "bond/ragdoll.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
 #include "xdk/hle.h"
@@ -52,6 +53,11 @@ X86_EXTERN_FUNC(__imp__sub_000AC040);
 X86_FUNC(sub_000AC040) {
     const uint32_t victim = ctx.ecx, attacker = kernel::R32(ctx.esp + 8);
     if (PlayerOf(attacker) == 0 && victim != attacker) g_recent[g_next++ % 16] = {victim, attacker};
+    // the shot's direction ([esp+0x14], a world vector) for a ragdoll's push
+    if (const uint32_t dir = kernel::R32(ctx.esp + 0x14)) {
+        const float* f = reinterpret_cast<const float*>(&kernel::G<uint32_t>(dir));
+        RagdollNoteHit(victim, f[0], f[1], f[2]);
+    }
     __imp__sub_000AC040(ctx, base);
 }
 
