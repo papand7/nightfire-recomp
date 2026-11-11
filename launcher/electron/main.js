@@ -28,6 +28,7 @@ let state = null;
 let android = null;
 let androidOutput = null;
 let pack = null;  // the running hd_pack
+let jobKind = '';  // what the running hd_pack or collecting game does: 'textures' or 'movies'
 let collect = null;  // the game running to collect the textures from its files
 
 function send(channel, data) {
@@ -189,6 +190,7 @@ ipcMain.handle('textures:info', async () => {
         folder: tex,
         running: !!pack,
         collecting: !!collect,
+        job: jobKind,  // 'textures' or 'movies': what pack or collect is doing
         game: fs.existsSync(path.join(dir, WINDOWS ? 'Nightfire.exe' : 'Nightfire')),
     };
 });
@@ -200,6 +202,7 @@ ipcMain.handle('textures:run', async (_, o) => {
     if (o.pbr) args.push('--pbr');
     if (o.force) args.push('--force');
     pack = spawn(exe, args, { cwd: dir, windowsHide: true });
+    jobKind = 'textures';
     const out = line => send('pack', { line });
     readline.createInterface({ input: pack.stdout }).on('line', out);
     readline.createInterface({ input: pack.stderr }).on('line', out);
@@ -208,16 +211,47 @@ ipcMain.handle('textures:run', async (_, o) => {
     return { ok: true };
 });
 ipcMain.handle('textures:cancel', async () => { if (pack) pack.kill(); if (collect) collect.kill(); });
-// the game started with NF_COLLECT_TEXTURES=1 reads its level files and saves every texture in them, then plays the
-// eight menu movies once each and saves their frames, then quits (about nine minutes; nothing to play)
+// the game started with NF_COLLECT_TEXTURES=1 reads its level files and saves every texture in them, then quits (about
+// half a minute; nothing to play)
 ipcMain.handle('textures:collect', async () => {
     if (collect || pack) return { ok: false, message: 'Another texture job is running.' };
     if (await gameRunning()) return { ok: false, message: 'Close the game first.' };
     const dir = playDir(), exe = path.join(dir, WINDOWS ? 'Nightfire.exe' : 'Nightfire');
     if (!fs.existsSync(exe)) return { ok: false, message: 'Install the game first.' };
     collect = spawn(exe, [], { cwd: dir, env: { ...process.env, NF_COLLECT_TEXTURES: '1' }, windowsHide: false });
+    jobKind = 'textures';
     collect.on('exit', code => { collect = null; send('collect', { done: true, code }); });
     collect.on('error', e => { collect = null; send('collect', { done: true, code: -1, line: e.message }); });
+    return { ok: true };
+});
+
+// ---- HD menu movies: the game started with NF_COLLECT_MOVIES=1 plays the eight front end movies once each and saves
+// their frames (about eight minutes), then hd_pack --movies upscales them 2x into mods/movies (fast: a video model,
+// quality: x4plus, hours; fast falls back to quality by itself on a GPU it draws wrong on)
+ipcMain.handle('movies:collect', async () => {
+    if (collect || pack) return { ok: false, message: 'Another texture or movie job is running.' };
+    if (await gameRunning()) return { ok: false, message: 'Close the game first.' };
+    const dir = playDir(), exe = path.join(dir, WINDOWS ? 'Nightfire.exe' : 'Nightfire');
+    if (!fs.existsSync(exe)) return { ok: false, message: 'Install the game first.' };
+    collect = spawn(exe, [], { cwd: dir, env: { ...process.env, NF_COLLECT_MOVIES: '1' }, windowsHide: false });
+    jobKind = 'movies';
+    collect.on('exit', code => { collect = null; send('collect', { done: true, code, movies: true }); });
+    collect.on('error', e => { collect = null; send('collect', { done: true, code: -1, line: e.message, movies: true }); });
+    return { ok: true };
+});
+ipcMain.handle('movies:run', async (_, o) => {
+    if (pack || collect) return { ok: false, message: 'Another texture or movie job is running.' };
+    const dir = playDir(), exe = path.join(dir, 'tools', 'hd_pack' + EXE);
+    if (!fs.existsSync(exe)) return { ok: false, message: 'hd_pack is not there yet: build the game first.' };
+    const args = ['--movies', '--dir', dir, '--movie-model', o.quality ? 'quality' : 'fast'];
+    if (o.force) args.push('--force');
+    pack = spawn(exe, args, { cwd: dir, windowsHide: true });
+    jobKind = 'movies';
+    const out = line => send('pack', { line, movies: true });
+    readline.createInterface({ input: pack.stdout }).on('line', out);
+    readline.createInterface({ input: pack.stderr }).on('line', out);
+    pack.on('exit', code => { pack = null; send('pack', { done: true, code, movies: true }); });
+    pack.on('error', e => { pack = null; send('pack', { done: true, code: -1, line: e.message, movies: true }); });
     return { ok: true };
 });
 

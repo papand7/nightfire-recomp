@@ -4,8 +4,8 @@
 // mods/textures/dump/<key>.png), for hd_pack to upscale. Turned on by NF_COLLECT_TEXTURES=1 (the launcher's Collect
 // button); the game quits when the files are done.
 //
-// Then the front end's eight movies (the menus' backgrounds and the two logos), for the movie pack (gpu/movie_pack.h):
-// each played once through the game's own player (0xDCCD0: the movie's id, a flag, the volume 0-100; [0x2AE288] the
+// NF_COLLECT_MOVIES=1 (the launcher's HD Movies, a job of its own) instead: the front end's eight movies (the menus'
+// backgrounds and the two logos), for the movie pack (gpu/movie_pack.h): each played once through the game's own player (0xDCCD0: the movie's id, a flag, the volume 0-100; [0x2AE288] the
 // id playing, 0 once it ends), every frame of it dumped as it is bound (nf::CollectMovieFrame: mods/movies/dump/
 // <key>.png and <movie>.txt, the order). They play in real time: about eight minutes.
 //
@@ -92,6 +92,13 @@ bool CollectingTextures() {
         const char* e = std::getenv("NF_COLLECT_TEXTURES");
         return e && *e == '1';
     }();
+    return on || CollectingMovies();
+}
+bool CollectingMovies() {
+    static const bool on = [] {
+        const char* e = std::getenv("NF_COLLECT_MOVIES");
+        return e && *e == '1';
+    }();
     return on;
 }
 
@@ -102,10 +109,13 @@ void CollectTextures(X86Context& ctx) {
     static char movie_name[16];
     if (!CollectingTextures() || done_at) return;
     if (++frame < kStartFrame) return;
-    if (next >= sizeof kLevels / sizeof kLevels[0] && !movie_at && movie == 0) {
+    if (CollectingMovies() && !movie_at) movie_at = 1;
+    if (next >= sizeof kLevels / sizeof kLevels[0] && !movie_at) {
         LOGR("nightfire: textures: %u files, %u records, %u new pictures dumped", totals.files, totals.records, totals.dumped);
         for (auto [code, n] : totals.skipped) LOGR("nightfire: textures: %u records with format code %u skipped", n, code);
-        movie_at = 1;  // the movies next
+        done_at = frame;
+        app::Quit();
+        return;
     }
     if (movie_at) {
         if (movie_at > 1) {

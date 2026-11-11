@@ -103,7 +103,7 @@ void Init() {
 // over; the language select's background (07350048) and the story's movies stay. Not while collecting (the movie
 // pack takes them too)
 bool HideFile(const std::string& path) {
-    static const bool collecting = std::getenv("NF_COLLECT_TEXTURES") != nullptr;
+    static const bool collecting = std::getenv("NF_COLLECT_MOVIES") != nullptr;
     if (!nf::skip_intro || collecting) return false;
     std::string n;
     for (char c : path) n += char(std::tolower(static_cast<unsigned char>(c)));
@@ -230,7 +230,7 @@ bool TextureBound(uint32_t header, uint32_t palette) {
     nf::TitleLog(header);
     const bool yuy2 = header && (kernel::R32(header + 12) >> 8 & 0xFF) == 0x24;
     if (yuy2) nf::CollectMovieFrame(header);
-    static const bool collecting = std::getenv("NF_COLLECT_TEXTURES") != nullptr;
+    static const bool collecting = std::getenv("NF_COLLECT_MOVIES") != nullptr;
     const uint64_t movie = yuy2 && !collecting ? gpu::MovieKey(header) : 0;  // before MenuMovie turns it
     const bool turned = nf::MenuMovie(header);
     if (movie) gpu::MovieShow(header, movie, nf::MenuMovieMode(), nf::RecolorMovie);

@@ -362,7 +362,7 @@ $('btn-save').onclick = async () => {
 };
 
 // ---- the HD texture pack
-let packOpts = { scale: 4, model: 'x4plus' };
+let packOpts = { scale: 4, model: 'x4plus', movie: 'fast' };
 function seg(id, key) {
     document.querySelectorAll(`#${id} button`).forEach(b => b.onclick = () => {
         document.querySelectorAll(`#${id} button`).forEach(x => x.classList.toggle('on', x === b));
@@ -371,6 +371,7 @@ function seg(id, key) {
 }
 seg('seg-scale', 'scale');
 seg('seg-model', 'model');
+seg('seg-movie', 'movie');
 
 async function loadTextures() {
     const [info, f] = await Promise.all([nf.textureInfo(), nf.loadSettings()]);
@@ -387,13 +388,21 @@ async function loadTextures() {
     $('btn-collect').disabled = !info.game || info.collecting || info.running;
     $('btn-collect').textContent = info.collecting ? 'Collecting...' : 'Collect all textures now';
     const ready = info.tool && !info.running && !info.collecting;
-    $('btn-pack').disabled = !ready || (!info.dumped && !info.movieDumped);
-    $('btn-pack').hidden = info.running;
-    $('btn-pack-stop').hidden = !info.running;
-    $('pack-progress').hidden = !info.running;
+    $('btn-pack').disabled = !ready || !info.dumped;
+    // the movies' card: its own collect and pack (sharing the one job at a time)
+    const movieJob = info.job === 'movies' && (info.running || info.collecting);
+    $('btn-movie-collect').disabled = !info.game || info.collecting || info.running;
+    $('btn-movie-collect').textContent = movieJob && info.collecting ? 'Collecting...' : 'Collect the movies';
+    $('btn-movie-pack').disabled = !ready || !info.movieDumped;
+    $('btn-movie-pack').hidden = movieJob && info.running;
+    $('btn-movie-stop').hidden = !(movieJob && info.running);
+    $('movie-progress').hidden = !movieJob;
+    $('btn-pack').hidden = info.running && info.job !== 'movies';
+    $('btn-pack-stop').hidden = !info.running || info.job === 'movies';
+    $('pack-progress').hidden = !info.running || info.job === 'movies';
     $('btn-pack-folder').onclick = () => nf.open(info.folder);
     if (!info.tool) setMsg($('pack-msg'), 'Install the game first: the pack maker comes with it.', false);
-    else if (!info.dumped && !info.movieDumped && !info.running) setMsg($('pack-msg'), 'Nothing collected yet: press Collect all textures now, or turn on saving the textures and play.', false);
+    else if (!info.dumped && !info.running) setMsg($('pack-msg'), 'Nothing collected yet: press Collect all textures now, or turn on saving the textures and play.', false);
     else if (!info.running && $('pack-msg').classList.contains('bad')) setMsg($('pack-msg'), '');
 }
 async function saveGraphics(patch, text) {
@@ -425,12 +434,37 @@ $('btn-collect').onclick = async () => {
     loadTextures();
 };
 nf.onCollect(ev => {
-    setMsg($('collect-msg'), ev.code === 0 ? 'Done: the textures and movie frames are collected. Now make the pack below.' : `The game stopped before it finished (exit ${ev.code}).`, ev.code === 0);
+    if (ev.movies) setMsg($('movie-msg'), ev.code === 0 ? 'Done: the movie frames are collected. Now make them HD.' : `The game stopped before it finished (exit ${ev.code}).`, ev.code === 0);
+    else setMsg($('collect-msg'), ev.code === 0 ? 'Done: the textures are collected. Now make the pack below.' : `The game stopped before it finished (exit ${ev.code}).`, ev.code === 0);
     loadTextures();
 });
+$('btn-movie-collect').onclick = async () => {
+    setMsg($('movie-msg'), '');
+    const r = await nf.collectMovies();
+    setMsg($('movie-msg'), r.ok ? 'Collecting: the game plays the movies and closes when it is done.' : r.message, r.ok);
+    loadTextures();
+};
+$('btn-movie-pack').onclick = async () => {
+    $('pack-log').textContent = '';
+    setMsg($('movie-msg'), '');
+    const r = await nf.makeMovies({ quality: packOpts.movie === 'quality' });
+    if (!r.ok) setMsg($('movie-msg'), r.message, false);
+    loadTextures();
+};
+$('btn-movie-stop').onclick = () => nf.stopTextures();
 nf.onPack(ev => {
     const el = $('pack-log');
     if (ev.line) { el.textContent += ev.line + '\n'; el.scrollTop = el.scrollHeight; }
+    if (ev.movies) {
+        const m = ev.line && ev.line.match(/movie frames (\d+) of (\d+)/);
+        if (m) { setMsg($('movie-msg'), `${m[1]} of ${m[2]} frames in HD`, true); loadTextures(); }
+        if (ev.line && /broken pictures/.test(ev.line)) setMsg($('movie-msg'), 'Fast draws wrong on this graphics card: using Quality (a few hours).', true);
+        if (ev.done) {
+            setMsg($('movie-msg'), ev.code === 0 ? 'The movies are in HD: the menus show them at the next start.' : `Stopped (exit ${ev.code}); what is done is kept.`, ev.code === 0);
+            loadTextures();
+        }
+        return;
+    }
     if (ev.done) {
         setMsg($('pack-msg'), ev.code === 0 ? 'The pack is made. The game loads it at its next start.' : `The pack maker stopped (exit ${ev.code}).`, ev.code === 0);
         loadTextures();

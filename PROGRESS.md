@@ -2719,3 +2719,10 @@ and PGR2's 5659 in Ghidra, re-derive the layout, sign, rescan both xbes; then se
   1,795 of 1,800 frames came from the pack (the misses: a movie's first frames).
 - Launcher: the HD Textures page counts the movie frames collected and in the pack; Collect takes about nine minutes.
 - Not yet: the Android package does not carry mods/movies.
+- Made a job of its own (the launcher's HD Textures page, card 03 "HD menu movies"): `NF_COLLECT_MOVIES=1` collects
+  the movies alone (NF_COLLECT_TEXTURES is textures alone again, half a minute), `hd_pack --movies [--movie-model
+  fast|quality]` upscales them. Fast is realesr-animevideov3 (2x, shipped with the build now); on this RTX 5060 the
+  compact models (animevideov3, Upscayl's upscayl-lite-4x, in Real-ESRGAN's build and in Upscayl's fork alike) make
+  black or garbage pictures, so hd_pack checks the first frames (shrunk back, they must match the collected ones)
+  and goes on with quality (x4plus halved, 1.2 s a frame here) when they do not. Upscayl's fork is no faster at
+  x4plus, so the build keeps Real-ESRGAN's own. Two upscalers at once on one GPU also made black frames.

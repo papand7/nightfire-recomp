@@ -77,8 +77,9 @@ void OnlineRefresh();
 std::vector<OnlineServer> OnlineServers();
 bool OnlineSearching();
 void TeleportTest();                              // NF_TELEPORT_AHEAD=m (diagnostic): player 1 moved that far ahead, once
-bool CollectingTextures();                        // NF_COLLECT_TEXTURES=1 (src/game/texture_collect.cpp)
-void CollectTextures(X86Context& ctx);            // the pads' frame: the level files' textures, then the movies, dumped
+bool CollectingTextures();                        // NF_COLLECT_TEXTURES=1 or NF_COLLECT_MOVIES=1 (src/game/texture_collect.cpp)
+bool CollectingMovies();                          // NF_COLLECT_MOVIES=1: the menu movies' frames alone
+void CollectTextures(X86Context& ctx);            // the pads' frame: the level files' textures, or the movies, dumped
 void CollectMovieFrame(uint32_t header);          // texture_bound: a collected movie's frame dumped (menu_colors.cpp)
 extern const char* collect_movie;                 // the movie being collected (texture_collect.cpp), else null
 void NoteMainMenu();                              // the pads' frame: the main menu seen (src/game/start.cpp)
