@@ -98,6 +98,13 @@ void LoadTune() {
     static bool loaded = false;
     if (loaded) return;
     loaded = true;
+    // the tuner's results built in (2026-11-11: x_mm y_mm z_mm, yaw pitch roll degrees); a file's line replaces one
+    static const struct { int idx; float v[6]; } kBuiltIn[] = {
+        {10, {13.5f, 1.5f, 0, -1.70f, 0.80f, 0}},  // the Kowloon Type 40
+        {12, {14.0f, -4.5f, 0, -1.50f, 0, 0}},     // the Kowloon Type 40, its other mode
+    };
+    for (const auto& b : kBuiltIn)
+        for (int k = 0; k < 6; k++) g_tune[b.idx][k] = k < 3 ? b.v[k] / 1000.0f : b.v[k] * kDeg;
     if (FILE* f = std::fopen(TunePath().string().c_str(), "r")) {
         char line[128];
         while (std::fgets(line, sizeof line, f)) {
