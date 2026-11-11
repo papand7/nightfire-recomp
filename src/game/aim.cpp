@@ -314,6 +314,9 @@ X86_FUNC(sub_000BD740) {  // the first person gun placed (cdecl: the object)
         if (std::getenv("NF_ADS_CAL") && f >= 145 && f < 175) sight.x += 0.02f;
         if (std::getenv("NF_ADS_CAL") && f >= 175) sight.y += 0.02f;
     }
+    // the tuning in settings.toml (aim_sight_x_mm, aim_sight_y_mm): the sights moved for every weapon
+    sight.x += app::Get().aim_sight_x_mm / 1000.0f * (sight.optic ? 0.0f : 1.0f);
+    sight.y += app::Get().aim_sight_y_mm / 1000.0f * (sight.optic ? 0.0f : 1.0f);
     p.optic = sight.optic && p.t >= 1.0f;
     SetF(gun + kGunPos, GetF(gun + kGunPos) + sight.x * s);
     SetF(gun + kGunPos + 4, GetF(gun + kGunPos + 4) + (p.optic ? -50.0f : sight.y * s));  // an optic: out of sight
