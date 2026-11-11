@@ -8,6 +8,7 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
   - Present in Agent Under Fire: FXAA, SMAA, render scaling/filtering, sharpening, gamma, anisotropic filtering, texture replacement, Enhanced Color, depth-aware and depth-slope screen-space Toon, Retro, Noir, SDR bloom, vignette, film grain, YUY2 movie scaling, and screen color adjustments. Vulkan MSAA is unsupported.
   - Still to adapt in the shared renderer: temporal AA/upscalers (requires depth, jitter and motion vectors), HDR tone mapping and multilevel HDR bloom, motion blur and depth of field. These need renderer-owned passes and checks against this game's output.
   - Game-data dependent: the full ray-traced Enhanced look, mesh-normal Toon outlines, AO/contact shadows, global illumination, reflections/water, light shafts, muzzle/fire lighting, fog, snow/footprints, particles and persistent blood. Nightfire's versions depend on its depth, lights, materials, weather and game hooks; identify Agent Under Fire equivalents before implementation.
+  - RT capture adaptation: Agent Under Fire has two frame slots, and it waits for a slot in Present after draw recording. Capture buffers therefore need an early wait before the first draw that writes each slot; Nightfire's frame handling cannot be copied as-is.
   Not built or Windows-smoke-tested; this checkout has no game assets.
 - Milestone: 1 - plays headless. default.xbe's movies, START, bond_eng.xbe's title, menus, briefing and first mission;
   DRIVING.XBE's five levels and back. No trap in 200 s of the first mission. On Windows the first mission plays to its end; Harry (2026-10-30, D3D12): plays with the driving fix, no obvious visual bugs on a first look.
@@ -29,8 +30,13 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-11 - Agent Under Fire RT frame-slot constraint
+- Confirmed the renderer has two frame slots and waits on a slot in Present, after the scene draws are recorded. A per-slot RT capture buffer must wait before its first write of the next use; copying Nightfire's buffer lifetime unchanged would race the GPU.
+- Agent Under Fire's vertex/index inputs are represented by gpu::Assembled (sdk/runtime/gpu/vertex.h). The capture shader can wrap its generated VOut main as in Nightfire, but index/base-vertex mapping must use these fields.
+- Next: implement the capture path with the early slot wait, then build a frame acceleration structure.
+
 ### 2026-11-11 - Validate device addresses for RT buffers
-- Addressable Vulkan buffers now query kGetBufferDeviceAddress after allocation and binding. If the feature or address is unavailable, creation fails cleanly before the buffer can be used as an acceleration-structure input.
+- Addressable Vulkan buffers now query vkGetBufferDeviceAddress after allocation and binding. If the feature or address is unavailable, creation fails cleanly before the buffer can be used as an acceleration-structure input.
 - SDK commit: 201c897. git -C sdk diff --check passes. No build or GPU check was run; geometry capture and visible ray-traced effects remain incomplete.
 - Next: implement eligible draw capture and a frame-slot acceleration structure using these validated addresses.
 
