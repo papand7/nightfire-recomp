@@ -4,9 +4,9 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Status
 - Vulkan port: SDK branch vulkan-port (9dbcdf3) contains NightFire's Vulkan backend adapted as the only host renderer; DX renderer sources, interfaces, fallback, and libraries are excluded. This checkout has no game assets, so it has not been built or Windows-smoke-tested.
-- Vulkan visual port: SDK branch `visual-port` has FXAA, gamma, scaling, sharpening, anisotropic filtering, texture replacement, SMAA 1x, PNG texture packs/dumps (2e5d161), five screen-space styles (0b65310), SDR bloom (349fd1d), vignette and animated film grain (b569525).
-  - Present in Agent Under Fire: FXAA, SMAA, render scaling/filtering, sharpening, gamma, anisotropic filtering, texture replacement, Enhanced Color, screen-space Toon, Retro, Noir, SDR bloom, vignette and film grain. Vulkan MSAA is unsupported.
-  - Still to adapt in the shared renderer: temporal AA/upscalers, HDR tone mapping and multilevel HDR bloom, motion blur and depth of field. These need renderer-owned passes and checks against this game's output.
+- Vulkan visual port: SDK branch `visual-port` has FXAA, gamma, scaling, sharpening, anisotropic filtering, texture replacement, SMAA 1x, PNG texture packs/dumps (2e5d161), five screen-space styles (0b65310), SDR bloom (349fd1d), vignette and animated film grain (b569525), and optional YUY2 movie upscaling (b129368).
+  - Present in Agent Under Fire: FXAA, SMAA, render scaling/filtering, sharpening, gamma, anisotropic filtering, texture replacement, Enhanced Color, screen-space Toon, Retro, Noir, SDR bloom, vignette, film grain and Lanczos/RCAS scaling for large YUY2 movie frames. Vulkan MSAA is unsupported.
+  - Still to adapt in the shared renderer: temporal AA/upscalers (requires depth, jitter and motion vectors), HDR tone mapping and multilevel HDR bloom, motion blur and depth of field. These need renderer-owned passes and checks against this game's output.
   - Game-data dependent: the full ray-traced Enhanced look and depth/normal-aware Toon outlines, AO/contact shadows, global illumination, reflections/water, light shafts, muzzle/fire lighting, fog, snow/footprints, particles and persistent blood. Nightfire's versions depend on its depth, lights, materials, weather and game hooks; identify Agent Under Fire equivalents before implementation.
   Not built or Windows-smoke-tested; this checkout has no game assets.
 - Milestone: 1 - plays headless. default.xbe's movies, START, bond_eng.xbe's title, menus, briefing and first mission;
@@ -28,6 +28,11 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Every library 1.0.4039. Sections include a DSOUND section though the library table does not list it.
 
 ## Log
+
+### 2026-11-11 - Lanczos movie upscaling added to the Vulkan renderer
+- Ported Nightfire's 4x4 Lanczos 2 enlargement, neighbour clamp and RCAS-style sharpening for large Xbox YUY2 video frames (format 0x24). Agent Under Fire already decodes those frames to BGRA; the pass caches its two outputs per texture and redraws only when the source frame changes. Added a saved F1 Graphics toggle, on by default.
+- SDK commit: b129368. `git -C sdk diff --check` passes. Source-path review only; no build or visual check because this checkout has no game assets.
+- Next: continue with temporal upscaling inputs, then investigate scene-dependent visual features.
 
 ### 2026-11-11 - Enhanced Color and screen-space Toon styles added
 - Expanded the F1 style selector to Enhanced Color, Toon (Screen), Retro and Noir. Enhanced Color adjusts contrast/saturation; Toon posterizes brightness and outlines neighboring color changes. These do not port Nightfire's ray-traced lighting or geometry-aware Toon edges.
