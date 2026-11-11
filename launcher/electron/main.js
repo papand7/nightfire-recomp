@@ -305,7 +305,8 @@ function newer(a, b) {  // a > b, versions like 1.5.1 (a leading v and a -suffix
 }
 async function latestRelease() {
     const tries = [
-        ['https://api.github.com/repos/papand7/nightfire-recomp/releases/latest', j => ({ version: j.tag_name, url: j.html_url })],
+        ['https://api.github.com/repos/papand7/nightfire-recomp/releases/latest',
+         j => ({ version: j.tag_name, url: j.html_url, assets: (j.assets || []).map(a => ({ name: a.name, url: a.browser_download_url, size: a.size })) })],
         ['https://mirror.dankelsoft.dk/latest.json', j => ({ version: j.version, url: j.url || RELEASES })],
     ];
     for (const [url, pick] of tries) {
@@ -316,10 +317,74 @@ async function latestRelease() {
     }
     return null;
 }
+let latestFound = null;  // the newer release launcher:update found, for launcher:install
+// the file this launcher runs from, which an update replaces: the portable exe (not its unpacked copy) or the AppImage
+const SELF = process.env.PORTABLE_EXECUTABLE_FILE || process.env.APPIMAGE || null;
+// the release's launcher for this system: the portable exe, the AppImage (named 007Remastered.* from 1.5.15, before
+// that NightFireLauncher.*)
+function launcherAsset(assets) {
+    const want = WINDOWS ? /\.exe$/i : process.platform === 'linux' ? /x86_64\.AppImage$/i : null;
+    return want && (assets || []).find(a => want.test(a.name)) || null;
+}
 ipcMain.handle('launcher:update', async () => {
     const latest = await latestRelease();
     if (!latest || !latest.version || !newer(latest.version, app.getVersion())) return null;
-    return { version: String(latest.version).replace(/^v/, ''), url: latest.url || RELEASES, current: app.getVersion() };
+    latestFound = latest;
+    return { version: String(latest.version).replace(/^v/, ''), url: latest.url || RELEASES, current: app.getVersion(),
+             installable: !!(app.isPackaged && SELF && launcherAsset(latest.assets)) };
+});
+// the newer launcher downloaded beside this one (GitHub, else the mirror's copy of the same file) and put in its place:
+// Windows cannot replace a running exe, so a small script waits for this one to close, moves the new one in and starts
+// it; Linux replaces the AppImage at once and starts the new one
+ipcMain.handle('launcher:install', async () => {
+    const asset = latestFound && launcherAsset(latestFound.assets);
+    if (!app.isPackaged || !SELF || !asset) return { ok: false, message: 'Download the new launcher from the release page.' };
+    const dir = path.dirname(SELF), tmp = path.join(dir, asset.name + '.download');
+    const target = path.join(dir, asset.name);
+    let done = 0;
+    const get = async url => {
+        const r = await fetch(url, { headers: { 'User-Agent': '007Remastered' }, signal: AbortSignal.timeout(15 * 60000) });
+        if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
+        const total = Number(r.headers.get('content-length')) || asset.size || 0;
+        const out = fs.createWriteStream(tmp);
+        done = 0;
+        for await (const chunk of r.body) {
+            done += chunk.length;
+            if (!out.write(chunk)) await new Promise(res => out.once('drain', res));
+            send('update', { fraction: total ? done / total : -1, done, total });
+        }
+        await new Promise((res, rej) => out.end(err => err ? rej(err) : res()));
+        if (asset.size && fs.statSync(tmp).size !== asset.size) throw new Error('the download is incomplete');
+    };
+    try {
+        try { await get(asset.url); }
+        catch (e) { await get(asset.url.replace('https://github.com/', 'https://mirror.dankelsoft.dk/github.com/')); }
+    } catch (e) {
+        try { fs.unlinkSync(tmp); } catch {}
+        return { ok: false, message: `The download failed (${e.message}).` };
+    }
+    if (WINDOWS) {
+        const script = path.join(app.getPath('temp'), '007remastered-update.cmd');
+        const q = s => `"${s}"`;
+        fs.writeFileSync(script, [
+            '@echo off',
+            `:wait`,
+            `tasklist /fi "PID eq ${process.pid}" | find "${process.pid}" >nul && (timeout /t 1 /nobreak >nul & goto wait)`,
+            // the old exe goes when the new one has another name (NightFireLauncher.exe -> 007Remastered.exe)
+            path.resolve(SELF).toLowerCase() !== path.resolve(target).toLowerCase() ? `del /f /q ${q(SELF)}` : 'rem same name',
+            `move /y ${q(tmp)} ${q(target)} >nul`,
+            `start "" ${q(target)}`,
+            '(goto) 2>nul & del "%~f0"',
+        ].join('\r\n'));
+        spawn('cmd.exe', ['/c', script], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+    } else {
+        fs.chmodSync(tmp, 0o755);
+        fs.renameSync(tmp, target);
+        if (path.resolve(SELF) !== path.resolve(target)) { try { fs.unlinkSync(SELF); } catch {} }
+        spawn(target, [], { detached: true, stdio: 'ignore' }).unref();
+    }
+    setTimeout(() => app.quit(), 300);
+    return { ok: true };
 });
 ipcMain.on('win', (_, what) => {
     if (!win) return;

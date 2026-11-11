@@ -55,6 +55,7 @@ a { color: var(--fire-2); }
 #nav > button:hover { color: var(--text); background: rgba(255, 255, 255, 0.03); }
 #nav > button.active { color: var(--fire-1); border-left-color: var(--fire-2); background: linear-gradient(90deg, rgba(40, 120, 255, 0.14), transparent); }
 .nav-foot { margin-top: auto; padding: 0 14px; font-size: 11px; color: var(--muted); }
+#btn-check-update { width: 100%; margin-bottom: 10px; }
 .classified { margin-top: 6px; font: 600 9px var(--cond); letter-spacing: 2px; color: rgba(20, 70, 190, 0.55); }
 main { flex: 1; position: relative; overflow: hidden; }
 .page { position: absolute; inset: 0; padding: 26px 34px 30px; overflow-y: auto; display: none; }
@@ -191,3 +192,5 @@ input[type=range]::-webkit-slider-thumb { appearance: none; width: 16px; height:
 .gametabs button { padding: 0 16px; border: 0; border-bottom: 2px solid transparent; background: transparent; font: 600 11px var(--font); letter-spacing: 1.6px; text-transform: uppercase; color: #9d988f; cursor: pointer; }
 .gametabs button:hover { color: var(--text); }
 .gametabs button.on { color: var(--fire-1); border-bottom-color: var(--fire-1); background: rgba(40, 120, 255, 0.08); }
+.brand, .gametabs button { white-space: nowrap; flex-shrink: 0; }
+@media (max-width: 900px) { .brand-sub { display: none; } }

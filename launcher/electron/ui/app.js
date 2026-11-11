@@ -515,16 +515,37 @@ nf.onAndroid(ev => {
     }
 });
 $('btn-android-folder').onclick = () => nf.revealAndroid();
-// a newer launcher: a banner at the top (Download opens the release page); asked at start and every 6 hours
-async function checkLauncherUpdate() {
+// a newer launcher: a banner at the top, asked at start, every 6 hours and by Check for updates. Update now downloads
+// it and puts it in this one's place (the portable exe, the AppImage); elsewhere Download opens the release page.
+async function checkLauncherUpdate(asked) {
     let u = null;
-    try { u = await nf.launcherUpdate(); } catch (e) { return; }
-    if (!u || localStorage.getItem('update-later') === u.version) return;
+    try { u = await nf.launcherUpdate(); } catch (e) { if (asked) toast('Could not check for updates.'); return; }
+    if (!u) { if (asked) toast('This launcher is the newest.'); return; }
+    if (!asked && localStorage.getItem('update-later') === u.version) return;
     $('update-text').textContent = `007 Remastered ${u.version} is out (you have ${u.current}).`;
-    $('update-get').onclick = () => nf.open(u.url);
+    $('update-get').textContent = u.installable ? 'Update now' : 'Download';
+    $('update-get').disabled = false;
+    $('update-get').onclick = async () => {
+        if (!u.installable) return nf.open(u.url);
+        $('update-get').disabled = true;
+        $('update-text').textContent = 'Downloading the new launcher…';
+        const r = await nf.installUpdate();
+        if (r.ok) $('update-text').textContent = 'Restarting with the new launcher…';
+        else { $('update-text').textContent = r.message; $('update-get').disabled = false; $('update-get').textContent = 'Download'; u.installable = false; }
+    };
     $('update-later').onclick = () => { localStorage.setItem('update-later', u.version); $('update-banner').hidden = true; };
     $('update-banner').hidden = false;
     toast(`Version ${u.version} is available`);
 }
 checkLauncherUpdate();
 setInterval(checkLauncherUpdate, 6 * 3600 * 1000);
+$('btn-check-update').onclick = async () => {
+    const b = $('btn-check-update');
+    b.disabled = true; b.textContent = 'Checking…';
+    await checkLauncherUpdate(true);
+    b.disabled = false; b.textContent = 'Check for updates';
+};
+nf.onUpdate(ev => {
+    $('update-text').textContent = 'Downloading the new launcher… ' +
+        (ev.fraction >= 0 ? Math.round(ev.fraction * 100) + '%' : mb(ev.done));
+});

@@ -23,4 +23,6 @@ contextBridge.exposeInMainWorld('nf', {
     onCollect: fn => ipcRenderer.on('collect', (_, ev) => fn(ev)),
     onPack: fn => ipcRenderer.on('pack', (_, ev) => fn(ev)),
     launcherUpdate: () => ipcRenderer.invoke('launcher:update'),
+    installUpdate: () => ipcRenderer.invoke('launcher:install'),
+    onUpdate: fn => ipcRenderer.on('update', (_, ev) => fn(ev)),
 });
