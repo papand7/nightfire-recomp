@@ -41,6 +41,10 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
   ([0x3587C4]) and the pause screen's figure (0x41A60) are hidden, the pause menu's input and tick (0x33920) skipped.
   F12 takes the picture; F10 again puts all back. Checked in Trouble in Paradise: flies, nothing 2D drawn, play resumes.
 - Not yet: field of view and depth of field controls, split screen (off with more than one player).
+- Test switches (src/bond/hooks.cpp): AUF_UNLOCK=1 opens every mission (flags 0x207630 + 4m, written each frame);
+  AUF_MISSION=n starts mission n at Start Mission (0x4AA40 events 2 and 0x16 read 0x2A9F98). Maps: 0 orc_1, 3 emstel_1,
+  4 alp1_1, 5 m6_1, 7 rig_1, 9 uwb_2a, 10 carrier1, 11 alp2_1; 1, 2, 6, 8 are DRIVING.XBE. Cold Reception (4) and Fire &
+  Water (7) start this way, but no enemy is in sight from either start, so hits and the ragdoll push are still unseen.
 
 ### 2026-11-11 - Ragdolls meet the level and the killing shot
 - Each point's move is traced through the game's ray 0x73F40 (mask 0x10001, Quake III's MASK_DEADSOLID; the body's own
