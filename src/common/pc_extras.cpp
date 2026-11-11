@@ -186,6 +186,7 @@ void TakeScreenshot() {
     LOGR("nightfire: screenshot asked for: %s", p.string().c_str());
 }
 
+void (*g_sight_tuner_ui)() = nullptr;
 void GameUi(double fps) {
     ModernMenuUi(fps);
     if (kDriving) {  // Discord: the mission default.xbe launched (src/game/quick_keys.cpp)
@@ -200,6 +201,7 @@ void GameUi(double fps) {
     static bool shot_was = false;
     if (Pressed(screenshot_key, shot_was)) TakeScreenshot();
     PhotoUi();
+    if (g_sight_tuner_ui) g_sight_tuner_ui();
     PerfOverlay(fps);
     Toast();
 }

@@ -16,12 +16,17 @@
 // - the crosshair (the actor's first HUD sprite [[+0x770]], drawn by 0xB6190 when the controls' +8 is set) hidden
 // NF_ADS_TEST=1 (diagnostic): player 1 aims for 240 frames of each 480.
 #include <algorithm>
+#include <filesystem>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
+#include <imgui.h>
+
 #include "app/app.h"
 #include "common/nightfire.h"
+#include "core/input.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
 #include "xdk/hle.h"
@@ -73,6 +78,42 @@ Sight SightOf(int idx) {
     }
 }
 constexpr float kEase = 0.125f;                        // of the way in or out a frame
+
+// each weapon's own correction (metres, +x left, +y up), from the sight tuner: sight_offsets.txt beside the exe,
+// a line a weapon: "index x_mm y_mm z_mm" (z: + farther from the eye; an old line without z reads as 0); read once,
+// written by the tuner's Enter
+float g_tune[64][3] = {};
+std::filesystem::path TunePath() { return app::ExeDir() / "sight_offsets.txt"; }
+void LoadTune() {
+    static bool loaded = false;
+    if (loaded) return;
+    loaded = true;
+    if (FILE* f = std::fopen(TunePath().string().c_str(), "r")) {
+        char line[128];
+        while (std::fgets(line, sizeof line, f)) {
+            int idx;
+            float x = 0, y = 0, z = 0;
+            if (std::sscanf(line, "%d %f %f %f", &idx, &x, &y, &z) >= 3 && idx >= 0 && idx < 64)
+                g_tune[idx][0] = x / 1000.0f, g_tune[idx][1] = y / 1000.0f, g_tune[idx][2] = z / 1000.0f;
+        }
+        std::fclose(f);
+        LOGR("nightfire: sight offsets read from %s", TunePath().string().c_str());
+    }
+}
+bool SaveTune() {
+    FILE* f = std::fopen(TunePath().string().c_str(), "w");
+    if (!f) return false;
+    for (int i = 0; i < 64; i++)
+        if (g_tune[i][0] != 0 || g_tune[i][1] != 0 || g_tune[i][2] != 0)
+            std::fprintf(f, "%d %.1f %.1f %.1f\n", i, g_tune[i][0] * 1000, g_tune[i][1] * 1000, g_tune[i][2] * 1000);
+    std::fclose(f);
+    return true;
+}
+struct Tuner {
+    int weapon = -1;            // the weapon held
+    int64_t saved_at = -100000;  // when Enter saved (the panel says so a while)
+    bool was[4] = {};            // PageUp, PageDown, Enter, Delete last frame
+} g_tuner;
 
 struct Player {
     bool held = false;    // L held last frame (the toggle's edge)
@@ -136,6 +177,7 @@ void AimDownSights(uint32_t count) {
         float l = GetF(c + kAimSlot);
         if (Test() && i == 0) l = (frame / 240) % 2 ? 1.0f : 0.0f;
         if (WeaponsTest() && i == 0) l = 1.0f;
+        if (i == 0 && sight_tuner && !p.scoped) l = 1.0f;  // the sight tuner holds the aim
         if (!aim_down_sights || p.scoped) {
             p.aiming = p.held = false;
             continue;
@@ -240,6 +282,83 @@ X86_FUNC(sub_000B7190) {  // a player's zoom eased (cdecl: the object)
     __imp__sub_000B7190(ctx, base);
 }
 
+namespace {
+// The sight tuner (nf::sight_tuner, debug): player 1 aims all the time; PageUp/PageDown give and hold the next or the
+// weapon before (0xBA5E0 gives it, the weapon state's +0x53 asks for it, as NF_ADS_WEAPONS does; the scoped and thrown
+// ones skipped: they have no sights of ours); the arrow keys move the held weapon (0.5 mm a frame, Shift 0.1 mm), Enter
+// saves every weapon's place to sight_offsets.txt (applied from then on), Delete puts the held one back. The keys do not
+// reach the game meanwhile (input::HoldBackToolKeys).
+int64_t NowMs() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+}
+bool Usable(int idx) {
+    const uint32_t w = kWeapons + uint32_t(idx) * kWeaponSize;
+    return kernel::G<uint16_t>(w) && !(R32(w + kWeaponFlags) & kScoped) && !(idx >= 52 && idx <= 56);
+}
+void SightTunerFrame(X86Context& ctx, uint32_t obj, int held) {
+    if (!nf::sight_tuner) {
+        if (g_tuner.weapon != -1) input::HoldBackToolKeys(false), g_tuner.weapon = -1;
+        return;
+    }
+    input::HoldBackToolKeys(true);
+    g_tuner.weapon = held;
+    const bool focused = input::GameFocused();
+    const bool now[4] = {focused && input::KeyDown(0x21), focused && input::KeyDown(0x22), focused && input::KeyDown(0x0D),
+                         focused && input::KeyDown(0x2E)};
+    auto pressed = [&](int k) { return now[k] && !g_tuner.was[k]; };
+    if (pressed(0) || pressed(1)) {  // the weapon after (PageDown) or before (PageUp)
+        const int dir = pressed(1) ? 1 : -1;
+        for (int n = 1; n < 64; n++) {
+            const int idx = ((held < 0 ? 0 : held) + dir * n + 64) % 64;
+            if (!Usable(idx)) continue;
+            const uint32_t eax = ctx.eax;
+            kernel::CallGuest(ctx, 0xBA5E0, {R32(obj + kActor), uint32_t(idx), 999});
+            ctx.eax = eax;
+            kernel::G<int8_t>(R32(obj + kWeaponState) + 0x53) = int8_t(idx);
+            LOGR("nightfire: sight tuner: weapon %d", idx);
+            break;
+        }
+    }
+    if (held >= 0 && held < 64 && focused) {
+        const float step = (input::KeyDown(0x10) ? 0.1f : 0.5f) / 1000.0f;  // Shift: finer
+        if (input::KeyDown(0x25)) g_tune[held][0] += step;  // left
+        if (input::KeyDown(0x27)) g_tune[held][0] -= step;  // right
+        if (input::KeyDown(0x26)) g_tune[held][1] += step;  // up
+        if (input::KeyDown(0x28)) g_tune[held][1] -= step;  // down
+        if (input::KeyDown(0x24)) g_tune[held][2] -= step;  // Home: nearer (seen: + is farther)
+        if (input::KeyDown(0x23)) g_tune[held][2] += step;  // End: farther
+        if (pressed(3)) g_tune[held][0] = g_tune[held][1] = g_tune[held][2] = 0;
+    }
+    if (pressed(2)) {
+        if (SaveTune()) g_tuner.saved_at = NowMs(), LOGR("nightfire: sight tuner: saved to %s", TunePath().string().c_str());
+    }
+    for (int k = 0; k < 4; k++) g_tuner.was[k] = now[k];
+}
+// its panel (from nf::GameUi): the true centre (where the shots go) and the held weapon's place
+void SightTunerUi() {
+    if (!nf::sight_tuner || g_tuner.weapon < 0) return;
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    const ImVec2 c(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f);
+    dl->AddCircleFilled(c, 3.5f, IM_COL32(0, 0, 0, 200));
+    dl->AddCircleFilled(c, 2.5f, IM_COL32(255, 40, 40, 255));
+    const int w = g_tuner.weapon;
+    char line[256];
+    std::snprintf(line, sizeof line,
+                  "SIGHT TUNER  weapon %d   left/right %+.1f mm   up/down %+.1f mm   farther %+.1f mm\n"
+                  "PageUp/PageDown weapon   Arrows move   Home/End nearer/farther   (Shift finer)   Enter save all   Delete reset\n"
+                  "Put the sights on the red dot: that is where the shots go.%s",
+                  w, g_tune[w][0] * 1000, g_tune[w][1] * 1000, g_tune[w][2] * 1000,
+                  NowMs() - g_tuner.saved_at < 2500 ? "\nSaved to sight_offsets.txt" : "");
+    const ImVec2 at(vp->Pos.x + 24, vp->Pos.y + vp->Size.y * 0.72f);
+    const ImVec2 size = ImGui::CalcTextSize(line);
+    dl->AddRectFilled(ImVec2(at.x - 10, at.y - 8), ImVec2(at.x + size.x + 10, at.y + size.y + 8), IM_COL32(0, 0, 0, 170), 6);
+    dl->AddText(at, IM_COL32(255, 255, 255, 255), line);
+}
+const bool g_tuner_ui_set = (nf::g_sight_tuner_ui = SightTunerUi, true);
+}  // namespace
+
 X86_EXTERN_FUNC(__imp__sub_000BD740);
 X86_FUNC(sub_000BD740) {  // the first person gun placed (cdecl: the object)
     uint32_t obj = R32(ctx.esp + 4);
@@ -300,10 +419,15 @@ X86_FUNC(sub_000BD740) {  // the first person gun placed (cdecl: the object)
                  GetF(gun + 0x40), GetF(gun + 0x44), GetF(R32(obj + kActor) + 0xE0), GetF(R32(obj + kActor) + 0xE4),
                  GetF(R32(obj + kActor) + 0x874));
     }
+    if (i == 0) SightTunerFrame(ctx, obj, kernel::G<int8_t>(R32(obj + kWeaponState) + kWeaponIndex));
     if (gun) nf::GunSway(i, gun, 1 - 0.8f * p.t * p.t * (3 - 2 * p.t));  // sway: a fifth of it when aimed
     if (!gun || p.t <= 0) return;
     float s = p.t * p.t * (3 - 2 * p.t);
-    Sight sight = SightOf(kernel::G<int8_t>(R32(obj + kWeaponState) + kWeaponIndex));
+    const int held_idx = kernel::G<int8_t>(R32(obj + kWeaponState) + kWeaponIndex);
+    Sight sight = SightOf(held_idx);
+    LoadTune();
+    if (held_idx >= 0 && held_idx < 64 && !sight.optic) sight.x += g_tune[held_idx][0], sight.y += g_tune[held_idx][1];
+    const float near = held_idx >= 0 && held_idx < 64 && !sight.optic ? g_tune[held_idx][2] : 0.0f;
     if (WeaponsTest()) {  // NF_ADS_NUDGE=x,y (diagnostic): added to every sight, to measure the view's scale
         static float nx = 0, ny = 0;
         static const bool read = [] { if (const char* e = std::getenv("NF_ADS_NUDGE")) std::sscanf(e, "%f,%f", &nx, &ny); return true; }();
@@ -320,6 +444,7 @@ X86_FUNC(sub_000BD740) {  // the first person gun placed (cdecl: the object)
     p.optic = sight.optic && p.t >= 1.0f;
     SetF(gun + kGunPos, GetF(gun + kGunPos) + sight.x * s);
     SetF(gun + kGunPos + 4, GetF(gun + kGunPos + 4) + (p.optic ? -50.0f : sight.y * s));  // an optic: out of sight
+    SetF(gun + kGunPos + 8, GetF(gun + kGunPos + 8) + near * s);  // the tuner's farther (+) or nearer (-)
 }
 
 X86_EXTERN_FUNC(__imp__sub_000B6190);

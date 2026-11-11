@@ -83,6 +83,8 @@ void NoteMainMenu();                              // the pads' frame: the main m
 bool CanChangeMovement();
 bool NetGuest();
 bool NetMovement(bool& enabled);  // true when a LAN client follows the host
+extern bool sight_tuner;     // the sight tuner (debug, src/game/aim.cpp)
+extern void (*g_sight_tuner_ui)();  // its panel, drawn from GameUi when set
 extern bool foot_ik;         // the characters' feet on the ground on slopes and steps (src/game/foot_ik.cpp)
 extern bool ragdolls;        // dead enemies fall limp (src/game/ragdoll.cpp); off by default and in network play
 bool RagdollsOn();

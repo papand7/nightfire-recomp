@@ -25,6 +25,7 @@ bool aim_down_sights = true;
 bool view_motion = true;
 bool tight_movement = false;
 bool foot_ik = true;
+bool sight_tuner = false;
 bool ragdolls = false;
 bool coop = false;
 bool coop_friendly_fire = false;
@@ -271,6 +272,8 @@ const app::GameInfo app::kGame = {
                 {"coop_side", &nf::coop_side, nullptr, "Co-op side by side", "The two views side by side, not one above the other."},
                 {"coop_leash", &nf::coop_leash, nullptr, "Co-op keep together", "Player 2 brought back beside player 1 when far away."},
                 {"coop_respawn", &nf::coop_respawn, nullptr, "Co-op respawn", "Player 2 comes back beside player 1 after dying."},
+                {"sight_tuner", &nf::sight_tuner, nullptr, "Sight tuner (debug)",
+                 "Aiming held on: PageUp/PageDown change the weapon, the arrow keys move it (Shift finer), Enter saves each weapon's place, Delete resets it."},
                 {"foot_ik", &nf::foot_ik, nullptr, "Feet on the ground",
                  "Characters' legs bend so each foot stands on the ground under it, on slopes and steps (the original's float or sink)."},
                 {"ragdolls", &nf::ragdolls, nullptr, "Ragdolls",

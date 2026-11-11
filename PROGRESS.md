@@ -2,6 +2,18 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-11: the sight tuner (debug)
+
+- settings.toml `sight_tuner = true` (also in the F1 window's options): player 1 aims all the time; PageUp/PageDown give and
+  hold the next/previous weapon (scoped and thrown skipped); arrows move the held gun, Home/End nearer/farther, Shift
+  finer (0.5 mm a frame, 0.1 with Shift); Enter saves every weapon's correction to sight_offsets.txt beside the exe
+  ("index x_mm y_mm z_mm"; +x left, +y up, +z farther), Delete resets the held weapon. A panel shows the values and a red
+  dot at the true centre (where the shots go). The keys are held back from the game (input::HoldBackToolKeys).
+- The file is read at start and applied in every game (not only while tuning). For a release, its values go into
+  aim.cpp's SightOf as the defaults.
+- Checked: panel and dot show; a file "5 40 0 0" moved the pistol left, "5 0 0 150" made it farther (smaller). The keys
+  themselves read the physical keyboard and were not driven by the scripts.
+
 ## 2026-11-11: aim down sights: measured, no static mismatch found
 
 - "shot made" (NF_SHOT_TRACE): the round the spawner makes has exactly the direction given, no spread (0.000 deg off).
