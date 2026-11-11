@@ -9,6 +9,7 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
   - Still to adapt in the shared renderer: temporal AA/upscalers (requires depth, jitter and motion vectors), HDR tone mapping and multilevel HDR bloom, motion blur and depth of field. These need renderer-owned passes and checks against this game's output.
   - Game-data dependent: the full ray-traced Enhanced look, mesh-normal Toon outlines, AO/contact shadows, global illumination, reflections/water, light shafts, muzzle/fire lighting, fog, snow/footprints, particles and persistent blood. Nightfire's versions depend on its depth, lights, materials, weather and game hooks; identify Agent Under Fire equivalents before implementation.
   - RT capture adaptation: Agent Under Fire has two frame slots, and it waits for a slot in Present after draw recording. Capture buffers therefore need an early wait before the first draw that writes each slot; Nightfire's frame handling cannot be copied as-is.
+  Agent Under Fire also exposes the matched scene depth image to final Vulkan passes. Its default W-buffer path can use Nightfire's depth reconstruction; the optional `XBE_WBUFFER=0` path needs standard-depth reconstruction. This makes a GTAO pass feasible without ray-query bindings, but world depth, HUD/gun separation and image orientation still need verification.
   Not built or Windows-smoke-tested; this checkout has no game assets.
 - Milestone: 1 - plays headless. default.xbe's movies, START, bond_eng.xbe's title, menus, briefing and first mission;
   DRIVING.XBE's five levels and back. No trap in 200 s of the first mission. On Windows the first mission plays to its end; Harry (2026-10-30, D3D12): plays with the driving fix, no obvious visual bugs on a first look.
@@ -29,6 +30,11 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Every library 1.0.4039. Sections include a DSOUND section though the library table does not list it.
 
 ## Log
+
+### 2026-11-11 - Check the ambient occlusion depth path
+- Source inspection confirms Present retains a same-frame depth view matched to the scene colour target, and the generated draw path supports both the default W-buffer and `XBE_WBUFFER=0` standard depth.
+- This gives a renderer-owned GTAO pass a usable depth input; the Nightfire shader cannot be copied unchanged because its world/gun depth split and projection assumptions still need checking against Agent Under Fire.
+- No code or build change. Next: implement the depth-aware pass and verify its depth conversion and screen orientation.
 
 ### 2026-11-11 - Build frame acceleration structures
 - Added opt-in BLAS/TLAS construction from the captured positions and normalized indices. It honors the device's acceleration-structure scratch alignment and keeps each frame slot's source, scratch, storage, and instance buffers alive until that slot is reused.
