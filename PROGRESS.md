@@ -4,7 +4,7 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Status
 - Vulkan port: SDK branch vulkan-port (9dbcdf3) contains NightFire's Vulkan backend adapted as the only host renderer; DX renderer sources, interfaces, fallback, and libraries are excluded. This checkout has no game assets, so it has not been built or Windows-smoke-tested.
-- Vulkan visual port: `visual-port` SDK commit 97287d0 adds SMAA 1x to Vulkan presentation. FXAA, scaling and sharpening remain available. Not built or Windows-smoke-tested; this checkout has no game assets.
+- Vulkan visual port: SDK branch `visual-port` now has SMAA 1x and content-keyed PNG texture packs with optional original-texture dumps (2e5d161). Nightfire-specific post-processing, lighting and game hooks remain to port. Not built or Windows-smoke-tested; this checkout has no game assets.
 - Milestone: 1 - plays headless. default.xbe's movies, START, bond_eng.xbe's title, menus, briefing and first mission;
   DRIVING.XBE's five levels and back. No trap in 200 s of the first mission. On Windows the first mission plays to its end; Harry (2026-10-30, D3D12): plays with the driving fix, no obvious visual bugs on a first look.
 - XDK: 4039 in the fork's main: default.xbe 98, bond_eng.xbe 113, DRIVING.XBE 112 of
@@ -24,6 +24,11 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Every library 1.0.4039. Sections include a DSOUND section though the library table does not list it.
 
 ## Log
+### 2026-11-11 - HD texture packs added to Vulkan visual port
+- Added Nightfire-style PNG replacements keyed by the game texture bytes, format and dimensions. F1 settings can enable pack loading or dump original textures to `mods/textures/dump`; user PNGs live in `mods/textures`. Added the WIC image codec and a README note.
+- Evidence: reviewed call placement so existing replacements remain fast and pack lookup runs once per texture per frame; `git diff --check` passes. Build and visual checks remain pending because this checkout has no game assets.
+- Next: port remaining renderer-wide post-processing and then identify which lighting/effects can be adapted to Agent Under Fire game data.
+
 ### 2026-11-11 - SMAA added to the Agent Under Fire Vulkan renderer
 - Ported Nightfire's SMAA 1x shader passes: luma edge detection, blending weights and neighbourhood resolve. The settings already exposed SMAA; Vulkan now applies it before the final frame blit and avoids also applying FXAA when old settings enable both.
 - Evidence: reviewed shader bindings, transient image lifetimes and command ordering; `git diff --check` passes. Build and visual comparison remain pending because this checkout has no game assets.

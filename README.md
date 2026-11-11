@@ -139,6 +139,8 @@ Keys can be changed in the F1 window.
 
 In PC Settings or the settings window (F1, Graphics). These are shots of one spot at 1920x1080, taken one after another, brightened here so the dark scene shows.
 
+- **HD texture pack** loads replacement PNGs from `mods/textures` beside the executable. Turn on **Dump textures** to write originals under `mods/textures/dump`; use those named PNGs as pack bases. Pack images are supplied by the player.
+
 <p align="center">
   <img src="docs/img/agentunderfire-settings-wipe.webp" alt="A wipe across an oil rig's towers and ladders at night between all settings off and render scale 200%, MSAA 4x and sharpening 50%" width="800">
   <br>
