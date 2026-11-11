@@ -4,7 +4,7 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Status
 - Vulkan port: SDK branch vulkan-port (9dbcdf3) contains NightFire's Vulkan backend adapted as the only host renderer; DX renderer sources, interfaces, fallback, and libraries are excluded. This checkout has no game assets, so it has not been built or Windows-smoke-tested.
-- Vulkan visual port: SDK branch `visual-port` has FXAA, gamma, scaling, sharpening, anisotropic filtering, texture replacement, SMAA 1x, PNG texture packs/dumps (2e5d161), five screen-space styles (0b65310), SDR bloom (349fd1d), vignette and animated film grain (b569525), YUY2 movie upscaling (b129368), exposure/contrast/saturation/temperature controls (5162dbf), optional Vulkan ray-query setup, geometry-capture layout, and opt-in vertex/triangle capture (1f6e61a, f9dd919, 9c57952), depth-aware Toon outlines (3e78285), depth-slope crease outlines (607d5fc), device-addressable allocation for ray-query input buffers (20635d1), address validation for those buffers (201c897), and cached addresses on addressable buffers (9051246).
+- Vulkan visual port: SDK branch `visual-port` has FXAA, gamma, scaling, sharpening, anisotropic filtering, texture replacement, SMAA 1x, PNG texture packs/dumps (2e5d161), five screen-space styles (0b65310), SDR bloom (349fd1d), vignette and animated film grain (b569525), YUY2 movie upscaling (b129368), exposure/contrast/saturation/temperature controls (5162dbf), optional Vulkan ray-query setup, geometry-capture layout, and opt-in vertex/triangle capture and per-frame BLAS/TLAS builds (1f6e61a, f9dd919, 9c57952, a250cd2), depth-aware Toon outlines (3e78285), depth-slope crease outlines (607d5fc), device-addressable allocation for ray-query input buffers (20635d1), address validation for those buffers (201c897), and cached addresses on addressable buffers (9051246).
   - Present in Agent Under Fire: FXAA, SMAA, render scaling/filtering, sharpening, gamma, anisotropic filtering, texture replacement, Enhanced Color, depth-aware and depth-slope screen-space Toon, Retro, Noir, SDR bloom, vignette, film grain, YUY2 movie scaling, and screen color adjustments. Vulkan MSAA is unsupported.
   - Still to adapt in the shared renderer: temporal AA/upscalers (requires depth, jitter and motion vectors), HDR tone mapping and multilevel HDR bloom, motion blur and depth of field. These need renderer-owned passes and checks against this game's output.
   - Game-data dependent: the full ray-traced Enhanced look, mesh-normal Toon outlines, AO/contact shadows, global illumination, reflections/water, light shafts, muzzle/fire lighting, fog, snow/footprints, particles and persistent blood. Nightfire's versions depend on its depth, lights, materials, weather and game hooks; identify Agent Under Fire equivalents before implementation.
@@ -29,6 +29,11 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Every library 1.0.4039. Sections include a DSOUND section though the library table does not list it.
 
 ## Log
+
+### 2026-11-11 - Build frame acceleration structures
+- Added opt-in BLAS/TLAS construction from the captured positions and normalized indices. It honors the device's acceleration-structure scratch alignment and keeps each frame slot's source, scratch, storage, and instance buffers alive until that slot is reused.
+- SDK commit: a250cd2. git -C sdk diff --check passes. No build or GPU check was run; the TLAS is not yet consumed by a ray-query shader, so there is no visible ray-traced effect.
+- Next: bind the TLAS into a ray-query-capable image pass and expose the effect as a user-facing visual option.
 
 ### 2026-11-11 - Capture eligible Agent Under Fire scene geometry
 - Added an opt-in capture pass (XBE_RT_CAPTURE=1) for opaque, depth-writing, non-HUD triangle draws with matching full-size color/depth targets. It wraps Agent Under Fire's generated vertex shader, writes view-like positions to a per-frame addressable buffer, and records normalized triangle indices; it waits before reusing the two-slot buffer.
