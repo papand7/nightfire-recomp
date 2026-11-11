@@ -4,9 +4,9 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Status
 - Vulkan port: SDK branch vulkan-port (9dbcdf3) contains NightFire's Vulkan backend adapted as the only host renderer; DX renderer sources, interfaces, fallback, and libraries are excluded. This checkout has no game assets, so it has not been built or Windows-smoke-tested.
-- Vulkan visual port: SDK branch `visual-port` has inherited FXAA, gamma, scaling, sharpening, anisotropic filtering and user texture replacement, plus SMAA 1x and content-keyed PNG packs/dumps (2e5d161). Nightfire parity map:
+- Vulkan visual port: SDK branch `visual-port` has inherited FXAA, gamma, scaling, sharpening, anisotropic filtering and texture replacement, plus SMAA 1x and content-keyed PNG packs/dumps (2e5d161), and Retro/Noir finished-frame color styles (ea96fec). Nightfire parity map:
   - Present in Agent Under Fire: FXAA, SMAA, render scaling/filtering, sharpening, gamma, anisotropic filtering and texture replacement. Vulkan MSAA is unsupported.
-  - Still to adapt in the shared renderer: graphics styles (especially retro/noir grading), temporal AA/upscalers, HDR/bloom, motion blur and depth of field. These need renderer-owned passes and checks against this game's output.
+  - Still to adapt in the shared renderer: other graphics-style treatment (Enhanced/Toon scene effects), temporal AA/upscalers, HDR/bloom, motion blur and depth of field. These need renderer-owned passes and checks against this game's output.
   - Game-data dependent, not portable as-is: toon/outline styles, AO/contact shadows, ray-traced/global illumination, reflections/water, light shafts, muzzle/fire lighting, fog, snow/footprints, particles and persistent blood. Nightfire's versions depend on its depth, lights, materials, weather and game hooks; identify Agent Under Fire equivalents before implementation.
   Not built or Windows-smoke-tested; this checkout has no game assets.
 - Milestone: 1 - plays headless. default.xbe's movies, START, bond_eng.xbe's title, menus, briefing and first mission;
@@ -28,6 +28,11 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Every library 1.0.4039. Sections include a DSOUND section though the library table does not list it.
 
 ## Log
+
+### 2026-11-11 - Retro and Noir color styles
+- Added optional Retro and Noir color grades to the Vulkan finished-frame pass, with F1 Graphics selection and saved settings. These are screen-space looks; they do not reproduce Nightfire's scene-aware toon outlines, lighting or material effects.
+- SDK commit: ea96fec. `git -C sdk diff --check` passes. No build or visual check: this checkout has no game assets.
+- Next: continue with renderer-owned post-processing and inspect Agent Under Fire scene data before adapting game-dependent effects.
 
 ### 2026-11-11 - Nightfire visual feature parity mapped
 - Compared Nightfire's documented visual feature set with the Agent Under Fire Vulkan backend and completed `visual-port` changes. Separated renderer features from those dependent on Nightfire game data/hooks; Vulkan MSAA remains unsupported.
