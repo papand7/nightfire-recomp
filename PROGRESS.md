@@ -2726,3 +2726,11 @@ and PGR2's 5659 in Ghidra, re-derive the layout, sign, rescan both xbes; then se
   black or garbage pictures, so hd_pack checks the first frames (shrunk back, they must match the collected ones)
   and goes on with quality (x4plus halved, 1.2 s a frame here) when they do not. Upscayl's fork is no faster at
   x4plus, so the build keeps Real-ESRGAN's own. Two upscalers at once on one GPU also made black frames.
+- Shelved (Harry: 4 hours is unusable, the limit is 30 minutes): the HD Movies card is out of the launcher, and the
+  runtime shows a movie pack only with NF_MOVIE_PACK=1. Measured on the RTX 5060, 12,183 frames: x4plus 1.2 s a
+  frame (4 h), x4plus-anime 0.4 s (80 min, correct output), the compact video models are broken on this GPU. The
+  30 minutes of "Fast" was an estimate for GPUs where the compact model works, never measured here. Ways back: fewer
+  frames (every other one, or only the main menu's movie), or a faster upscaler. The collect (NF_COLLECT_MOVIES=1),
+  hd_pack --movies and the runtime are kept. The collected frames are in .local/rt_run/mods/movies/dump (3.5 GB) and
+  D:
+f_movies\pack (a partial pack).

@@ -21,7 +21,5 @@ contextBridge.exposeInMainWorld('nf', {
     collectTextures: () => ipcRenderer.invoke('textures:collect'),
     onCollect: fn => ipcRenderer.on('collect', (_, ev) => fn(ev)),
     onPack: fn => ipcRenderer.on('pack', (_, ev) => fn(ev)),
-    collectMovies: () => ipcRenderer.invoke('movies:collect'),
-    makeMovies: opts => ipcRenderer.invoke('movies:run', opts),
     launcherUpdate: () => ipcRenderer.invoke('launcher:update'),
 });

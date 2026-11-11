@@ -135,7 +135,6 @@
               <div><b id="n-pack">0</b><span>in the HD pack</span></div>
               <div><b id="n-maps">0</b><span>with PBR maps</span></div>
             </div>
-
           </div>
         </div>
         <div class="card">
@@ -156,32 +155,6 @@
             </div>
             <label class="switch-row"><span>Use the pack in the game</span><input type="checkbox" class="switch" id="use-pack"></label>
             <label class="switch-row"><span>Relief on the stones and walls (PBR + Relief)</span><input type="checkbox" class="switch" id="use-relief"></label>
-          </div>
-        </div>
-      </div>
-      <div class="grid">
-        <div class="card">
-          <div class="card-head"><span class="num">03</span> HD menu movies</div>
-          <div class="card-body">
-            <p class="muted">The menus' background movies (and the EA and MGM logos) upscaled 2x by Real-ESRGAN, frame
-              by frame, and shown in place of the game's in the menus (with "Use the pack in the game" on).</p>
-            <p class="muted">Collect plays the eight movies once each and saves their frames (about eight minutes;
-              leave the game's window alone until it closes). Then make them HD: Fast takes about half an hour on most
-              graphics cards, Quality a few hours (about a second a frame, some 12,000 frames). Fast switches to
-              Quality by itself on a graphics card it draws wrong on. Stopping keeps what is done.</p>
-            <div id="movie-msg" class="msg"></div>
-            <div class="stats">
-              <div><b id="n-mdumped">0</b><span>frames collected</span></div>
-              <div><b id="n-mpack">0</b><span>frames in HD</span></div>
-            </div>
-            <div class="form-row"><span>Upscaler</span>
-              <div class="seg" id="seg-movie"><button data-v="fast" class="on">Fast</button><button data-v="quality">Quality</button></div></div>
-            <div id="movie-progress" hidden><div class="bar indet"><div></div></div></div>
-            <div class="row">
-              <button class="btn" id="btn-movie-collect">Collect the movies</button>
-              <button class="btn" id="btn-movie-pack">Make them HD</button>
-              <button class="btn ghost" id="btn-movie-stop" hidden>Stop</button>
-            </div>
           </div>
         </div>
       </div>
