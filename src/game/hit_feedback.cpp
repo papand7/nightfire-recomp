@@ -63,6 +63,7 @@ void ViewRect(int i, float& x0, float& y0, float& x1, float& y1) {
 }
 
 void Bleed(int player, float lost) {
+    nf::CameraShake(player, lost / 40.0f * 0.06f);  // about 6 cm for a hit of 40 health
     float x0, y0, x1, y1;
     ViewRect(player, x0, y0, x1, y1);
     app::BloodHurt(x0, y0, x1, y1, lost / 40.0f);

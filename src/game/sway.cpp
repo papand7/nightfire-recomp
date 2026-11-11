@@ -11,6 +11,7 @@
 
 #include <cstdlib>
 
+#include "app/app.h"
 #include "common/nightfire.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
@@ -44,9 +45,15 @@ struct Motion {
     float amount = 0;   // 0 standing to 1 running, eased
     float lag_x = 0, lag_y = 0;
 } g_motion[4];
+float g_shake[4] = {};  // metres of the camera's shake left, per player (CameraShake)
 }  // namespace
 
 namespace nf {
+// a hit on a player (src/game/hit_feedback.cpp): the camera shakes by up to `metres`, as Settings::hurt_effects is on
+void CameraShake(int player, float metres) {
+    if (player < 0 || player >= 4 || !app::Get().hurt_effects) return;
+    g_shake[player] = std::max(g_shake[player], std::min(metres, 0.12f));
+}
 
 
 // after 0xBD740 placed player i's gun (src/game/aim.cpp): its lag and step sway, `keep` of it (aiming: less)
@@ -64,9 +71,19 @@ X86_FUNC(sub_00024530) {  // a player's camera placed from its object (cdecl: th
     uint32_t obj = R32(ctx.esp + 4), cam = R32(ctx.esp + 8);
     __imp__sub_00024530(ctx, base);
     uint32_t actor = obj ? R32(obj + kActor) : 0;
-    if (!nf::view_motion || !actor || !cam) return;
+    if (!actor || !cam) return;
     int i = kernel::G<int8_t>(actor + kPlayerIndex);
     if (i < 0 || i >= 4) return;
+    // the shake after a hit (CameraShake), whether or not the sway is on: a few centimetres, dying away in half a second
+    if (g_shake[i] > 0.0005f) {
+        static uint32_t tick = 0;
+        const float t = float(++tick);
+        const float kick = g_shake[i] * (std::sin(t * 2.7f) + 0.5f * std::sin(t * 5.9f + 1.0f)) * 0.6f;
+        SetF(cam + kEye, GetF(cam + kEye) + kick);
+        SetF(cam + kEye + 4, GetF(cam + kEye + 4) + kick * 0.6f);
+        g_shake[i] *= 0.82f;
+    }
+    if (!nf::view_motion) return;
     Motion& m = g_motion[i];
     float p[3] = {GetF(obj + kPos), GetF(obj + kPos + 4), GetF(obj + kPos + 8)};
     float yaw = GetF(obj + kYaw), pitch = GetF(actor + kPitch);

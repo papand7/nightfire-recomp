@@ -2,6 +2,12 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-11: camera shake on a hit (not yet seen on screen)
+
+- A hit on a player (hit_feedback.cpp Bleed) shakes the camera by about 6 cm for a hit of 40 health: a decaying offset
+  to the eye, applied after the camera is placed (sway.cpp CameraShake; shakes even with Weapon Sway off). Gated by
+  `hurt_effects`. Built and exercised by the NF_HIT_TEST hits; the feel is not yet checked.
+
 ## 2026-11-11: menu glow on the focused row
 
 - Modern menus: the focused row's bar has a soft blue halo (three fainter rings) that breathes slowly
