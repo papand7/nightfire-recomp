@@ -5,9 +5,9 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 ## Status
 - Vulkan port: SDK branch vulkan-port (9dbcdf3) contains NightFire's Vulkan backend adapted as the only host renderer; DX renderer sources, interfaces, fallback, and libraries are excluded. This checkout has no game assets, so it has not been built or Windows-smoke-tested.
 - Vulkan visual port: SDK branch `visual-port` has FXAA, gamma, scaling, sharpening, anisotropic filtering, texture replacement, SMAA 1x, PNG texture packs/dumps (2e5d161), five screen-space styles (0b65310), SDR bloom (349fd1d), vignette and animated film grain (b569525), YUY2 movie upscaling (b129368), exposure/contrast/saturation/temperature controls (5162dbf), optional Vulkan ray-query setup, geometry-capture layout, and opt-in vertex/triangle capture and per-frame BLAS/TLAS builds (1f6e61a, f9dd919, 9c57952, a250cd2), depth-aware Toon outlines (3e78285), depth-slope crease outlines (607d5fc), device-addressable allocation for ray-query input buffers (20635d1), address validation for those buffers (201c897), and cached addresses on addressable buffers (9051246).
-  - Present in Agent Under Fire: FXAA, SMAA, render scaling/filtering, sharpening, gamma, anisotropic filtering, texture replacement, Enhanced Color, depth-aware and depth-slope screen-space Toon, Retro, Noir, SDR bloom, vignette, film grain, YUY2 movie scaling, and screen color adjustments. Vulkan MSAA is unsupported.
+  - Present in Agent Under Fire: FXAA, SMAA, render scaling/filtering, sharpening, gamma, anisotropic filtering, texture replacement, Enhanced Color, depth-aware and depth-slope screen-space Toon, Retro, Noir, SDR bloom, vignette, film grain, YUY2 movie scaling, screen color adjustments, and optional screen-space ambient occlusion (depth-based, Vulkan only). Vulkan MSAA is unsupported.
   - Still to adapt in the shared renderer: temporal AA/upscalers (requires depth, jitter and motion vectors), HDR tone mapping and multilevel HDR bloom, motion blur and depth of field. These need renderer-owned passes and checks against this game's output.
-  - Game-data dependent: the full ray-traced Enhanced look, mesh-normal Toon outlines, AO/contact shadows, global illumination, reflections/water, light shafts, muzzle/fire lighting, fog, snow/footprints, particles and persistent blood. Nightfire's versions depend on its depth, lights, materials, weather and game hooks; identify Agent Under Fire equivalents before implementation.
+  - Game-data dependent: the full ray-traced Enhanced look, ray-traced AO/contact shadows, mesh-normal Toon outlines, global illumination, reflections/water, light shafts, muzzle/fire lighting, fog, snow/footprints, particles and persistent blood. Nightfire's versions depend on its depth, lights, materials, weather and game hooks; identify Agent Under Fire equivalents before implementation.
   - RT capture adaptation: Agent Under Fire has two frame slots, and it waits for a slot in Present after draw recording. Capture buffers therefore need an early wait before the first draw that writes each slot; Nightfire's frame handling cannot be copied as-is.
   Agent Under Fire also exposes the matched scene depth image to final Vulkan passes. Its default W-buffer path can use Nightfire's depth reconstruction; the optional `XBE_WBUFFER=0` path needs standard-depth reconstruction. This makes a GTAO pass feasible without ray-query bindings, but world depth, HUD/gun separation and image orientation still need verification.
   Not built or Windows-smoke-tested; this checkout has no game assets.
@@ -30,6 +30,11 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Every library 1.0.4039. Sections include a DSOUND section though the library table does not list it.
 
 ## Log
+
+### 2026-11-11 - Add optional depth-based ambient occlusion
+- Added a half-resolution screen-space occlusion pass over the same-frame scene depth and composite it before the final Vulkan blit. Added a saved Graphics toggle, off by default; the pass supports the default W-buffer and `XBE_WBUFFER=0` depth mapping.
+- Source review and `git diff --check` only. No build or visual check; depth reconstruction, orientation and quality still need runtime verification. This is screen-space AO, not Nightfire's ray-traced AO.
+- Next: build and inspect in Agent Under Fire, then correct the depth mapping and tune the sample pattern from captures.
 
 ### 2026-11-11 - Check the ambient occlusion depth path
 - Source inspection confirms Present retains a same-frame depth view matched to the scene colour target, and the generated draw path supports both the default W-buffer and `XBE_WBUFFER=0` standard depth.
