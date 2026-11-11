@@ -2,6 +2,16 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-11: muzzle flash boost: tried, not working (reverted)
+
+- 0xB9FC0 loads the weapon entry's flash colour and size (+0x54, +0x58) and calls the light maker 0x6D530 (return
+  0xBA08D). A hook on 0x6D530 scaling that size by 1.8 was built, but in The Exchange with real shots (the pad's RT
+  held 20 vblanks fires: NF_SHOT_TRACE logs projectiles) no light came from 0xBA08D, facing open ground or turned 90
+  degrees. The only light seen was a world light (0x6DBE2). So the call is conditional (a hit, or a weapon's flag) and
+  the pistol's first person flash is something else. Reverted. Next: trace what draws the first person flash
+  (the gun model's own flash, the weapon entry's +0x68 flags) before changing it.
+- Learned: real shots in scripts need the pad's RT held about 20 vblanks (4 does nothing).
+
 ## 2026-11-11: menu parallax
 
 - The modern menu layer (panel, rows, text, focus glow) leans up to 6 px sideways and 4 px vertically against the
