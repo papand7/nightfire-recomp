@@ -4,6 +4,7 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Status
 - Vulkan port: SDK branch vulkan-port (9dbcdf3) contains NightFire's Vulkan backend adapted as the only host renderer; DX renderer sources, interfaces, fallback, and libraries are excluded. This checkout has no game assets, so it has not been built or Windows-smoke-tested.
+- Vulkan visual port: `visual-port` SDK commit 97287d0 adds SMAA 1x to Vulkan presentation. FXAA, scaling and sharpening remain available. Not built or Windows-smoke-tested; this checkout has no game assets.
 - Milestone: 1 - plays headless. default.xbe's movies, START, bond_eng.xbe's title, menus, briefing and first mission;
   DRIVING.XBE's five levels and back. No trap in 200 s of the first mission. On Windows the first mission plays to its end; Harry (2026-10-30, D3D12): plays with the driving fix, no obvious visual bugs on a first look.
 - XDK: 4039 in the fork's main: default.xbe 98, bond_eng.xbe 113, DRIVING.XBE 112 of
@@ -23,6 +24,11 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Every library 1.0.4039. Sections include a DSOUND section though the library table does not list it.
 
 ## Log
+### 2026-11-11 - SMAA added to the Agent Under Fire Vulkan renderer
+- Ported Nightfire's SMAA 1x shader passes: luma edge detection, blending weights and neighbourhood resolve. The settings already exposed SMAA; Vulkan now applies it before the final frame blit and avoids also applying FXAA when old settings enable both.
+- Evidence: reviewed shader bindings, transient image lifetimes and command ordering; `git diff --check` passes. Build and visual comparison remain pending because this checkout has no game assets.
+- Next: port renderer-wide texture improvements and post-processing in small steps, then adapt Nightfire-specific effects to AUF game data.
+
 ### 2026-11-11 - Vulkan-only host renderer port started
 - Adapted NightFire's initial Vulkan backend commit onto the AUF SDK history. Vulkan is now the only selectable renderer; D3D11/12 backend sources and ImGui backends, DX renderer link libraries, and the D3D fallback are removed. The Vulkan shader cache now uses an SDK-owned blob helper instead of D3DCreateBlob; DXC remains to compile HLSL into SPIR-V.
 - Evidence: source/dependency review and git diff --check; no game assets are present in this checkout, so no build or Windows run has been done.
