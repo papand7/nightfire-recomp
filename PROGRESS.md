@@ -4,10 +4,10 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Status
 - Vulkan port: SDK branch vulkan-port (9dbcdf3) contains NightFire's Vulkan backend adapted as the only host renderer; DX renderer sources, interfaces, fallback, and libraries are excluded. This checkout has no game assets, so it has not been built or Windows-smoke-tested.
-- Vulkan visual port: SDK branch `visual-port` has FXAA, gamma, scaling, sharpening, anisotropic filtering, texture replacement, SMAA 1x, PNG texture packs/dumps (2e5d161), five screen-space styles (0b65310), SDR bloom (349fd1d), vignette and animated film grain (b569525), YUY2 movie upscaling (b129368), exposure/contrast/saturation/temperature controls (5162dbf), optional Vulkan ray-query setup and geometry-capture layout (1f6e61a, f9dd919), and depth-aware Toon outlines (3e78285), plus device-addressable allocation for ray-query input buffers (20635d1).
-  - Present in Agent Under Fire: FXAA, SMAA, render scaling/filtering, sharpening, gamma, anisotropic filtering, texture replacement, Enhanced Color, depth-aware screen-space Toon, Retro, Noir, SDR bloom, vignette, film grain, YUY2 movie scaling, and screen color adjustments. Vulkan MSAA is unsupported.
+- Vulkan visual port: SDK branch `visual-port` has FXAA, gamma, scaling, sharpening, anisotropic filtering, texture replacement, SMAA 1x, PNG texture packs/dumps (2e5d161), five screen-space styles (0b65310), SDR bloom (349fd1d), vignette and animated film grain (b569525), YUY2 movie upscaling (b129368), exposure/contrast/saturation/temperature controls (5162dbf), optional Vulkan ray-query setup and geometry-capture layout (1f6e61a, f9dd919), depth-aware Toon outlines (3e78285), depth-slope crease outlines (607d5fc), and device-addressable allocation for ray-query input buffers (20635d1).
+  - Present in Agent Under Fire: FXAA, SMAA, render scaling/filtering, sharpening, gamma, anisotropic filtering, texture replacement, Enhanced Color, depth-aware and depth-slope screen-space Toon, Retro, Noir, SDR bloom, vignette, film grain, YUY2 movie scaling, and screen color adjustments. Vulkan MSAA is unsupported.
   - Still to adapt in the shared renderer: temporal AA/upscalers (requires depth, jitter and motion vectors), HDR tone mapping and multilevel HDR bloom, motion blur and depth of field. These need renderer-owned passes and checks against this game's output.
-  - Game-data dependent: the full ray-traced Enhanced look, normal-aware Toon outlines, AO/contact shadows, global illumination, reflections/water, light shafts, muzzle/fire lighting, fog, snow/footprints, particles and persistent blood. Nightfire's versions depend on its depth, lights, materials, weather and game hooks; identify Agent Under Fire equivalents before implementation.
+  - Game-data dependent: the full ray-traced Enhanced look, mesh-normal Toon outlines, AO/contact shadows, global illumination, reflections/water, light shafts, muzzle/fire lighting, fog, snow/footprints, particles and persistent blood. Nightfire's versions depend on its depth, lights, materials, weather and game hooks; identify Agent Under Fire equivalents before implementation.
   Not built or Windows-smoke-tested; this checkout has no game assets.
 - Milestone: 1 - plays headless. default.xbe's movies, START, bond_eng.xbe's title, menus, briefing and first mission;
   DRIVING.XBE's five levels and back. No trap in 200 s of the first mission. On Windows the first mission plays to its end; Harry (2026-10-30, D3D12): plays with the driving fix, no obvious visual bugs on a first look.
@@ -28,6 +28,11 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Every library 1.0.4039. Sections include a DSOUND section though the library table does not list it.
 
 ## Log
+
+### 2026-11-11 - Depth-slope Toon crease outlines
+- Toon now compares depth-derived slopes on either side of each pixel and outlines their discontinuities, which can expose shallow creases beyond raw depth steps. This is a screen-space estimate, not a mesh-normal buffer.
+- SDK commit: 607d5fc. git -C sdk diff --check passes. No build or visual check was run.
+- Next: continue RT scene capture and acceleration-structure integration; the screen-space estimate does not provide ray tracing.
 
 ### 2026-11-11 - Device-addressable Vulkan buffers for ray-query inputs
 - Vulkan allocations now opt into VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT only for buffers requesting shader-device-address usage, and keep those memory blocks separate from ordinary allocations.
