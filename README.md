@@ -1,4 +1,4 @@
-# 007: NightFire Remastered (PC)
+# 007 Remastered
 
 The original Xbox 007: NightFire, running natively on PC and remastered: ray traced lighting, sharper and richer
 graphics, HD textures, story co-op, LAN multiplayer, a modern menu and full mouse, keyboard, controller and steering
