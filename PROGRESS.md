@@ -34,6 +34,17 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-11 - First Windows build and in-game check of the visual port
+- The PAL disc (En/Fr/De) was extracted into assets (27 files, 3.2 GB) through kernel::Disc; build.bat built all five exes.
+  The visual port compiled after the earlier Vulkan fixes (SMAA blend shaders, TAA views, alpha-test state, push cast).
+- Boots, hands over to bond_eng.xbe, reaches Trouble in Paradise (keyboard: P is START, Enter is A; the controller
+  screen needs one more Enter). Vulkan on an RTX 5060 reports ray queries; no effect shader failed to compile.
+- Auto exposure blew the frame out (yellow, washed): it metered the letterbox bars and aimed at 0.18 grey with up to 4x
+  gain, then ACES. Fixed: near black left out of the meter, gain 0.85-1.5x, a soft shoulder above 0.75 in place of ACES.
+  Afterwards it matches effects off closely. AO, bloom, shafts, fog, DoF, motion blur and TAA together draw cleanly in
+  the same scene; their individual strength is not judged yet (a 604x960 window).
+- Next: one effect at a time in a larger window and in a darker level; footprints and ragdolls from the game data.
+
 ### 2026-11-11 - Trace temporal-upscaler portability
 - Compared both SDKs: Agent Under Fire has render scaling and camera/depth history but no FSR2 target, shader generator, or upscaler dispatch. Nightfire's FSR2 inputs can be adapted to camera-only reprojection from Agent Under Fire's depth; object motion and weapon separation are unavailable. DLSS remains NVIDIA-specific and cannot cover this cross-platform port.
 - No code change. The game XBE/assets are still absent, so no in-game motion-vector or ghosting inspection is possible.
