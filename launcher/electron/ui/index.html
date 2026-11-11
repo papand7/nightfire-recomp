@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
-<title>007: NightFire Launcher</title>
+<title>007 Remastered</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -14,7 +14,11 @@
       <path class="mark-7" d="M38 4h24l-3 4H47l-9 14h-6l9-14h-6z"/>
       <circle cx="14" cy="12.4" r="2.2" class="mark-bore"/>
     </svg>
-    <span class="brand-name">NIGHTFIRE</span><span class="brand-sub">PC LAUNCHER</span>
+    <span class="brand-name">007 REMASTERED</span><span class="brand-sub">PC LAUNCHER</span>
+  </div>
+  <div class="gametabs" id="gametabs">
+    <button data-game="nightfire" class="on">NightFire</button>
+    <button data-game="auf">Agent Under Fire</button>
   </div>
   <div class="drag"></div>
   <div class="winbtns">
@@ -30,7 +34,7 @@
     <button data-page="settings"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><span>Settings</span></button>
     <button data-page="textures"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><path d="M13 17h8M17 13v8"/></svg><span>HD Textures</span></button>
     <button data-page="music" id="nav-music" hidden><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg><span>Music</span></button>
-    <button data-page="android"><svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/></svg><span>Android</span></button>
+    <button data-page="android" id="nav-android"><svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/></svg><span>Android</span></button>
     <button data-page="log"><svg viewBox="0 0 24 24"><path d="M5 3h10l4 4v14H5z"/><path d="M8 11h8M8 15h8M8 7h4"/></svg><span>Log</span></button>
     <div class="nav-foot"><div id="version"></div><div class="classified">// CLASSIFIED: MI6 EYES ONLY</div></div>
   </nav>
@@ -47,7 +51,7 @@
         <div class="barrel"></div>
         <div class="hero-text">
           <div class="hero-kicker">JAMES BOND</div>
-          <h1><span class="h-007">007</span><span class="h-colon">:</span> <span class="h-nf">NIGHTFIRE</span></h1>        </div>
+          <h1><span class="h-007">007</span><span class="h-colon">:</span> <span class="h-nf" id="hero-title">NIGHTFIRE</span></h1>        </div>
       </div>
 
       <div class="grid">
@@ -124,11 +128,11 @@
           <div class="card-body">
             <p class="muted">The game saves each texture it draws while this is on. Play the levels you want in HD, then
               turn it off.</p>
-            <p class="muted">Or collect them all at once: the game starts, reads every mission and multiplayer map
+            <p class="muted" id="collect-text">Or collect them all at once: the game starts, reads every mission and multiplayer map
               from your disc, saves their textures and closes by itself (about half a minute). Leave its window alone
               until it closes.</p>
             <div id="collect-msg" class="msg"></div>
-            <div class="row"><button class="btn" id="btn-collect">Collect all textures now</button></div>
+            <div class="row" id="collect-row"><button class="btn" id="btn-collect">Collect all textures now</button></div>
             <label class="switch-row"><span>Save the game's textures while playing</span><input type="checkbox" class="switch" id="dump"></label>
             <div class="stats">
               <div><b id="n-dumped">0</b><span>collected</span></div>
@@ -144,7 +148,7 @@
               <div class="seg" id="seg-scale"><button data-v="4" class="on">4x</button><button data-v="2">2x</button></div></div>
             <div class="form-row"><span>Upscaler</span>
               <div class="seg" id="seg-model"><button data-v="x4plus" class="on">Photo (x4plus)</button><button data-v="anime">Drawn (anime)</button></div></div>
-            <label class="switch-row"><span>Normal and height maps (PBR, relief)</span><input type="checkbox" class="switch" id="pbr" checked></label>
+            <label class="switch-row" id="pbr-row"><span>Normal and height maps (PBR, relief)</span><input type="checkbox" class="switch" id="pbr" checked></label>
             <label class="switch-row"><span>Make every texture again</span><input type="checkbox" class="switch" id="force"></label>
             <div id="pack-progress" hidden><div class="bar indet"><div></div></div></div>
             <div id="pack-msg" class="msg"></div>
@@ -154,7 +158,7 @@
               <button class="btn ghost" id="btn-pack-folder">Open the folder</button>
             </div>
             <label class="switch-row"><span>Use the pack in the game</span><input type="checkbox" class="switch" id="use-pack"></label>
-            <label class="switch-row"><span>Relief on the stones and walls (PBR + Relief)</span><input type="checkbox" class="switch" id="use-relief"></label>
+            <label class="switch-row" id="relief-row"><span>Relief on the stones and walls (PBR + Relief)</span><input type="checkbox" class="switch" id="use-relief"></label>
           </div>
         </div>
       </div>
@@ -198,6 +202,7 @@
 </div>
 <div id="toast"></div>
 <script src="schema.js"></script>
+<script src="schema_auf.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

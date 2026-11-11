@@ -1,8 +1,8 @@
 {
   "name": "nightfire-launcher",
-  "productName": "NightFire Launcher",
+  "productName": "007 Remastered",
   "version": "1.5.14",
-  "description": "007: NightFire PC port launcher: builds the game from your own disc image, its settings, its HD textures",
+  "description": "007 Remastered: the NightFire and Agent Under Fire PC ports' launcher: builds each game from your own disc image, its settings, its HD textures",
   "main": "main.js",
   "private": true,
   "license": "MIT",
@@ -25,7 +25,7 @@
   },
   "build": {
     "appId": "io.github.hk21x.nightfire.launcher",
-    "productName": "NightFire Launcher",
+    "productName": "007 Remastered",
     "directories": {
       "output": "../../out/launcher-electron"
     },
@@ -45,6 +45,10 @@
         {
           "from": "../../out/launcher-svc/NightFireLauncherService.exe",
           "to": "NightFireLauncherService.exe"
+        },
+        {
+          "from": "../../out/launcher-svc-auf/AgentUnderFireLauncherService.exe",
+          "to": "AgentUnderFireLauncherService.exe"
         },
         {
           "from": "../icon.ico",
@@ -102,7 +106,7 @@
     }
   },
   "author": {
-    "name": "NightFire PC port"
+    "name": "007 Remastered"
   },
   "homepage": "https://github.com/papand7/nightfire-recomp"
 }

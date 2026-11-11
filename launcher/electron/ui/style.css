@@ -185,3 +185,9 @@ input[type=range]::-webkit-slider-thumb { appearance: none; width: 16px; height:
 #update-banner { position: relative; z-index: 5; display: flex; align-items: center; gap: 12px; margin: 14px 34px 0; padding: 10px 14px;
     background: linear-gradient(90deg, rgba(40, 120, 255, 0.35), rgba(40, 120, 255, 0.12)); border: 1px solid rgba(120, 200, 255, 0.5); border-radius: 6px; }
 #update-banner #update-text { flex: 1; font-weight: 600; }
+
+/* the game tabs in the title bar: NightFire | Agent Under Fire */
+.gametabs { display: flex; gap: 2px; margin-left: 22px; height: 100%; -webkit-app-region: no-drag; }
+.gametabs button { padding: 0 16px; border: 0; border-bottom: 2px solid transparent; background: transparent; font: 600 11px var(--font); letter-spacing: 1.6px; text-transform: uppercase; color: #9d988f; cursor: pointer; }
+.gametabs button:hover { color: var(--text); }
+.gametabs button.on { color: var(--fire-1); border-bottom-color: var(--fire-1); background: rgba(40, 120, 255, 0.08); }

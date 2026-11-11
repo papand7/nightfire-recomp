@@ -1,8 +1,17 @@
-// The launcher's page: the service's state drawn (main.js forwards NightFireLauncherService's JSON lines), the
-// settings editor (schema.js), the texture pack and the log
+// The launcher's page: the shown game's service state drawn (main.js forwards each game's <short>LauncherService JSON
+// lines, tagged with the game), the settings editor (schema.js, schema_auf.js), the texture pack and the log
 const $ = id => document.getElementById(id);
-let S = null;          // the service's last state
-let checkedUpdate = false;
+const GAME_INFO = {
+    nightfire: { title: 'NIGHTFIRE', schema: () => SCHEMA },
+    auf: { title: 'AGENT UNDER FIRE', schema: () => SCHEMA_AUF },
+};
+let game = 'nightfire'; // the game tab shown
+const SS = {};          // each game's service's last state
+const LOGS = {};        // each game's log
+const checkedUpdate = {};
+let S = null;           // the shown game's state
+const schema = () => GAME_INFO[game].schema();
+const nightfire = () => game === 'nightfire';
 let androidBusy = false;
 let androidOutput = null;
 
@@ -34,16 +43,25 @@ function show(page) {
 
 // ---- the service
 const logEl = $('log');
-function log(line) {
+function log(line, id = game) {
+    LOGS[id] = ((LOGS[id] || '') + line + '\n').slice(-400000);
+    if (id !== game) return;
     logEl.textContent += line + '\n';
     if (logEl.textContent.length > 400000) logEl.textContent = logEl.textContent.slice(-300000);
     logEl.scrollTop = logEl.scrollHeight;
 }
 nf.onService(ev => {
+    const id = ev.game || 'nightfire';
+    if (ev.ev === 'state') SS[id] = ev;
+    if (ev.ev === 'state' && !checkedUpdate[id]) { checkedUpdate[id] = true; nf.command({ cmd: 'check_update', game: id }); }
+    if (id !== game) {  // the other tab's: kept for when it is shown
+        if (ev.ev === 'log') log(ev.line, id);
+        else if (ev.ev === 'error') log('error: ' + ev.message, id);
+        return;
+    }
     if (ev.ev === 'state') {
         S = ev;
         render();
-        if (!checkedUpdate) { checkedUpdate = true; nf.command({ cmd: 'check_update' }); }
     } else if (ev.ev === 'status') {
         $('progress').hidden = false;
         $('step').textContent = ev.step || 'Working…';
@@ -183,14 +201,14 @@ function itemValue(it) {
     if (it.alias && v in it.alias) return it.alias[v];
     return v === undefined ? it.def : v;
 }
-function vulkan() { return (value('s', 'renderer') || 'd3d12') === 'vulkan'; }
+function vulkan() { return !nightfire() || (value('s', 'renderer') || 'd3d12') === 'vulkan'; }  // Agent Under Fire: Vulkan only
 function graphicsNow() {
     const out = {};
-    for (const p of SCHEMA) for (const gr of p.groups) for (const it of gr.items) if (it.f === 'g') out[it.key] = itemValue(it);
+    for (const p of schema()) for (const gr of p.groups) for (const it of gr.items) if (it.f === 'g') out[it.key] = itemValue(it);
     return out;
 }
 function find(f, key) {
-    for (const p of SCHEMA) for (const gr of p.groups) for (const it of gr.items) if (it.f === f && it.key === key) return it;
+    for (const p of schema()) for (const gr of p.groups) for (const it of gr.items) if (it.f === f && it.key === key) return it;
     return null;
 }
 const v = (f, key) => itemValue(find(f, key));
@@ -222,10 +240,12 @@ function set(it, val) {
     } else {
         edits[it.f][it.key] = val;
     }
-    if (it.f === 'g' && it.key === 'quality') applyQuality(val);
-    else if (QUALITY_KEYS.includes(it.f + ':' + it.key)) edits.g.quality = matchQuality();
-    if (it.key === 'mode') edits.g.preset = val;  // a built-in style chosen by its name
-    else if (STYLE_KEYS.has(it.key)) edits.g.preset = '';  // a style's value changed: "(Edited)"
+    if (nightfire()) {  // NightFire's quality preset and shader styles (graphics.toml)
+        if (it.f === 'g' && it.key === 'quality') applyQuality(val);
+        else if (QUALITY_KEYS.includes(it.f + ':' + it.key)) edits.g.quality = matchQuality();
+        if (it.key === 'mode') edits.g.preset = val;  // a built-in style chosen by its name
+        else if (STYLE_KEYS.has(it.key)) edits.g.preset = '';  // a style's value changed: "(Edited)"
+    }
     $('savebar').hidden = false;
     renderSettings();
 }
@@ -299,14 +319,14 @@ function renderSettings() {
     if (!files) return;
     const tabs = $('settings-tabs');
     tabs.innerHTML = '';
-    for (const p of SCHEMA) {
+    for (const p of schema()) {
         const b = document.createElement('button');
         b.textContent = p.title;
         b.className = p.id === tab ? 'on' : '';
         b.onclick = () => { tab = p.id; renderSettings(); };
         tabs.append(b);
     }
-    const page = SCHEMA.find(p => p.id === tab);
+    const page = schema().find(p => p.id === tab) || schema()[0];
     const body = $('settings-body');
     body.innerHTML = '';
     const g = graphicsNow();
@@ -378,7 +398,9 @@ async function loadTextures() {
     $('n-dumped').textContent = info.dumped;
     $('n-pack').textContent = info.pack;
     $('n-maps').textContent = info.maps;
-    const gr = f.graphics;
+    const gr = nightfire() ? f.graphics : f.settings;  // Agent Under Fire keeps these in settings.toml
+    $('collect-row').hidden = $('collect-text').hidden = !info.canCollect;
+    $('pbr-row').hidden = $('relief-row').hidden = !nightfire();
     $('dump').checked = !!gr.dump_textures;
     $('use-pack').checked = gr.texture_pack !== false;
     $('use-relief').checked = !!gr.materials && (gr.surface_depth || 0) > 0;
@@ -391,11 +413,11 @@ async function loadTextures() {
     $('pack-progress').hidden = !info.running;
     $('btn-pack-folder').onclick = () => nf.open(info.folder);
     if (!info.tool) setMsg($('pack-msg'), 'Install the game first: the pack maker comes with it.', false);
-    else if (!info.dumped && !info.running) setMsg($('pack-msg'), 'Nothing collected yet: press Collect all textures now, or turn on saving the textures and play.', false);
+    else if (!info.dumped && !info.running) setMsg($('pack-msg'), info.canCollect ? 'Nothing collected yet: press Collect all textures now, or turn on saving the textures and play.' : 'Nothing collected yet: turn on saving the textures and play.', false);
     else if (!info.running && $('pack-msg').classList.contains('bad')) setMsg($('pack-msg'), '');
 }
 async function saveGraphics(patch, text) {
-    const r = await nf.saveSettings({ graphics: patch });
+    const r = await nf.saveSettings(nightfire() ? { graphics: patch } : { settings: patch });
     toast(r.ok ? text : r.message);
     if (!r.ok) loadTextures();
     else files = null;
@@ -427,6 +449,7 @@ nf.onCollect(ev => {
     loadTextures();
 });
 nf.onPack(ev => {
+    if (ev.game && ev.game !== game) return;
     const el = $('pack-log');
     if (ev.line) { el.textContent += ev.line + '\n'; el.scrollTop = el.scrollHeight; }
     if (ev.done) {
@@ -435,7 +458,31 @@ nf.onPack(ev => {
     }
 });
 
-nf.state().then(s => { if (s) { S = s; render(); } });
+nf.state('nightfire').then(s => { if (s) { S = SS.nightfire = s; render(); } });
+
+// ---- the game tabs: NightFire | Agent Under Fire, each with its own service, folder, settings and log
+async function switchGame(id) {
+    if (id === game || !GAME_INFO[id]) return;
+    game = id;
+    const r = await nf.setGame(id);
+    document.querySelectorAll('#gametabs button').forEach(b => b.classList.toggle('on', b.dataset.game === id));
+    $('hero-title').textContent = GAME_INFO[id].title;
+    $('nav-android').hidden = !nightfire();
+    S = SS[id] || await nf.state(id) || null;
+    if (S) SS[id] = S;
+    logEl.textContent = LOGS[id] || '';
+    logEl.scrollTop = logEl.scrollHeight;
+    setMsg($('build-msg'), r && r.missing ? 'This launcher was made without this game: get the full 007 Remastered launcher.' : '', false);
+    $('progress').hidden = true;
+    $('pack-log').textContent = '';
+    setMsg($('pack-msg'), ''); setMsg($('collect-msg'), ''); setMsg($('music-msg'), '');
+    files = null; edits = { s: {}, g: {} }; tab = schema()[0].id;
+    $('savebar').hidden = true;
+    const page = document.querySelector('#nav > button.active');
+    show(page && (page.dataset.page !== 'android' || nightfire()) ? page.dataset.page : 'home');
+    render();
+}
+document.querySelectorAll('#gametabs button').forEach(b => b.onclick = () => switchGame(b.dataset.game));
 
 // ---- Android export
 $('btn-android').onclick = async () => {
@@ -473,7 +520,7 @@ async function checkLauncherUpdate() {
     let u = null;
     try { u = await nf.launcherUpdate(); } catch (e) { return; }
     if (!u || localStorage.getItem('update-later') === u.version) return;
-    $('update-text').textContent = `NightFire Remastered ${u.version} is out (you have ${u.current}).`;
+    $('update-text').textContent = `007 Remastered ${u.version} is out (you have ${u.current}).`;
     $('update-get').onclick = () => nf.open(u.url);
     $('update-later').onclick = () => { localStorage.setItem('update-later', u.version); $('update-banner').hidden = true; };
     $('update-banner').hidden = false;

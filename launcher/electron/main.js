@@ -1,5 +1,5 @@
-// The NightFire launcher's window (Electron, Windows and Linux): the player's disc image found beside it, the game
-// built on this PC by NightFireLauncherService (sdk/launcher/service.cpp: the same builder as the ImGui launcher,
+// 007 Remastered's launcher window (Electron, Windows and Linux): NightFire and Agent Under Fire, a tab each. For each,
+// the player's disc image found beside it, the game built on this PC by its <short>LauncherService (sdk/launcher/service.cpp: the same builder as the ImGui launcher,
 // driven by JSON lines), the game's settings.toml and graphics.toml edited without starting it, the HD texture pack
 // made (hd_pack, Windows).
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
@@ -16,15 +16,23 @@ const EXE = WINDOWS ? '.exe' : '';
 const LAUNCHER_DIR = process.env.PORTABLE_EXECUTABLE_DIR ||
     (process.env.APPIMAGE ? path.dirname(process.env.APPIMAGE) : null) ||
     (app.isPackaged ? path.dirname(app.getPath('exe')) : (process.env.NF_LAUNCHER_DIR || path.resolve(__dirname, '../../out/launcher-dev')));
-const ROOT = path.join(LAUNCHER_DIR, 'NightFire');
-const SERVICE = app.isPackaged ? path.join(process.resourcesPath, 'NightFireLauncherService' + EXE)
-                               : path.resolve(__dirname, '../../out/launcher-svc/NightFireLauncherService' + EXE);
-// the game's executables (launcher/game.json's exes)
-const GAME_EXES = ['Nightfire', 'NightfireDriving'];
+// the games this launcher installs, each by its own service (sdk/launcher/service.cpp built with that game's
+// launcher/game.json) in its own work folder beside the launcher. Agent Under Fire's service is built from that
+// game's repository (build_service.bat, AUF_REPO).
+const SVC_DIR = name => app.isPackaged ? path.join(process.resourcesPath, name + EXE)
+                                       : path.resolve(__dirname, '../../out', name === 'NightFireLauncherService' ? 'launcher-svc' : 'launcher-svc-auf', name + EXE);
+const GAMES = {
+    nightfire: { root: 'NightFire', service: SVC_DIR('NightFireLauncherService'), exe: 'Nightfire',
+                 exes: ['Nightfire', 'NightfireDriving'], collect: true, android: true },
+    auf: { root: 'AgentUnderFire', service: SVC_DIR('AgentUnderFireLauncherService'), exe: 'AgentUnderFire',
+           exes: ['AgentUnderFire', 'AgentUnderFireBond', 'AgentUnderFireBondFre', 'AgentUnderFireBondGer', 'AgentUnderFireDriving'],
+           collect: false, android: false },
+};
+for (const [id, g] of Object.entries(GAMES)) Object.assign(g, { id, dir: path.join(LAUNCHER_DIR, g.root), svc: null, state: null });
+let active = 'nightfire';  // the game tab the window shows: the settings and texture calls are about it
+const G = () => GAMES[active];
 
 let win = null;
-let svc = null;
-let state = null;
 let android = null;
 let androidOutput = null;
 let pack = null;  // the running hd_pack
@@ -34,39 +42,50 @@ function send(channel, data) {
     if (win && !win.isDestroyed()) win.webContents.send(channel, data);
 }
 
-function startService() {
-    fs.mkdirSync(ROOT, { recursive: true });
+function startService(g) {
+    const emit = ev => send('svc', { ...ev, game: g.id });
+    if (!fs.existsSync(g.service)) {
+        g.missing = true;
+        emit({ ev: 'error', message: 'This launcher was made without this game\'s service.' });
+        return;
+    }
+    fs.mkdirSync(g.dir, { recursive: true });
     // the game's source the launcher carries (git bundles of the game and its runtime): installs need no download of it
     const bundles = app.isPackaged ? path.join(process.resourcesPath, 'source') : path.resolve(__dirname, '../../out/source-bundles');
-    svc = spawn(SERVICE, ['--games', LAUNCHER_DIR, '--root', ROOT],
+    const svc = g.svc = spawn(g.service, ['--games', LAUNCHER_DIR, '--root', g.dir],
                 { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, NF_SOURCE_BUNDLES: bundles } });
     readline.createInterface({ input: svc.stdout }).on('line', line => {
         let ev;
         try { ev = JSON.parse(line); } catch { return; }
-        if (ev.ev === 'state') state = ev;
-        send('svc', ev);
+        if (ev.ev === 'state') g.state = ev;
+        emit(ev);
     });
-    readline.createInterface({ input: svc.stderr }).on('line', line => send('svc', { ev: 'log', line }));
-    svc.on('error', err => send('svc', { ev: 'error', message: `The launcher service did not start: ${err.message}` }));
+    readline.createInterface({ input: svc.stderr }).on('line', line => emit({ ev: 'log', line }));
+    svc.on('error', err => emit({ ev: 'error', message: `The launcher service did not start: ${err.message}` }));
     svc.on('exit', code => {
-        svc = null;
-        if (!app.isQuitting) send('svc', { ev: 'error', message: `The launcher service stopped (exit ${code}).` });
+        g.svc = null;
+        if (!app.isQuitting) emit({ ev: 'error', message: `The launcher service stopped (exit ${code}).` });
     });
 }
 
+// cmd.game: the game it is for (else the shown one)
 function command(cmd) {
+    const g = GAMES[cmd.game] || G();
     if (android && !['state', 'quit'].includes(cmd.cmd)) return;
-    if (svc && svc.stdin.writable) svc.stdin.write(JSON.stringify(cmd) + '\n');
+    const { game, ...rest } = cmd;
+    if (g.svc && g.svc.stdin.writable) g.svc.stdin.write(JSON.stringify(rest) + '\n');
 }
 
-// a new or removed .iso beside the launcher is looked at again
+// a new or removed .iso beside the launcher is looked at again, by each game's service that has none yet
 function watchGames() {
     let timer = null;
     try {
         fs.watch(LAUNCHER_DIR, (_, name) => {
             if (!name || !/\.iso$/i.test(name)) return;
             clearTimeout(timer);
-            timer = setTimeout(() => { if (!(state && state.game && state.game.ok)) command({ cmd: 'scan' }); }, 1500);
+            timer = setTimeout(() => {
+                for (const g of Object.values(GAMES)) if (!(g.state && g.state.game && g.state.game.ok)) command({ cmd: 'scan', game: g.id });
+            }, 1500);
         });
     } catch { /* a folder that cannot be watched: the Scan again button */ }
 }
@@ -75,7 +94,7 @@ function createWindow() {
     win = new BrowserWindow({
         width: 1180, height: 760, minWidth: 960, minHeight: 640,
         frame: false, backgroundColor: '#07080b', show: false,
-        title: '007: NightFire Launcher',
+        title: '007 Remastered',
         icon: path.resolve(__dirname, WINDOWS ? '../icon.ico' : '../icon.png'),
         webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
@@ -88,12 +107,15 @@ function createWindow() {
         win.webContents.once('did-finish-load', async () => {
             const wait = ms => new Promise(r => setTimeout(r, ms));
             await wait(2500);
+            // a page as [game@]page[:settings tab], e.g. auf@settings:effects
             for (const page of (process.env.NF_SHOT_PAGES || 'home,settings,textures').split(',')) {
-                const [name, tab] = page.split(':');
+                const [g, rest] = page.includes('@') ? page.split('@') : [null, page];
+                const [name, tab] = rest.split(':');
+                if (g) { await win.webContents.executeJavaScript(`switchGame(${JSON.stringify(g)})`); await wait(600); }
                 await win.webContents.executeJavaScript(`show(${JSON.stringify(name)});` + (tab ? `tab=${JSON.stringify(tab)};renderSettings();` : ''));
                 await wait(900);
                 const img = await win.webContents.capturePage();
-                fs.writeFileSync(path.join(process.env.NF_SHOT, `launcher_${page.replace(':', '_')}.png`), img.toPNG());
+                fs.writeFileSync(path.join(process.env.NF_SHOT, `launcher_${page.replace(/[:@]/g, '_')}.png`), img.toPNG());
             }
             app.quit();
         });
@@ -104,7 +126,7 @@ function createWindow() {
 }
 
 // ---- the game's settings: settings.toml and graphics.toml in play\, beside the exe
-function playDir() { return (state && state.play_dir) || path.join(ROOT, 'play'); }
+function playDir(g = G()) { return (g.state && g.state.play_dir) || path.join(g.dir, 'play'); }
 
 function readToml(file) {
     try { return TOML.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
@@ -118,6 +140,7 @@ function writeToml(file, table, header) {
 
 // the game in this launcher's play folder running (another copy elsewhere writes its own files)
 function gameRunning() {
+    const GAME_EXES = G().exes;
     if (!WINDOWS) {
         // each process's executable, /proc/<pid>/exe (the player's own processes are readable)
         const dir = path.resolve(playDir());
@@ -173,41 +196,53 @@ ipcMain.handle('settings:save', async (_, patch) => {
 function countPng(dir, filter) {
     try { return fs.readdirSync(dir).filter(n => /\.png$/i.test(n) && (!filter || filter(n))).length; } catch { return 0; }
 }
+// the pack maker: the game's own, else NightFire's (Agent Under Fire's builds none; hd_pack only reads mods/textures/dump
+// and writes the pack beside it, the same in both games)
+function hdPack(dir) {
+    for (const d of [dir, playDir(GAMES.nightfire)]) {
+        const exe = path.join(d, 'tools', 'hd_pack' + EXE);
+        if (fs.existsSync(exe)) return exe;
+    }
+    return null;
+}
 ipcMain.handle('textures:info', async () => {
     const dir = playDir(), tex = path.join(dir, 'mods', 'textures');
     return {
         dumped: countPng(path.join(tex, 'dump')),
         pack: countPng(tex, n => !/_(n|r)\.png$/i.test(n)),
         maps: countPng(tex, n => /_n\.png$/i.test(n)),
-        tool: fs.existsSync(path.join(dir, 'tools', 'hd_pack' + EXE)),
+        tool: !!hdPack(dir),
+        canCollect: G().collect,
         folder: tex,
         running: !!pack,
         collecting: !!collect,
-        game: fs.existsSync(path.join(dir, WINDOWS ? 'Nightfire.exe' : 'Nightfire')),
+        game: fs.existsSync(path.join(dir, G().exe + EXE)),
     };
 });
 ipcMain.handle('textures:run', async (_, o) => {
     if (pack) return { ok: false, message: 'Already making the pack.' };
-    const dir = playDir(), exe = path.join(dir, 'tools', 'hd_pack' + EXE);
-    if (!fs.existsSync(exe)) return { ok: false, message: 'hd_pack is not there yet: build the game first.' };
+    const dir = playDir(), exe = hdPack(dir);
+    if (!exe) return { ok: false, message: "hd_pack is not there yet: build the game first (for Agent Under Fire, NightFire's comes with NightFire)." };
     const args = ['--dir', dir, '--scale', String(o.scale === 2 ? 2 : 4), '--model', o.model === 'anime' ? 'anime' : 'x4plus'];
-    if (o.pbr) args.push('--pbr');
+    if (o.pbr && G().id === 'nightfire') args.push('--pbr');  // the PBR maps are NightFire's materials'
     if (o.force) args.push('--force');
     pack = spawn(exe, args, { cwd: dir, windowsHide: true });
-    const out = line => send('pack', { line });
+    const game = active;
+    const out = line => send('pack', { line, game });
     readline.createInterface({ input: pack.stdout }).on('line', out);
     readline.createInterface({ input: pack.stderr }).on('line', out);
-    pack.on('exit', code => { pack = null; send('pack', { done: true, code }); });
-    pack.on('error', e => { pack = null; send('pack', { done: true, code: -1, line: e.message }); });
+    pack.on('exit', code => { pack = null; send('pack', { done: true, code, game }); });
+    pack.on('error', e => { pack = null; send('pack', { done: true, code: -1, line: e.message, game }); });
     return { ok: true };
 });
 ipcMain.handle('textures:cancel', async () => { if (pack) pack.kill(); if (collect) collect.kill(); });
 // the game started with NF_COLLECT_TEXTURES=1 reads its level files and saves every texture in them, then quits (about
 // half a minute; nothing to play)
 ipcMain.handle('textures:collect', async () => {
+    if (!G().collect) return { ok: false, message: 'This game has no texture collection: turn on saving the textures and play.' };
     if (collect || pack) return { ok: false, message: 'Another texture job is running.' };
     if (await gameRunning()) return { ok: false, message: 'Close the game first.' };
-    const dir = playDir(), exe = path.join(dir, WINDOWS ? 'Nightfire.exe' : 'Nightfire');
+    const dir = playDir(), exe = path.join(dir, G().exe + EXE);
     if (!fs.existsSync(exe)) return { ok: false, message: 'Install the game first.' };
     collect = spawn(exe, [], { cwd: dir, env: { ...process.env, NF_COLLECT_TEXTURES: '1' }, windowsHide: false });
     collect.on('exit', code => { collect = null; send('collect', { done: true, code }); });
@@ -217,8 +252,10 @@ ipcMain.handle('textures:collect', async () => {
 
 // ---- Android package: the same Linux build on Linux and in Windows' WSL.
 ipcMain.handle('android:run', async (_, options = {}) => {
+    const nf = GAMES.nightfire, state = nf.state;
+    if (active !== 'nightfire') return { ok: false, message: "The Android package is NightFire's only." };
     if (android || (state && state.busy)) return { ok: false, message: 'Another job is running.' };
-    const repo = path.join(ROOT, 'source');
+    const repo = path.join(nf.dir, 'source');
     if (!state || !state.built || !fs.existsSync(path.join(repo, 'sdk/scripts/android/package.sh')))
         return { ok: false, message: 'Install the game on the Mission page first. If the source was removed, rebuild it.' };
     const output = await dialog.showSaveDialog(win, { title: 'Save Android game package',
@@ -227,8 +264,8 @@ ipcMain.handle('android:run', async (_, options = {}) => {
     if (output.canceled) return { ok: false, cancelled: true };
     // Check again after the native dialog: a service job may have started while it was open.
     if (android || state.busy) return { ok: false, message: 'Another job is running.' };
-    const args = [repo, path.join(playDir(), 'assets'), output.filePath,
-        options.textures === true ? path.join(playDir(), 'mods', 'textures') : '',
+    const args = [repo, path.join(playDir(nf), 'assets'), output.filePath,
+        options.textures === true ? path.join(playDir(nf), 'mods', 'textures') : '',
         options.abi === 'x86_64' ? 'x86_64' : 'arm64-v8a'];
     const child = spawn(WINDOWS ? 'wsl.exe' : 'bash', WINDOWS
         ? ['--exec', 'bash', '-s', '--', ...args] : ['-s', '--', ...args],
@@ -253,8 +290,9 @@ ipcMain.handle('android:run', async (_, options = {}) => {
 ipcMain.handle('android:reveal', () => { if (androidOutput) shell.showItemInFolder(androidOutput); });
 // ---- the rest
 ipcMain.on('svc', (_, cmd) => command(cmd));
-ipcMain.handle('svc:state', () => state);
-ipcMain.handle('paths', () => ({ launcher: LAUNCHER_DIR, root: ROOT, platform: process.platform }));
+ipcMain.handle('svc:state', (_, id) => (GAMES[id] || G()).state);
+ipcMain.handle('game:set', (_, id) => { if (GAMES[id]) active = id; return { missing: !!G().missing }; });
+ipcMain.handle('paths', () => ({ launcher: LAUNCHER_DIR, root: G().dir, platform: process.platform }));
 
 // a newer launcher: the latest release on GitHub, else the mirror's latest.json; null when this one is the newest or
 // neither answers
@@ -302,7 +340,7 @@ ipcMain.on('open', (_, target) => {
 
 app.whenReady().then(() => {
     createWindow();
-    startService();
+    for (const g of Object.values(GAMES)) startService(g);
     watchGames();
 });
 app.on('before-quit', () => {
@@ -311,6 +349,6 @@ app.on('before-quit', () => {
         if (WINDOWS) spawn('taskkill', ['/pid', String(android.pid), '/T', '/F'], { windowsHide: true });
         else { try { process.kill(-android.pid, 'SIGTERM'); } catch {} }
     }
-    if (svc) { command({ cmd: 'quit' }); svc.stdin.end(); }
+    for (const g of Object.values(GAMES)) if (g.svc) { command({ cmd: 'quit', game: g.id }); g.svc.stdin.end(); }
 });
 app.on('window-all-closed', () => app.quit());
