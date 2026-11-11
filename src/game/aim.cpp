@@ -153,7 +153,20 @@ void AimDownSights(uint32_t count) {
 // NF_ADS_FIRE=1 (diagnostic): while player 1 aims, its current weapon is fired every 60 frames from its eye straight
 // along its view (the spawner 0x211F0, as a shot), and the bullet's direction logged beside the view's forward
 // direction: a difference is the aim going wrong. Its shots hit whatever is there (no ammo needed).
+// XBE_CAM_TRACE=1 (diagnostic): twice a second, player 1's own camera (its place and forward, +0x138 and +0x128) logged, to
+// set beside the renderer's "camera trace" line (the camera the picture is drawn from)
+void CameraTrace() {
+    static const bool on = std::getenv("XBE_CAM_TRACE") != nullptr;
+    static uint32_t frame = 0;
+    if (!on || ++frame % 30) return;
+    const uint32_t cam = kernel::R32(0x1F661C);
+    if (!cam) return;
+    LOGR("camera trace: the game's camera at %.3f %.3f %.3f, facing %.4f %.4f %.4f", GetF(cam + 0x138), GetF(cam + 0x13C),
+         GetF(cam + 0x140), GetF(cam + 0x128), GetF(cam + 0x12C), GetF(cam + 0x130));
+}
+
 void AimFireTest(X86Context& ctx) {
+    CameraTrace();
     static const bool on = [] { const char* e = std::getenv("NF_ADS_FIRE"); return e && *e == '1'; }();
     static uint32_t frame = 0;
     if (!on || !g_players[0].aiming) return;
@@ -266,6 +279,15 @@ X86_FUNC(sub_000BD740) {  // the first person gun placed (cdecl: the object)
     Player& p = g_players[i];
     p.t = std::clamp(p.t + (p.aiming ? kEase : -kEase), 0.0f, 1.0f);
     uint32_t gun = R32(R32(obj + kActor) + kGun);
+    if (i == 0 && gun && std::getenv("NF_GUN_TRACE")) {  // diagnostic: the gun's place (its model's) each frame it moves
+        static float last[3] = {};
+        const float now[3] = {GetF(gun + kGunPos), GetF(gun + kGunPos + 4), GetF(gun + kGunPos + 8)};
+        if (std::fabs(now[0] - last[0]) + std::fabs(now[1] - last[1]) + std::fabs(now[2] - last[2]) > 0.004f) {
+            LOGR("nightfire: gun at %.3f %.3f %.3f (aim %.2f)", now[0], now[1], now[2], p.t);
+            logx::Flush();
+        }
+        std::memcpy(last, now, sizeof last);
+    }
     if (i == 0 && WeaponsTest() && gun) {  // the test: alive, and each weapon's own place (before ours) logged
         SetF(R32(obj + kActor) + 0x824, 100.0f);
         static int last = -1;

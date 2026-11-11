@@ -2,6 +2,18 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-11: aim down sights: measured, no static mismatch found
+
+- "shot made" (NF_SHOT_TRACE): the round the spawner makes has exactly the direction given, no spread (0.000 deg off).
+- XBE_CAM_TRACE=1: the renderer's drawn camera (rt_cams_, with rt_lighting on) and the game's camera (cam+0x138/0x128)
+  are identical: eye 101.847 25.746 106.132, facing -0.8387 0 -0.5446. Bullets start there and go that way.
+- Sight pictures (.local/sight_run.py, every weapon aimed, centre marked): pistols and SMGs 0-13 have the front sight tip on
+  the centre (within about 25 px of 1080); also at fov 130. Weapons above 13 not yet pictured.
+- Firing: the gun's position does not change (NF_GUN_TRACE) but its fire animation kicks it far up the screen for about
+  0.3 s (picture imp1_hit1), so while firing the sights are off the centre though the bullets still go dead centre.
+- So a static offset is not found; remaining suspects are dynamic (the recoil animation, the gun's lag while turning).
+  Mitigation: Crosshair: Dot (More Settings) draws the true bullet point, also while aiming.
+
 ## 2026-11-11: muzzle flash boost: tried, not working (reverted)
 
 - 0xB9FC0 loads the weapon entry's flash colour and size (+0x54, +0x58) and calls the light maker 0x6D530 (return

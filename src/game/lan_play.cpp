@@ -1568,6 +1568,18 @@ X86_FUNC(sub_000211F0) {
              GetF(shooter + kPos), GetF(shooter + kPos + 4) + 1.5f, GetF(shooter + kPos + 8));
     }
     __imp__sub_000211F0(ctx, base);
+    if (trace && shooter && dir && R32(shooter + 0xBC) && kernel::G<int8_t>(R32(shooter + 0xBC) + 0x8DE) == 0 && ctx.eax) {
+        // the round as the spawner made it: its direction (data +0, spread included) against the one given
+        const uint32_t data = R32(ctx.eax + 0xBC);
+        float given[3], made[3];
+        std::memcpy(given, kernel::HostPtr(dir), 12);
+        std::memcpy(made, kernel::HostPtr(data), 12);
+        const float dot = given[0] * made[0] + given[1] * made[1] + given[2] * made[2];
+        const float len = std::sqrt(made[0] * made[0] + made[1] * made[1] + made[2] * made[2]);
+        LOGR("nightfire: shot made: dir %+.4f %+.4f %+.4f, %.3f deg off the given (length %.3f), weapon %u", made[0], made[1],
+             made[2], std::acos(std::clamp(dot / std::max(len, 1e-6f), -1.0f, 1.0f)) * 57.29578f, len,
+             (entry - 0x18CFA0) / 0x10C);
+    }
     nf::ThrowSpawned(entry, ctx.eax);
     if (slot < 0 || !origin || !dir || entry < 0x18CFA0) return;
     if (slot >= kFirstBot && (!g_host || nf::LanPuppet(shooter))) return;  // the host's bots' rounds go out too
