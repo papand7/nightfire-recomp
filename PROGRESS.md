@@ -4,7 +4,7 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Status
 - Vulkan port: SDK branch vulkan-port (9dbcdf3) contains NightFire's Vulkan backend adapted as the only host renderer; DX renderer sources, interfaces, fallback, and libraries are excluded. This checkout has no game assets, so it has not been built or Windows-smoke-tested.
-- Vulkan visual port: SDK branch `visual-port` has FXAA, gamma, scaling, sharpening, anisotropic filtering, texture replacement, SMAA 1x, PNG texture packs/dumps (2e5d161), five screen-space styles (0b65310), SDR bloom (349fd1d), vignette and animated film grain (b569525), YUY2 movie upscaling (b129368), exposure/contrast/saturation/temperature controls (5162dbf), optional Vulkan ray-query setup and geometry-capture layout (1f6e61a, f9dd919), depth-aware Toon outlines (3e78285), depth-slope crease outlines (607d5fc), device-addressable allocation for ray-query input buffers (20635d1), and address validation for those buffers (201c897).
+- Vulkan visual port: SDK branch `visual-port` has FXAA, gamma, scaling, sharpening, anisotropic filtering, texture replacement, SMAA 1x, PNG texture packs/dumps (2e5d161), five screen-space styles (0b65310), SDR bloom (349fd1d), vignette and animated film grain (b569525), YUY2 movie upscaling (b129368), exposure/contrast/saturation/temperature controls (5162dbf), optional Vulkan ray-query setup and geometry-capture layout (1f6e61a, f9dd919), depth-aware Toon outlines (3e78285), depth-slope crease outlines (607d5fc), device-addressable allocation for ray-query input buffers (20635d1), address validation for those buffers (201c897), and cached addresses on addressable buffers (9051246).
   - Present in Agent Under Fire: FXAA, SMAA, render scaling/filtering, sharpening, gamma, anisotropic filtering, texture replacement, Enhanced Color, depth-aware and depth-slope screen-space Toon, Retro, Noir, SDR bloom, vignette, film grain, YUY2 movie scaling, and screen color adjustments. Vulkan MSAA is unsupported.
   - Still to adapt in the shared renderer: temporal AA/upscalers (requires depth, jitter and motion vectors), HDR tone mapping and multilevel HDR bloom, motion blur and depth of field. These need renderer-owned passes and checks against this game's output.
   - Game-data dependent: the full ray-traced Enhanced look, mesh-normal Toon outlines, AO/contact shadows, global illumination, reflections/water, light shafts, muzzle/fire lighting, fog, snow/footprints, particles and persistent blood. Nightfire's versions depend on its depth, lights, materials, weather and game hooks; identify Agent Under Fire equivalents before implementation.
@@ -29,6 +29,11 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Every library 1.0.4039. Sections include a DSOUND section though the library table does not list it.
 
 ## Log
+
+### 2026-11-11 - Cache validated Vulkan buffer addresses
+- Addressable buffers now cache their device address immediately after binding; later acceleration-structure code can use the validated value without querying Vulkan again.
+- SDK commit: 9051246. git -C sdk diff --check passes. No build or GPU check was run; there is still no geometry capture, AS build, or visible RT effect.
+- Next: add frame-safe scene geometry capture and build the per-frame acceleration structure.
 
 ### 2026-11-11 - Agent Under Fire RT frame-slot constraint
 - Confirmed the renderer has two frame slots and waits on a slot in Present, after the scene draws are recorded. A per-slot RT capture buffer must wait before its first write of the next use; copying Nightfire's buffer lifetime unchanged would race the GPU.
