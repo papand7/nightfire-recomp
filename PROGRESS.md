@@ -4,8 +4,8 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Status
 - Vulkan port: SDK branch vulkan-port (9dbcdf3) contains NightFire's Vulkan backend adapted as the only host renderer; DX renderer sources, interfaces, fallback, and libraries are excluded. This checkout has no game assets, so it has not been built or Windows-smoke-tested.
-- Vulkan visual port: SDK branch `visual-port` has FXAA, gamma, scaling, sharpening, anisotropic filtering, user texture replacement, SMAA 1x, content-keyed PNG packs/dumps (2e5d161), Retro/Noir finished-frame color styles (ea96fec), and optional SDR screen-space bloom (349fd1d).
-  - Present in Agent Under Fire: FXAA, SMAA, render scaling/filtering, sharpening, gamma, anisotropic filtering, texture replacement, Retro/Noir color grade and SDR bloom. Vulkan MSAA is unsupported.
+- Vulkan visual port: SDK branch `visual-port` has FXAA, gamma, scaling, sharpening, anisotropic filtering, texture replacement, SMAA 1x, PNG texture packs/dumps (2e5d161), Retro/Noir color grades (ea96fec), SDR bloom (349fd1d), and vignette/animated film grain (b569525).
+  - Present in Agent Under Fire: FXAA, SMAA, render scaling/filtering, sharpening, gamma, anisotropic filtering, texture replacement, Retro/Noir grade, SDR bloom, vignette and film grain. Vulkan MSAA is unsupported.
   - Still to adapt in the shared renderer: Enhanced/Toon scene treatment, temporal AA/upscalers, HDR tone mapping and multilevel HDR bloom, motion blur and depth of field. These need renderer-owned passes and checks against this game's output.
   - Game-data dependent, not portable as-is: toon/outline styles, AO/contact shadows, ray-traced/global illumination, reflections/water, light shafts, muzzle/fire lighting, fog, snow/footprints, particles and persistent blood. Nightfire's versions depend on its depth, lights, materials, weather and game hooks; identify Agent Under Fire equivalents before implementation.
   Not built or Windows-smoke-tested; this checkout has no game assets.
@@ -28,6 +28,11 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Every library 1.0.4039. Sections include a DSOUND section though the library table does not list it.
 
 ## Log
+
+### 2026-11-11 - Vignette and animated film grain added
+- Added optional vignette and film-grain controls to the Vulkan finished-frame pass and persisted them in graphics settings. The grain phase changes each presented frame. Strength is quantized to 64 steps in the packed pass settings.
+- SDK commit: b569525. `git -C sdk diff --check` passes. No build or visual check: this checkout has no game assets.
+- Next: port the remaining renderer-owned effects and investigate Agent Under Fire scene data for adaptations of lighting, water and weather features.
 
 ### 2026-11-11 - Optional SDR bloom added to the Vulkan final pass
 - Added a configurable thresholded screen-space bloom kernel to the finished-frame shader (off by default), with an F1 Graphics slider and saved preference. Enabled the sharp scaling filter in that same final pass when selected. This is SDR bloom; Nightfire's multilevel HDR bloom and tone mapping remain unported.
