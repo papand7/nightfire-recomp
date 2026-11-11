@@ -31,8 +31,9 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ### 2026-11-11 - Ray-tracing port dependency check
 - Confirmed the Agent Under Fire Vulkan backend has no acceleration-structure extension loading, ray-query path, geometry capture, or RT passes. Nightfire builds a per-frame acceleration structure from vertices captured by scene draws, then uses it for AO, shadows and GI. Porting its final shaders alone cannot enable ray tracing.
-- Nightfire uses Vulkan ray queries and DXC Shader Model 6.5; its source notes MoltenVK cannot compile those ray-tracing shaders. The Agent Under Fire draw path already assembles vertex and index data before submitting Vulkan draws, which is a possible capture point, but its scene eligibility and shader variants need adapting and validating.
-- Next: map capture eligibility against Agent Under Fire's draw/state conventions, then port the reusable Vulkan acceleration-structure and ray-query pipeline in stages. No GPU/visual validation has been done.
+- Nightfire captures only opaque or alpha-cutout world triangles with matching full-size color/depth targets, depth test/write enabled, and no HUD/pretransformed geometry. It compiles a storage-writing variant of each generated game vertex shader; its source notes Vulkan ray-query support and DXC Shader Model 6.5 are required (MoltenVK cannot compile those shaders).
+- Agent Under Fire's draw path already assembles vertex/index data and generates translated vertex shaders, so there is a plausible capture point. Its scene/frame boundaries and shader variants still need adaptation; this checkout has no game data for visual validation.
+- Next: adapt capture eligibility to Agent Under Fire's draw/state conventions, then port the reusable Vulkan acceleration-structure and ray-query pipeline in stages.
 
 ### 2026-11-11 - Screen color controls added
 - Added persistent Exposure (50-150%), Contrast (50-150%), Saturation (0-200%) and Color temperature (-100 cool to +100 warm) controls to F1 Graphics and the Vulkan final pass. Exposure remains an SDR adjustment, not HDR tone mapping.
