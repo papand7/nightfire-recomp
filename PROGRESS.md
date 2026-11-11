@@ -4,7 +4,7 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Status
 - Vulkan port: SDK branch vulkan-port (9dbcdf3) contains NightFire's Vulkan backend adapted as the only host renderer; DX renderer sources, interfaces, fallback, and libraries are excluded. This checkout has no game assets, so it has not been built or Windows-smoke-tested.
-- Vulkan visual port: SDK branch `visual-port` has FXAA, gamma, scaling, sharpening, anisotropic filtering, texture replacement, SMAA 1x, PNG texture packs/dumps (2e5d161), five screen-space styles (0b65310), SDR bloom (349fd1d), vignette and animated film grain (b569525), YUY2 movie upscaling (b129368), exposure/contrast/saturation/temperature controls (5162dbf), optional Vulkan ray-query setup and geometry-capture layout (1f6e61a, f9dd919), and depth-aware Toon outlines (3e78285).
+- Vulkan visual port: SDK branch `visual-port` has FXAA, gamma, scaling, sharpening, anisotropic filtering, texture replacement, SMAA 1x, PNG texture packs/dumps (2e5d161), five screen-space styles (0b65310), SDR bloom (349fd1d), vignette and animated film grain (b569525), YUY2 movie upscaling (b129368), exposure/contrast/saturation/temperature controls (5162dbf), optional Vulkan ray-query setup and geometry-capture layout (1f6e61a, f9dd919), and depth-aware Toon outlines (3e78285), plus device-addressable allocation for ray-query input buffers (20635d1).
   - Present in Agent Under Fire: FXAA, SMAA, render scaling/filtering, sharpening, gamma, anisotropic filtering, texture replacement, Enhanced Color, depth-aware screen-space Toon, Retro, Noir, SDR bloom, vignette, film grain, YUY2 movie scaling, and screen color adjustments. Vulkan MSAA is unsupported.
   - Still to adapt in the shared renderer: temporal AA/upscalers (requires depth, jitter and motion vectors), HDR tone mapping and multilevel HDR bloom, motion blur and depth of field. These need renderer-owned passes and checks against this game's output.
   - Game-data dependent: the full ray-traced Enhanced look, normal-aware Toon outlines, AO/contact shadows, global illumination, reflections/water, light shafts, muzzle/fire lighting, fog, snow/footprints, particles and persistent blood. Nightfire's versions depend on its depth, lights, materials, weather and game hooks; identify Agent Under Fire equivalents before implementation.
@@ -28,6 +28,11 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Every library 1.0.4039. Sections include a DSOUND section though the library table does not list it.
 
 ## Log
+
+### 2026-11-11 - Device-addressable Vulkan buffers for ray-query inputs
+- Vulkan allocations now opt into VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT only for buffers requesting shader-device-address usage, and keep those memory blocks separate from ordinary allocations.
+- SDK commit: 20635d1. git -C sdk diff --check passes. No build or GPU check was run. This is allocator support only; ray-traced geometry capture, acceleration-structure builds, and visible RT effects remain incomplete.
+- Next: use the device addresses in Agent Under Fire's eligible scene-geometry capture and per-frame acceleration-structure path.
 
 ### 2026-11-11 - Depth-aware Toon outlines
 - Toon now combines its color edges with discontinuities from the matching full-size scene depth buffer. The renderer records only same-frame depth associated with the presented color target; missing or mismatched depth keeps the existing color-only Toon edge.
