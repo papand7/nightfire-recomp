@@ -2759,3 +2759,7 @@ f_movies\pack (a partial pack).
   and picks weapons whose model (+0xDC, swapped per level by 0x11350 with EAX in and out) 0x6B500 finds. Levels:
   07000001-03 have 28-29 (and 14-15, 18-19); 07000011-13 have 16, 24-25, 28-29, 42-43; 07000014-16 (space) 50-51 and
   20-21; 07000006 has 10-12, 20-25.
+- Sights done (Harry, 2026-11-11): the tuner's results built into aim.cpp (LoadTune's kBuiltIn, position and turn):
+  10 and 12 (Kowloon Type 40), 14, 18 (the submachine gun), 28 (Frinesi Automatic 12); earlier 2, 4, 6, 12, 20, 22
+  into SightOf. The Phoenix Samurai keeps the game's scope; the dual Kowloon (13) has no sights. Tuner keys: , . pick,
+  arrows/Home/End move, J L turn, I K tilt, U O roll.

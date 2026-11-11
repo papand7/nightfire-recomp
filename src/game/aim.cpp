@@ -102,6 +102,9 @@ void LoadTune() {
     static const struct { int idx; float v[6]; } kBuiltIn[] = {
         {10, {13.5f, 1.5f, 0, -1.70f, 0.80f, 0}},  // the Kowloon Type 40
         {12, {14.0f, -4.5f, 0, -1.50f, 0, 0}},     // the Kowloon Type 40, its other mode
+        {14, {2.0f, -7.0f, 0, 0, 0, 0}},
+        {18, {-3.0f, 15.0f, 0, 0, 0, 0}},          // the submachine gun
+        {28, {16.5f, -2.0f, 0, 0, 0, 0}},          // the Frinesi Automatic 12
     };
     for (const auto& b : kBuiltIn)
         for (int k = 0; k < 6; k++) g_tune[b.idx][k] = k < 3 ? b.v[k] / 1000.0f : b.v[k] * kDeg;
@@ -272,10 +275,9 @@ X86_FUNC(sub_000BA8F0) {  // a player's weapon update (cdecl: the object)
         Player& p = g_players[i];
         // the game's scoped weapons keep its scope; the thrown ones (52-56: the grenades, NF_ADS_WEAPONS shots
         // 2026-11-05) and the dual-wield Kowloon (13: two guns, no sights to line up) have none: L is the game's own
-        // aim for them. The Phoenix Samurai (50, 51: flagged scoped, but its zoom shows the gun) aims down its sights
+        // aim for them. The Phoenix Samurai (50, 51) keeps the game's own scope too
         int idx = kernel::G<int8_t>(R32(obj + kWeaponState) + kWeaponIndex);
-        p.scoped = ((R32(Weapon(obj) + kWeaponFlags) & kScoped) && idx != 50 && idx != 51) || (idx >= 52 && idx <= 56) ||
-                   idx == kDualKowloon;
+        p.scoped = (R32(Weapon(obj) + kWeaponFlags) & kScoped) || (idx >= 52 && idx <= 56) || idx == kDualKowloon;
         if (p.scoped) p.aiming = false;
     }
     __imp__sub_000BA8F0(ctx, base);
@@ -320,8 +322,8 @@ int64_t NowMs() {
 // out; 0x6B500 the loaded model or 0)
 bool Usable(int idx) {
     const uint32_t w = kWeapons + uint32_t(idx) * kWeaponSize;
-    return kernel::G<uint16_t>(w) && (!(R32(w + kWeaponFlags) & kScoped) || idx == 50 || idx == 51) &&
-           !(idx >= 52 && idx <= 56) && idx != kDualKowloon;
+    return kernel::G<uint16_t>(w) && !(R32(w + kWeaponFlags) & kScoped) && !(idx >= 52 && idx <= 56) &&
+           idx != kDualKowloon;
 }
 bool Loaded(X86Context& ctx, int idx) {
     const uint32_t model = R32(kWeapons + uint32_t(idx) * kWeaponSize + 0xDC);
