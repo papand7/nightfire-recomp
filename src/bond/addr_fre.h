@@ -5,6 +5,7 @@
         case 0x14B654: return 0x14B564; \
         case 0x1E5FC8: return 0x1E67F0; \
         case 0x205408: return 0x205C68; \
+        case 0x207630: return 0x207E90; \
         case 0x2A8124: return 0x2A8964; \
         case 0x2A8128: return 0x2A8968; \
         case 0x2A8144: return 0x2A8984; \

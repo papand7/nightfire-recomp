@@ -2,11 +2,13 @@
 #define AUF_LANG_FRE
 // Hooks for bond_eng.xbe, the game.
 #include "bond/addr.h"
+#include <cstdlib>
 #include <cstring>
 
 #include "common/auf.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
+#include "xdk/hle.h"
 
 namespace auf {
 extern const int kImage = kBond;
@@ -68,3 +70,29 @@ void NoHitFlash(X86Context& ctx, uint8_t*) {
     kernel::W32(ctx.ebx + 0x30, 0);
 }
 
+
+// Test switches (a save made with them keeps what they did). The select screen opens mission m+1 when the dword
+// 0x207630 + 4m is 1 (0x20762C, mission 0, always is; a profile's load rebuilds them, so they are written each frame);
+// Start Mission (0x4AA40, events 2 and 0x16) loads the map of the mission 0x2A9F98 holds at the press.
+// AUF_UNLOCK=1: every mission open. AUF_MISSION=n (0 to 11): Start Mission starts mission n.
+X86_EXTERN_FUNC(__imp__sub_0015DD00);
+X86_FUNC(sub_0015DD00) {
+    static const bool unlock = std::getenv("AUF_UNLOCK") != nullptr;
+    if (unlock)
+        for (uint32_t m = 0; m < 11; m++) kernel::G<uint32_t>(A(0x207630) + 4 * m) = 1;
+    __imp__sub_0015DD00(ctx, base);
+}
+
+X86_EXTERN_FUNC(__imp__sub_0004AA40);
+X86_FUNC(sub_0004AA40) {
+    static const int mission = [] {
+        const char* e = std::getenv("AUF_MISSION");
+        return e && *e ? std::atoi(e) : -1;
+    }();
+    const uint32_t event = kernel::R32(ctx.esp + 4);
+    if (mission >= 0 && mission < 12 && event && (kernel::R32(event) == 2 || kernel::R32(event) == 0x16)) {
+        kernel::G<uint32_t>(auf::kAddrMission) = uint32_t(mission);
+        LOGR("auf: AUF_MISSION starts mission %d", mission);
+    }
+    __imp__sub_0004AA40(ctx, base);
+}
