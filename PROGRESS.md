@@ -2,6 +2,11 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-11: menu glow on the focused row
+
+- Modern menus: the focused row's bar has a soft blue halo (three fainter rings) that breathes slowly
+  (src/common/modern_menu.cpp). Seen in the .local/mm_test.sh grid (Invert Mouse, Operative).
+
 ## 2026-11-11: damage numbers on hit markers (off by default; not yet seen on screen)
 
 - Settings `damage_numbers` (settings.toml, default false): the damage a hit did floats up from its hit marker, red

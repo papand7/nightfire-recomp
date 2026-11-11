@@ -334,6 +334,13 @@ void ModernMenuUi(double) {
     // the focus: a bright bar sliding to its row, an electric edge on the left
     if (glow_y >= 0 && page.focus >= 0) {
         ImVec2 a{x0, glow_y}, b{x0 + rw, glow_y + rh};
+        // a soft glow round the bar, breathing slowly (three halos, the outer fainter)
+        const float breath = 0.75f + 0.25f * std::sin(float(ImGui::GetTime()) * 2.4f);
+        for (int h = 1; h <= 3; h++) {
+            const float grow = h * 5.0f * s;
+            dl->AddRect({a.x - grow, a.y - grow}, {b.x + grow, b.y + grow}, IM_COL32(60, 150, 255, int((70 - 20 * h) * breath)),
+                        (10 + h * 4) * s, 0, 3.0f * s);
+        }
         dl->AddRectFilledMultiColor(a, b, IM_COL32(40, 120, 255, 120), IM_COL32(40, 120, 255, 20),
                                     IM_COL32(40, 120, 255, 20), IM_COL32(40, 120, 255, 120));
         dl->AddRect(a, b, IM_COL32(120, 210, 255, 220), 10 * s, 0, 2 * s);
