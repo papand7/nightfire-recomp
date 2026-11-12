@@ -266,4 +266,5 @@ const app::GameInfo app::kGame = {
     .auto_fills_screen = true,            // the 3D views widen and the 2D stays 4:3: "from the screen's shape" can fill an ultrawide
     .fills_narrow_screens = true,         // and a 16:10 or 3:2 screen (the Steam Deck): its 4:3 mode widened, the 2D 4:3 in the middle
     .default_keys = Keys,                 // a shooter's keys on foot, a driving layout in DRIVING.XBE
+    .settings_window = false,             // no F1 window: every setting is in the menus' Settings pages (src/common/settings_page.cpp)
 };

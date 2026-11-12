@@ -1,7 +1,7 @@
 #pragma once
-// The PC settings in the modern menus: a page of categories (Display, Graphics, Effects, Ray Tracing, Controls, Gameplay) and each
-// category's rows, built here from app::Settings and the game's option table (app::kGame.options), changed through the same
-// settings the F1 window changes (and saved as it saves). The pages are the host's, not the game's widgets: src/bond/pc_settings.cpp
+// The PC settings in the modern menus, laid out as NightFire's: Settings, then Graphics (Style Options, Effects, Ray Tracing) and
+// More Settings (Key Bindings, Controller Buttons, Steering Wheel, Achievements, Gameplay & More), built here from app::Settings
+// and the game's own settings, saved as they change. They hold every setting: this game has no F1 window. The pages are the host's, not the game's widgets: src/bond/pc_settings.cpp
 // shows them in the place of the PC Settings page the game's menu holds open underneath, and plays the game's presses and the
 // UI's clicks into Event.
 #include <cstdint>

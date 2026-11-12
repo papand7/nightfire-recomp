@@ -1,5 +1,5 @@
 // The PC Settings page's rows: the same in bond_eng.xbe's menus and DRIVING.XBE's pause. Its first row chooses the tab; a row whose
-// label ends in * applies at the next start. Each changes what the settings window changes, as it does. The games' fonts are Latin-1.
+// label ends in * applies at the next start. Each changes what the settings pages change (src/common/settings_page.cpp). The games' fonts are Latin-1.
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -7,6 +7,7 @@
 
 #include "app/app.h"
 #include "common/auf.h"
+#include "common/settings_page.h"
 
 namespace auf {
 namespace {
@@ -16,7 +17,7 @@ enum Id {
     kMouseSpeed, kInvertMouse, kAutoAim,
     kLanguage, kSkipIntro, kPauseUnfocused, kHitFlash, kMore, kIds
 };
-const char* const kRowNames[3] = {"PC Settings", "Param\xE8tres PC", "PC-Einstellungen"};
+const char* const kRowNames[3] = {"Settings", "Param\xE8tres PC", "PC-Einstellungen"};
 const char* const kTabLabel[3] = {"Page", "Page", "Seite"};
 const char* const kTabNames[3][5] = {{"Graphics", "Picture", "Display", "Controls", "Game"},
                                      {"Graphismes", "Image", "Affichage", "Commandes", "Jeu"},
@@ -54,7 +55,12 @@ const Tab kTabs[5] = {{7, {kRenderScale, kMsaa, kFxaa, kAlphaEdges, kFiltering, 
                       {5, {kLanguage, kSkipIntro, kPauseUnfocused, kHitFlash, kMore}}};
 int g_tab = 0;
 
-int IdOf(int row) { return kTabs[g_tab].ids[(row - 1) % kTabs[g_tab].count]; }
+// the tab's rows; More Settings (the host's settings pages over the game's menus) only on foot, where they are drawn
+int Count() {
+    const Tab& t = kTabs[g_tab];
+    return kImage == kBond || t.ids[t.count - 1] != kMore ? t.count : t.count - 1;
+}
+int IdOf(int row) { return kTabs[g_tab].ids[(row - 1) % Count()]; }
 template <class T, size_t N>
 T Next(const T (&order)[N], T now, int dir) {
     int at = 0;
@@ -115,7 +121,7 @@ const char* PcTabName() {
     return kTab[Language() % 3];
 }
 const char* PcRowName(int lang) { return kRowNames[lang % 3]; }
-int PcRows() { return kTabs[g_tab].count + 1; }
+int PcRows() { return Count() + 1; }
 const char* PcLabel(int row, int lang) { return row ? kLabels[lang % 3][IdOf(row)] : kTabLabel[lang % 3]; }
 
 // the arrows are for the mouse: a click on the left one lowers (PcClickDir)
@@ -189,7 +195,12 @@ void PcStep(int row, int dir) {
         case kSkipIntro: skip_intro = !skip_intro; break;
         case kHitFlash: hit_flash = !hit_flash; break;
         case kPauseUnfocused: s.pause_unfocused = !s.pause_unfocused; break;
-        case kMore: app::ToggleOverlay(); return;
+        case kMore:  // the host's settings pages over the game's own (src/bond/modern_menu_frame.cpp)
+            if (kImage == kBond) {
+                settings_page::Reset();
+                settings_forced = true;
+            }
+            return;
         default: return;
     }
     app::Save();

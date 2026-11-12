@@ -35,6 +35,25 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-12 - Settings pages as NightFire's; the F1 window off
+- src/common/settings_page.cpp now follows NightFire's page tree and wording, in AUF's look (the game's Univers font,
+  blues and gold, the "007 AGENT UNDER FIRE" header, the pause's SETTINGS tab): Settings (Field of View, Mouse
+  Sensitivity, Controller Scheme, Invert Mouse, Skip Intro Movies, Sharp Text, Aspect Ratio, Display Mode, Monitor,
+  Resolution, Vertical Sync, Frame Cap, Graphics, More Settings); Graphics (Quality, Shader Style, Style Options, Effects,
+  filtering, AA, MSAA, TAA, sharpening, render scale, texture packs, dump textures, FSR 2, movies, low latency, Restore
+  Defaults); Effects (+ Ray Tracing when the card can); More Settings (Performance, Pause in Background, Hide HUD,
+  Keyboard and Mouse, Mouse Look, Language, Key Bindings, Controller Buttons, Steering Wheel, Achievements, Gameplay &
+  More, Quit Game). B goes back a page.
+- Everything the F1 window had is on them: key bindings (A waits for a key or mouse button, the old key becomes the second,
+  Escape clears; SDK app::BeginKeyCapture), the pad remap, the wheel's bindings, rotation, force feedback and test push,
+  buttons and shifter (SDK app::WheelDetectStart), achievements, dump textures, quit. SDK be8276b; GameInfo::settings_window
+  false: F1 and Back + Start do nothing. The game's own menus (modern menus off) open these pages from PC Settings' More
+  Settings (auf::settings_forced); DRIVING.XBE's pause drops that row. The main menu's row reads "Settings".
+- Long help lines shrink to stay above the footer. Screenshots: auf_run.ps1 captures the full 1302x1016 window now (the
+  620x999 ones were taken while another test's windows were up).
+- Verified on screen: scratch/set_mm3 (pause Settings, Graphics, Key Bindings, a key captured), set_mm4 (More Settings,
+  Steering Wheel, Achievements, Quit), set_mm6 (main menu Settings). Not tried: a real wheel, the USA build.
+
 ### 2026-11-12 - LAN play in lockstep (SDK core/netplay, from NightFire's): two copies meet, menus in step; arena desyncs
 - SDK 2081357: core/netplay.{h,cpp} ported from NightFire's (UDP 27015, host relays, input delay, LAN discovery,
   lobby box, session rules in the handshake, a state hash compared once a second) plus XBE_NETPLAY_SIM=delay,jitter,loss

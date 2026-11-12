@@ -28,7 +28,8 @@
 
 namespace auf {
 
-bool modern_menus = true;  // the default; off in the settings window or settings.toml for the game's own menus
+bool modern_menus = true;  // the default; off in the settings pages or settings.toml for the game's own menus
+bool settings_forced = false;
 
 namespace {
 std::mutex g_lock;
@@ -86,7 +87,7 @@ void ModernMenuTestClick(uint32_t row, int control) {
 
 bool ModernMenuActive() {
     std::lock_guard lock(g_lock);
-    return modern_menus && g_page.up && std::chrono::steady_clock::now() - g_published < std::chrono::milliseconds(250);
+    return (modern_menus || settings_forced) && g_page.up && std::chrono::steady_clock::now() - g_published < std::chrono::milliseconds(250);
 }
 
 // GameInfo::window: the fonts, before the renderer builds ImGui's atlas (the system's own: nothing shipped). Off
@@ -150,7 +151,7 @@ void ModernMenuUi(double) {
     ModernPage page;
     {
         std::lock_guard lock(g_lock);
-        if (!modern_menus || !g_page.up || std::chrono::steady_clock::now() - g_published > std::chrono::milliseconds(250)) return;
+        if (!(modern_menus || settings_forced) || !g_page.up || std::chrono::steady_clock::now() - g_published > std::chrono::milliseconds(250)) return;
         page = g_page;
     }
     ImGuiIO& io = ImGui::GetIO();
@@ -401,9 +402,12 @@ void ModernMenuUi(double) {
             dl->AddText(small, fs, {a.x + 22 * s, a.y + ch - 50 * s}, k == 0 ? kCyan : IM_COL32(140, 165, 205, 200), st);
         }
     }
-    // the help line
-    if (!page.help.empty())
-        dl->AddText(small, fs, {x0, bottom + 30 * s}, IM_COL32(170, 200, 240, 230), page.help.c_str(), nullptr, rw);
+    // the help line: smaller where two lines of it would not hold it (it stays above the footer)
+    if (!page.help.empty()) {
+        float hf = fs;
+        for (int k = 0; k < 3 && small->CalcTextSizeA(hf, 1e9f, rw, page.help.c_str()).y > hf * 2.3f; k++) hf *= 0.85f;
+        dl->AddText(small, hf, {x0, bottom + 30 * s}, IM_COL32(170, 200, 240, 230), page.help.c_str(), nullptr, rw);
+    }
 
     // the footer: Back, and the keys
     ImVec2 ba{x0, H - 74 * s}, bb{x0 + 170 * s, H - 22 * s};

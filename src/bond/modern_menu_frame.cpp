@@ -384,7 +384,7 @@ void ModernMenuFrame(X86Context& ctx, uint8_t* base, uint32_t file) {
     const uint32_t page = kernel::R32(file + 0x44);
     if (!page) return;
     if (kernel::R32(page + 0x54) >= 2) ModernMenuSeen();
-    if (!modern_menus) return;
+    if (!modern_menus && !settings_forced) return;
     if (Trace()) {  // each page a moment after it opens (its texts drawn once by then)
         static uint32_t dumped = 0, seen = 0;
         static int frames = 0;
@@ -413,9 +413,16 @@ void ModernMenuFrame(X86Context& ctx, uint8_t* base, uint32_t file) {
             for (const ModernRow& r : p.rows) LOGR("modern menu:   %u%s \"%s\" \"%s\"", r.id, r.focused ? "*" : "", r.label.c_str(), r.value.c_str());
         }
     }
-    g_hiding = true;
-    // the PC Settings page open on the game's page: the host's settings pages (src/common/settings_page.cpp) replace its rows
+    // the PC Settings page open on the game's page: the host's settings pages (src/common/settings_page.cpp) replace its rows;
+    // the game's own menus (modern menus off) show them only from its More Settings
     const bool settings = PcSettingsHost(file, page, p);
+    if (!modern_menus && !settings) {
+        settings_forced = false;
+        g_owned.clear();
+        ModernMenuPublish(ModernPage{});
+        return;
+    }
+    g_hiding = true;
     ModernMenuPublish(p);
     if (settings) PcSettingsPlay(ctx, base, file, page);
     else Play(ctx, base, file, page);

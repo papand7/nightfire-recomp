@@ -68,13 +68,16 @@ int PcRows();                    // of the tab showing, its chooser (row 0) incl
 const char* PcLabel(int row, int lang);
 std::string PcValue(int row, int lang);
 int PcClickDir(float value_x);   // what a press of A does to a value: down with the mouse on its left arrow
-void PcStep(int row, int dir);   // row 0 the tab; More Settings opens the settings window
+void PcStep(int row, int dir);   // row 0 the tab; More Settings opens the host's settings pages (settings_forced)
 bool PointerWanted();             // the arrow shows: each image's own test
 void PcSettingsFrame(X86Context& ctx, uint8_t* base, uint32_t file);  // src/bond/pc_settings.cpp
 
 // modern menus (src/common/modern_menu.cpp draws them, src/bond/modern_menu_frame.cpp reads the game's page): the
 // game's menu pages drawn anew over its background, the game's own texts left out
 extern bool modern_menus;
+// the game's own menus (modern_menus off): their PC Settings' More Settings shows the host's settings pages over them
+// (src/common/settings_page.cpp) until they are left
+extern bool settings_forced;
 enum ModernKind { kModernButton, kModernChoice, kModernSlider, kModernList };
 struct ModernRow {
     uint32_t id = 0;  // the item's place on its page, from 1

@@ -330,6 +330,7 @@ void RestoreBands() {
 }
 
 void ClosePage() {
+    auf::settings_forced = false;
     if (!g_open.page) return;
     RestoreBands();
     for (int i = 0; i < 9; i++) kernel::W32(g_open.page + kSavedAt[i], g_open.saved[i]);
@@ -374,7 +375,8 @@ void PcSettingsPlay(X86Context&, uint8_t*, uint32_t file, uint32_t page) {
                           : c == input::kRight ? int(kEventRight) : 6;  // 6: only the focus
         if (event == 6 && a.id == 0) continue;
         if (settings_page::Event(a.id, event, file == PauseFile()) == settings_page::kClose) {
-            ClosePage();
+            if (settings_forced) settings_forced = false;  // back to the game's own rows of the page
+            else ClosePage();
             return;
         }
     }
@@ -386,6 +388,7 @@ void PcSettingsFrame(X86Context& ctx, uint8_t* base, uint32_t file) {
     if (!page) return;
     if (g_open.page) {
         if (g_open.page != page) {  // the game left the page: it holds the arrays of ours still
+            settings_forced = false;
             for (int i = 0; i < 9; i++) kernel::W32(g_open.page + kSavedAt[i], g_open.saved[i]);
             RestoreBands();
             g_open.page = 0;
@@ -447,9 +450,12 @@ X86_FUNC(sub_00040A00) {
     const uint32_t file = kernel::R32(ctx.esp + 4), event = kernel::R32(ctx.esp + 8), page = Page(file);
     static const bool said = std::getenv("AUF_EVENT_LOG") != nullptr;
     if (said) LOGR("auf: menu event %u", event);
-    if (page && g_open.page == page && auf::modern_menus && event <= kEventB) {
+    if (page && g_open.page == page && (auf::modern_menus || auf::settings_forced) && event <= kEventB) {
         // the modern menus show the host's settings page over this one (PcSettingsHost): the presses go to it
-        if (auf::settings_page::Event(auf::settings_page::kNoRow, int(event), file == PauseFile()) == auf::settings_page::kClose) ClosePage();
+        if (auf::settings_page::Event(auf::settings_page::kNoRow, int(event), file == PauseFile()) == auf::settings_page::kClose) {
+            if (auf::settings_forced) auf::settings_forced = false;  // back to the game's own rows of the page
+            else ClosePage();
+        }
         ctx.esp += 4;
         return;
     }
