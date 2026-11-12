@@ -34,6 +34,19 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-12 - FSR 2 temporal upscaler (Vulkan), ported from NightFire
+- settings.toml `upscaler` (0 off, 1 AMD FSR 2), `upscale_quality` (0 Quality 1.5x, 1 Balanced 1.7x, 2 Performance 2x,
+  3 Ultra Performance 3x), `upscale_sharpness` (percent, RCAS); in the F1 Graphics page. Default off. FSR 2.2.1 is
+  fetched (URL + SHA-256) and built with its Vulkan backend; its shaders compiled by glslang at build time
+  (sdk/tools/fsr2_shaders). The scene's colour and depth targets are drawn smaller from the frame's first 3D draw,
+  jittered by FSR's sequence; FSR runs at the first 2D draw over them (the HUD stays out, drawn sharp after) or at
+  Present. Depth: AUF's scene is a z-buffer (kRsZEnable 1), passed through as device depth (a W-buffer would be
+  converted as NightFire does); motion vectors are the camera's, reprojected through the depth with the camera
+  matrices TAA and motion blur use. A depth clear late in the frame keeps the depth before it, so a weapon drawn
+  after it gets no camera motion. Temporal AA and SMAA are left out while it is on. Tested in Trouble in Paradise,
+  1280x960: Quality 853x640 and Performance 640x480 look like native when still (Performance's edges smoother),
+  softer while walking, no ghosting seen. XBE_UP_TRACE=1 logs its draws and kept depth once a second.
+
 ### 2026-11-12 - Photo mode: field of view, depth of field, split screen, driving
 - bond_eng.xbe: [ ] the field of view (the refdef's fov, radians at +0x2D4, scaled before 0x15D5A0), , . the focus
   distance, N M the blur, B depth of field, R back to the game's; the settings are restored on leaving. With several
