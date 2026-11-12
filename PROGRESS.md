@@ -27,7 +27,7 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
   tossed, bounced off the floor (normal 0,1,0) and a wall (0.91,0,0.41), rested lying flat (.local/pk4_grid.png); pushed
   by walking (6 m/s, flew to a wall, rested); thrown 6 m by a test explosion (NF_PICKUP_BLAST=1, .local/pk6_grid.png).
   Nothing seen falling through the floor in about 20 drops; an item thrown off a ledge fell 8 m and landed.
-- Not seen: a real enemy's grenade drop (0x3DE00 drops only for grenadiers on some levels: none in Phoenix Base's
+- Not seen: a real enemy's grenade drop (0x3DE00 drops only for grenadiers on some levels: none in level 0700000C's
   kills by NF_RAGDOLL_TEST) or a multiplayer death drop; both go through the same 0xA7F10 the test calls.
 
 ## 2026-11-11: the sight tuner (debug)
