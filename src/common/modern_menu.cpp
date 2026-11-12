@@ -106,6 +106,13 @@ void ModernMenuFonts(void*) {
         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
         "/usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf"};
 #endif
+    // the game's own menu fonts (src/common/game_font.cpp), read from the disc; the system's only when they cannot be
+    if ((g_body = GameMenuFont("univers13bold_57"))) {
+        g_title = g_body;
+        g_small = GameMenuFont("univers9bold");
+        if (!g_small) g_small = g_body;
+        return;
+    }
     for (const char* f : files) {
         if (FILE* t = std::fopen(f, "rb")) {
             std::fclose(t);

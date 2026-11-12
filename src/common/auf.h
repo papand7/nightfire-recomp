@@ -9,6 +9,7 @@
 #include "core/input.h"
 
 struct X86Context;
+struct ImFont;
 
 namespace auf {
 enum Image { kDefault, kBond, kDriving };
@@ -106,6 +107,7 @@ void ModernMenuTestClick(uint32_t row, int control);  // a test's click (AUF_PAD
 void ModernMenuSeen();                           // a page of rows has been up (AUF_PAD's clock starts)
 bool ModernMenuWasSeen();
 void ModernMenuFonts(void* hwnd);                // GameInfo::window
+::ImFont* GameMenuFont(const char* name);          // the game's font from the disc (game_font.cpp), null if unreadable
 void ModernMenuUi(double fps);                   // GameInfo::ui
 void ModernMenuFrame(X86Context& ctx, uint8_t* base, uint32_t file);  // bond_eng.xbe: the menu file read each frame
 
