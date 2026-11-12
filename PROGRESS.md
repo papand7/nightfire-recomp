@@ -34,6 +34,27 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-12 - Ray tracing (Vulkan), stage 3: shadows from the game's lights, relit over the lightmaps
+- Settings `rt_shadows` (on) and `rt_lighting` (off). RtHarvestLights reads the D3DLIGHT8s every lit draw sets
+  (g_state.lights in the SDK's State): point/spot lights listed once a frame (key: place, colour, reach), the strongest
+  directional one kept. In Trouble in Paradise the model renderer sets 6-7 point lights with a reach of 10000 units far
+  from the models (fill/key lights such as 0.71 0.54 0.36 at -1552 -476 1552); no directional light and no short-lived
+  light was seen.
+- RtRelightPass (gpu/rt_relight_hlsl.h; NightFire's kRtRelightHlsl made lightmap-relative): a lightmapped pixel (its
+  own traced triangle's lightmap texel, stage 1 x its modulate scale, is the baked light) is multiplied by
+  (baked + added - taken) / baked, clamped 0.15..3. taken (rt_shadows): a static light's share where a ray toward it
+  meets a D3D-lit model first (a candidate loop that only commits model triangles), so a character or prop the
+  lightmap never saw casts a traced shadow and the walls' shadows, already baked, are never darkened again. added
+  (rt_lighting): lights first seen in the last 15 frames with a reach under 2000 units (muzzle flashes, explosions),
+  with traced shadows. D3D-lit models and unlit surfaces are left as the game lit them.
+- Verified: XBE_RT_TEST=9 (red added, green taken, blue baked) and 6 (the ratio, halved): ratio 1 everywhere but the
+  shadows; the flag (a model) casts a shadow on the dome from the warm fill light (scratch
+  rt_stage3_shadows_off_on.png). Not verified: a dynamic light. Firing in the test (pad right trigger) used an empty
+  pistol, and no light with a short life or short reach was logged; if AUF's muzzle flashes and explosions never reach
+  the D3D lights (the entity dlight event 0x82630 may only feed the Quake III dlight passes), hooking 0x82630 to hand
+  the SDK each dlight is the next step. Cost: RT total 1.9-2.5 ms with AO and the relight (GPU shared with another
+  program).
+
 ### 2026-11-12 - Ray tracing (Vulkan), stage 2: reflections
 - Settings `reflections` (0 Off, 1 Shiny surfaces, 2 Shiny surfaces and floors; default 0) and `reflection_strength`
   (percent, 50). RtReflectPass (NightFire's kRtReflectHlsl) needs no mask target: the pixel's own triangle (a ray from
