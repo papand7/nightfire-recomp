@@ -94,6 +94,29 @@ window.SCHEMA_AUF = [
         ],
     },
     {
+        id: 'rt', title: 'Ray Tracing', icon: 'chip', groups: [
+            {
+                title: 'Ray tracing (Vulkan, a GPU with ray queries)', items: [
+                    { f: 's', key: 'ray_tracing', label: 'Ray tracing', def: false },
+                    { f: 's', key: 'rt_ao', label: 'Ray traced occlusion', def: 100, type: 'range', min: 0, max: 200, step: 10, unit: '%' },
+                    { f: 's', key: 'rt_radius', label: 'Occlusion reach', def: 150, type: 'range', min: 25, max: 500, step: 25, unit: ' cm' },
+                    { f: 's', key: 'rt_rays', label: 'Occlusion rays', def: 4, type: 'range', min: 1, max: 16, step: 1 },
+                    { f: 's', key: 'reflections', label: 'Reflections', def: 0, options: pick([0, 'Off'], [1, 'Shiny surfaces'], [2, 'Shiny surfaces and floors']) },
+                    { f: 's', key: 'reflection_strength', label: 'Reflection strength', def: 50, type: 'range', min: 0, max: 100, step: 5, unit: '%' },
+                    { f: 's', key: 'rt_shadows', label: 'Traced model shadows', def: true },
+                    { f: 's', key: 'rt_lighting', label: 'Traced dynamic lights', def: false },
+                    { f: 's', key: 'rt_sun', label: 'Traced sun', def: 100, type: 'range', min: 0, max: 200, step: 10, unit: '%' },
+                    { f: 's', key: 'rt_gi', label: 'Bounced light', def: false },
+                    { f: 's', key: 'rt_gi_strength', label: 'Bounced light strength', def: 100, type: 'range', min: 0, max: 200, step: 10, unit: '%' },
+                    { f: 's', key: 'rt_volumetric', label: 'Volumetric light', def: false },
+                    { f: 's', key: 'rt_vol_strength', label: 'Volumetric strength', def: 100, type: 'range', min: 0, max: 300, step: 10, unit: '%' },
+                    { f: 's', key: 'rt_denoise', label: 'Ray tracing denoise', def: true },
+                ],
+            },
+        ],
+        note: 'The other ray tracing settings take effect while Ray tracing is on.',
+    },
+    {
         id: 'controls', title: 'Controls', icon: 'pad', groups: [
             {
                 title: 'Mouse and keyboard', items: [
