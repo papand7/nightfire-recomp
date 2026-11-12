@@ -34,6 +34,22 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-12 - NightFire visual port, stages 2-4: what was left out and why
+- Snow, weather, footprints: dropped (no code kept). A snow/footprint effect was built and tried on the Vulkan post
+  chain (depth to world position, up-facing cover, flakes, prints from the player's +0xA8), then removed on the
+  instruction that it only belongs on levels that are snowy in the original. Checked: Evil Summit (AUF_MISSION=11,
+  alp2_1) shows snowy rock mountains and a purple sky, but the player walks on a concrete helipad and nothing falls;
+  Cold Reception (4, alp1_1) shows the same mountains through the windows in its cutscene (the on-foot part could not be
+  reached in a capture run). No snowfall particles or walkable snow ground were seen, so there is nothing for footprints
+  to be pressed into.
+- Materials (normal/roughness maps, relief, ground detail, displacement): not done. AUF's texture pack
+  (gpu/texture_pack.cpp) only swaps colour PNGs keyed by content; no `_n.png`/`_r.png` exist here, and using them needs
+  a second and third texture bound in every translated pixel shader plus a light direction the lightmapped Quake III
+  world does not give.
+- Reflections/water, soft particles, blood, effect and bounce lights: not done (they need the draw path's particle and
+  water draws told apart, scene captures, or ray queries; the ray-traced ones are for the other plan). Tone mapping
+  within 8 bits is in stage 1 (`tonemap`).
+
 ### 2026-11-12 - Pickup physics (bond_eng.xbe)
 - src/bond/pickup_physics.cpp, option pickup_physics (on; off in network play: NetPlay(), a stub as AUF has none).
   Physics_Toss 0xD9E80 is hooked for items (found by the ClassDef name chain: "KA57 < MachineGun < Weapon < Gadget <
