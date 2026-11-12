@@ -22,6 +22,7 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Smoke: scripts/smoke.sh, default.xbe -> START -> bond_eng.xbe's first mission, about 6 minutes, then the driving part, SMOKE OK
 - GitHub: hk21x/007-agentunderfire-recomp; SDK at the fork's main
 - PC features: PC Settings, pointer, achievements, French and German confirmed by Harry; skip intro, field of view, mouse on foot confirmed by Harry; skip intro, field of view, mouse, 60 FPS, radar and culling confirmed by Harry
+- Sound through walls on foot (audio_occlusion): traced, quieter and low-passed, seen in a trace, not heard by Harry yet
 - Not done: DRIVING.XBE in the smoke test, levels played to their end, PC features
 
 ## Disc
@@ -33,6 +34,27 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 - Every library 1.0.4039. Sections include a DSOUND section though the library table does not list it.
 
 ## Log
+
+### 2026-11-12 - Sound through walls (bond_eng.xbe): occlusion by the game's ray, a low-pass in the mixer
+- Setting `audio_occlusion` (Game, on; AUF_AUDIO_OCCLUSION=0/1), the mixer's `occlusion_filter` (settings.toml, on).
+  src/bond/audio_occlusion.cpp; SDK 194e30c (audio::SetOcclusion in xdk/dsound.cpp). As NightFire's audio3d.cpp.
+- Mapped: the game's Sound (gi +0x184 = 0x29480) -> 0x1FB60 -> 0x1EEF0 takes a sound instance from the pool at
+  0x24E5D8 (52 x 0x8C; +4 its definition, +0xC the entity it plays from, 0x800 none then its own place at +0x14, +0x44
+  bit 0 in use, +0x48 four EA voice handles). 0x1E580 updates them each frame (the game's thread, from the frame at
+  0x268F0); 0x1DE60 places each through 0x1DB10 (instance, &pan, &volume): the entity's place is [0x2A88A8] +
+  ent x [0x2A88AC] + 0x10, the listener player u's camera ([0x2A88B8] + u x [0x2A88BC], +0x2EC when +0x2E8) or entity.
+  An EA voice ([0x3AFAE0] + 0x88 x (handle & 0xFF)) plays through hardware voices (words at +4): [0x3AFBB0] + 16 n, +0xC
+  a record, +8 the DirectSound buffer.
+- After 0x1DB10: two rays (0x73F40, CONTENTS_SOLID, passing the sound's entity) from the listener to 16 units short of
+  the sound, the second 24 higher; each blocked is 0.5. New sounds traced at once, others every 4th frame within 8 rays
+  a frame; eased over 0.2 s; volume x (1 - 0.6 x occlusion); the buffers told (after 0x1EEF0 at once for a new sound).
+  The mixer low-passes 18 kHz -> 600 Hz, eased 0.1 s; a buffer started again from stopped is clear.
+- Evidence (AUF_MISSION=4, AUF_AUDIO_TRACE=1, XBE_DSOUND_LOG=1, scratch audio_re/run6): a sound of entity 316 at
+  -1280 592 200, 549 units from the listener at -1239 27 84, started walled 1.0 (volume 0.21, 1 buffer); the mixer
+  listed it `walled 1.00`; entity 350's sound went 0.5 -> 0 as Bond walked into view (heard 0.10 a moment later);
+  entities 157/158 in the room clear; Bond's own sounds (entity 0) skipped. No crash, mission played.
+- Not done: no recording of the mix (the Windows build has no WAV dump; only the headless harness does); split
+  screen takes the nearest listener's rays only; the loudness and cutoff are by ear from NightFire's, not tuned in play.
 
 ### 2026-11-12 - Ray tracing (Vulkan), stage 5: bounced light and volumetric light, built up over frames
 - Settings `rt_gi` (off), `rt_gi_strength` (percent, 100), `rt_volumetric` (off), `rt_vol_strength` (percent, 100),

@@ -22,6 +22,7 @@ bool aim_down_sights = true;
 bool weapon_sway = true;
 bool ragdolls = false;
 bool pickup_physics = true;
+bool audio_occlusion = true;
 bool photo_mode = true;
 uint32_t photo_key = 10;  // F10
 uint32_t restart_key = 0;
@@ -231,6 +232,7 @@ const app::GameInfo app::kGame = {
                 {"photo_mode", &auf::photo_mode, nullptr, "Photo mode (F10)", "F10 stops the game and frees the camera: mouse to look, W A S D to move, Space and C up and down, Shift faster, Ctrl slower; [ and ] the field of view, , and . the focus distance, N and M the blur, B depth of field on or off, R as the game had them; F12 takes the picture, F10 again goes back"},
                 {"ragdolls", &auf::ragdolls, nullptr, "Ragdolls", "Enemies go limp and fall when they die, in place of the death animations. Only their look; off by default"},
                 {"pickup_physics", &auf::pickup_physics, nullptr, "Pickup physics", "Dropped weapons, ammo and pickups fly out with a toss and a spin, bounce, slide and come to rest; walking into one you cannot take nudges it, and explosions throw them. Off in network play"},
+                {"audio_occlusion", &auf::audio_occlusion, nullptr, "Sound through walls", "A sound with a wall or a closed door between it and Bond is quieter and muffled, traced through the level as it plays"},
                 {"weapon_sway", &auf::weapon_sway, nullptr, "Weapon sway", "The gun trails your turns a little and settles back"},
                 {"modern_menus", &auf::modern_menus, nullptr, "Modern menus", "The menus and the pause drawn anew for the mouse, in the game's blues; off for the game's own"},
                 {"hit_flash", &auf::hit_flash, nullptr, "Hit flash", "The white flash on screen when Bond is hit. On by default; off for those it troubles"},

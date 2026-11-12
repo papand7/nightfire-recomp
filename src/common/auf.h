@@ -37,6 +37,7 @@ extern float photo_fov;         // photo mode's field of view, a factor on top o
 extern bool photo_mode;        // F10 frees the camera (src/bond/photo_mode.cpp)
 extern bool ragdolls;          // dead enemies go limp and fall (src/bond/ragdoll.cpp), off by default
 extern bool pickup_physics;    // dropped weapons and pickups fly, bounce and settle (src/bond/pickup_physics.cpp), on by default
+extern bool audio_occlusion;   // sounds behind walls quieter and dull (src/bond/audio_occlusion.cpp), on by default
 extern bool weapon_sway;       // the gun trails the view's turns (src/bond/aim.cpp)
 extern bool aim_down_sights;  // L raises the gun to the middle and zooms a little, not manual aim (src/bond/aim.cpp)
 extern uint32_t fov_percent;  // the 3D views' field of view, percent of the game's

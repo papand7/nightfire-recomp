@@ -15,10 +15,15 @@
         case 0x205408: return 0x205768; \
         case 0x207320: return 0x207680; \
         case 0x207630: return 0x207990; \
+        case 0x24E5DC: return 0x24E8FC; \
         case 0x2A8124: return 0x2A8444; \
         case 0x2A8128: return 0x2A8448; \
         case 0x2A8144: return 0x2A8464; \
         case 0x2A8148: return 0x2A8468; \
+        case 0x2A88A8: return 0x2A8BC8; \
+        case 0x2A88AC: return 0x2A8BCC; \
+        case 0x2A88B8: return 0x2A8BD8; \
+        case 0x2A88BC: return 0x2A8BDC; \
         case 0x2A9724: return 0x2A9A44; \
         case 0x2A9734: return 0x2A9A54; \
         case 0x2A977C: return 0x2A9A9C; \
@@ -41,7 +46,11 @@
         case 0x358780: return 0x358AA0; \
         case 0x3587C4: return 0x358AE4; \
         case 0x3587FC: return 0x358B1C; \
+        case 0x3AFA80: return 0x3AFDA0; \
+        case 0x3AFAE0: return 0x3AFE00; \
+        case 0x3AFBB0: return 0x3AFED0; \
         case 0x3B2200: return 0x3B2520; \
+        case 0x3B220C: return 0x3B252C; \
         case 0x3B22A0: return 0x3B25C0; \
         case 0x3B22D5: return 0x3B25F5; \
         case 0x3B2414: return 0x3B2734; \
