@@ -1,4 +1,4 @@
-// Pickup physics (auf::pickup_physics, on by default; off in network play, which Agent Under Fire has none of yet: see
+// Pickup physics (auf::pickup_physics, on by default; off in network play (core/netplay.h): see
 // NetPlay()): dropped weapons, ammo and other pickups fly out with a toss and a spin, fall, bounce off floors and walls,
 // slide, tumble and come to rest lying flat, instead of the game's short drop that stops dead where it lands.
 //
@@ -50,6 +50,7 @@
 #include "bond/ragdoll.h"
 #include "common/auf.h"
 #include "core/log.h"
+#include "core/netplay.h"
 #include "kernel/kernel.h"
 #include "kernel/memory.h"
 #include "xdk/hle.h"
@@ -97,8 +98,8 @@ bool Trace() {
     return on;
 }
 
-// network play: Agent Under Fire has none yet; when it does, its test goes here (the physics off for everyone)
-bool NetPlay() { return false; }
+// network play (core/netplay.h): the physics off for everyone, as each copy would throw its own way
+bool NetPlay() { return netplay::Active(); }
 
 bool On() {
     static const int env = [] {

@@ -113,5 +113,9 @@ void ModernMenuFonts(void* hwnd);                // GameInfo::window
 ::ImFont* GameMenuFont(const char* name);          // the game's font from the disc (game_font.cpp), null if unreadable
 void ModernMenuUi(double fps);                   // GameInfo::ui
 void ModernMenuFrame(X86Context& ctx, uint8_t* base, uint32_t file);  // bond_eng.xbe: the menu file read each frame
+// LAN play (core/netplay.h): the host's options for every copy (src/common/netplay_rules.cpp, from GameInfo::init), and
+// bond_eng.xbe's state hash the copies compare (src/bond/netplay_hash.cpp, each frame)
+void NetplayInit();
+void NetplayBond();
 
 }  // namespace auf

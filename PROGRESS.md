@@ -35,6 +35,29 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-12 - LAN play in lockstep (SDK core/netplay, from NightFire's): two copies meet, menus in step; arena desyncs
+- SDK 2081357: core/netplay.{h,cpp} ported from NightFire's (UDP 27015, host relays, input delay, LAN discovery,
+  lobby box, session rules in the handshake, a state hash compared once a second) plus XBE_NETPLAY_SIM=delay,jitter,loss
+  (slow network, from NightFire's NF_LAN_SIM), settings `netplay` ("host", "join" = `join_ip`, or an address),
+  `netplay_players`, `netplay_delay`. Call sites: main.cpp (Pace at 60 and Frame(rate), no pause), input.cpp (keyboard
+  handling off, the mouse as the right stick), dispatch.cpp/xboxkrnl.cpp (rdtsc, performance counter, interrupt and
+  system time count frames; the tick count and KeInterrupt/SystemTime records written on the title's thread at each
+  frame start through netplay::OnFrame), boot.cpp (Start before the title thread, Stop before a relaunch), xapi.cpp (PadOn).
+- Game: src/common/netplay_rules.cpp (the host's auto-aim, aim down sights, high frame rate, skip cutscenes, ragdolls
+  for every copy; photo mode, the restart key, pickup physics off; the modern menus' mouse clicks dropped),
+  src/bond/netplay_hash.cpp (every entity's origin + health from the edicts [0x329390], 0x2E0 each; srand 0x168E29
+  seeded by the frame in LAN play). AUF_PAD2 (menu_mouse.cpp, not yet committed: its hunk shares lines with
+  another change there) scripts a second local controller.
+- Stage 0, local split screen (scratch np1, AUF_PAD + AUF_PAD2): Multiplayer > Combat Training > Dungeon, both agents
+  join, a two-view split-screen match runs (16-16, radar 1/2). Bots not set up yet.
+- Two copies (scratch/np_run.ps1: --instance 1 hosts, --instance 2 joins 127.0.0.1): the lobby meets in ~1 s, both
+  relaunch default.xbe -> bond_eng.xbe and meet again (Stop/Start, the env carries over), the menus stay in step
+  (the same pages and focus on both from one copy's presses), both enter the same Dungeon match. Then DESYNC at the
+  first hash (frame 1860): the match's srand ran at frame 1798 on one copy and 1799 on the other, so a frame's
+  presents differ around the map load (the loading screen presents a PC-dependent number of frames).
+- Next: frames presented while a map loads kept out of the lockstep (or the copies met again after it), then the
+  own-view-only display and NightFire's lobby/online flow.
+
 ### 2026-11-12 - Settings in the pause menu (modern menus)
 - The pause strip has a SETTINGS tab (RÉGLAGES, EINSTELLUNGEN) after Mission, Objectives and Briefing; the main menu's
   PC Settings row opens the same pages: Display, Graphics, Effects, Ray Tracing (only when app::ray_query_ok, SDK

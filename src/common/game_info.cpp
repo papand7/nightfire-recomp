@@ -97,6 +97,7 @@ void Init() {
     if (auf::skip_intro) LOGR("auf: the logo movies are skipped (skip_intro)");
     if (kDrv) gpu::g_draw_filter = DrivingFlashFilter;  // here, not a static initializer: those never ran in the Windows exe
     if (auf::kImage == auf::kBond) auf::WatchLevelSun();
+    auf::NetplayInit();  // LAN play: the host's options travel, one copy's own keys off (netplay_rules.cpp)
 }
 
 // keyboard and mouse (Windows virtual key codes: this file builds for the headless harness too)

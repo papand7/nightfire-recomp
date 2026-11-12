@@ -79,6 +79,7 @@ X86_FUNC(sub_0015DDF0) {
     if (unlock)
         for (uint32_t m = 0; m < 11; m++) kernel::G<uint32_t>(A(0x207630) + 4 * m) = 1;
     auf::BondFrame(ctx, base);
+    auf::NetplayBond();
     __imp__sub_0015DDF0(ctx, base);
 }
 

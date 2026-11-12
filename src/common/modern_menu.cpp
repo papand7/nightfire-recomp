@@ -20,6 +20,7 @@
 #include "common/auf.h"
 #include "core/input.h"
 #include "core/log.h"
+#include "core/netplay.h"
 
 #ifndef XBE_HEADLESS  // ImGui: not in the headless harness
 #include <imgui.h>
@@ -62,6 +63,8 @@ void ModernMenuPublish(const ModernPage& page) {
 
 bool ModernMenuAction(ModernAction& a) {
     std::lock_guard lock(g_lock);
+    // LAN play: the mouse's clicks are this copy's alone (the game's own focus moves with the controllers only)
+    if (netplay::Active()) g_actions.clear();
     if (g_actions.empty()) return false;
     a = g_actions.front();
     g_actions.pop_front();
