@@ -45,6 +45,12 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
   AUF_MISSION=n starts mission n at Start Mission (0x4AA40 events 2 and 0x16 read 0x2A9F98). Maps: 0 orc_1, 3 emstel_1,
   4 alp1_1, 5 m6_1, 7 rig_1, 9 uwb_2a, 10 carrier1, 11 alp2_1; 1, 2, 6, 8 are DRIVING.XBE. Cold Reception (4) and Fire &
   Water (7) start this way, but no enemy is in sight from either start, so hits and the ragdoll push are still unseen.
+- AUF_HIT_TEST=2 (changes the game): every 3 s player 1 deals 25 to the nearest damageable character through
+  Entity::Damage with a weapon's arguments (damage an int; means of death 7; -1, -1, 1.0f, location 0x22). The handler
+  0x77A10 turns away [ent+0xC8] 1 and [ent+0x18] bit 2 (damage scale 0x8EA20 gives 0), so those are skipped; an
+  entity's place is +0xA8 (a model's +0x1A0 only while drawn). Cold Reception, Fire & Water, Bad Diplomacy: health
+  100, 75, 50, 25, 0; the kill's red marker shows on the crosshair. The kills are 1400 units off and never drawn, so
+  the ragdoll push is still unseen.
 
 ### 2026-11-11 - Ragdolls meet the level and the killing shot
 - Each point's move is traced through the game's ray 0x73F40 (mask 0x10001, Quake III's MASK_DEADSOLID; the body's own

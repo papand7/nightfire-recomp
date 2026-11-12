@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "bond/ragdoll.h"
 #include "common/auf.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
@@ -83,6 +84,7 @@ X86_FUNC(sub_000BB8A0) {
     g_held[i] = held;
     const float dt = std::clamp(GetF(kFrameSeconds), 0.0f, 0.1f);
     g_aim[i] = std::clamp(g_aim[i] + (held ? dt : -dt) / kEase, 0.0f, 1.0f);
+    if (i == 0) HitTestTick(ctx, p, dt);
     __imp__sub_000BB8A0(ctx, base);
 }
 

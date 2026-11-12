@@ -3,20 +3,23 @@
 // Hit feedback (app::HitMarker): a mark at the crosshair when player 1's shot hurts a character, red when it kills.
 //
 // The game is Ritual's Entity/Event system over Quake III. Entity::Damage 0xAC040 (thiscall: ecx the target, [esp+4]
-// the inflictor, [esp+8] the attacker, [esp+0xC] the damage) only posts EV_Damage; the actors' handler 0x77A10
+// the inflictor, [esp+8] the attacker, [esp+0xC] the damage, an integer) only posts EV_Damage; the actors' handler 0x77A10
 // (thiscall: ecx the victim, [esp+4] the event) takes the health, a float at gentity +0x2C4 (the entity's +0xC), and
 // posts EV_Killed at 0 or below. Glass and props have their own handler, so only characters reach 0x77A10. The
 // attacker is kept by victim from 0xAC040 for the handler: a player is an entity with a client (+0x10) whose gentity
 // is in the array [0x329390] (0x2E0 an entry) at index 0 (player 1).
 // Its direction ([esp+0x14]) goes to the ragdolls (RagdollNoteHit). AUF_HIT_TEST=1 logs each hit the handler sees.
 #include "bond/addr.h"
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <unordered_set>
 
 #include "app/app.h"
 #include "bond/ragdoll.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
+#include "kernel/memory.h"
 #include "xdk/hle.h"
 
 namespace {
@@ -77,4 +80,64 @@ X86_FUNC(sub_000778B0) {
     if (Trace()) LOGR("hit: victim %08X health %.1f -> %.1f", victim, before, after);
     if (after >= before || before <= 0) return;
     app::HitMarker(0.5f, 0.5f, after <= 0 ? 2 : 0, before - after);
+}
+
+// AUF_HIT_TEST=2 (a test switch that changes the game): every 3 s player 1 deals 25 damage to the nearest character
+// (an entity with a skeletal model of 30 bones or more and a health above 0, not a player) through Entity::Damage
+// itself, from player 1 toward it: the hit marker, a kill's and the ragdoll's push follow as from a shot. Called each
+// frame from player 1's input handler (src/bond/aim.cpp) with the player's entity.
+void HitTestTick(X86Context& ctx, uint32_t player, float dt) {
+    static const bool on = [] {
+        const char* e = std::getenv("AUF_HIT_TEST");
+        return e && *e == '2';
+    }();
+    static float wait = 3.0f;
+    if (!on || (wait -= dt) > 0) return;
+    wait = 3.0f;
+    const uint32_t base_g = kernel::R32(kGentities);
+    // an entity's place is its +0xA8 (a model's own +0x1A0 is set only while it is drawn)
+    auto at = [](uint32_t e, int k) {
+        float f;
+        std::memcpy(&f, &kernel::G<uint32_t>(e + 0xA8 + 4 * k), 4);
+        return f;
+    };
+    static std::unordered_set<uint32_t> immune;  // took a test hit and lost nothing: not tried again
+    static uint32_t last = 0;
+    static float last_health = 0;
+    if (last && Health(last) >= last_health) immune.insert(last);
+    if (!base_g || !player) return;
+    const float mx = at(player, 0), my = at(player, 1), mz = at(player, 2);
+    uint32_t best = 0;
+    float best_d = 1e30f, bx = 0, by = 0, bz = 0;
+    for (uint32_t k = 1; k < 1024; k++) {
+        const uint32_t g = base_g + k * kGentitySize, e = kernel::R32(g + 0x278);
+        if (!e || kernel::R32(e + 0x10) || !kernel::R32(g + 0x108)) continue;
+        const uint32_t m = kernel::R32(g + 0x10C);
+        if (!m || kernel::G<uint16_t>(m + 0x50) < 30 || Health(e) <= 0 || immune.count(e)) continue;
+        // what the damage handler 0x77A10 turns away: [+0xC8] 1 without a client, [+0x18] bit 2 (no damage taken)
+        if (kernel::R32(e + 0xC8) == 1 || (kernel::R32(e + 0x18) & 2) || (kernel::G<uint8_t>(e + 0x1C4) & 8)) continue;
+        const float x = at(e, 0) - mx, y = at(e, 1) - my, z = at(e, 2) - mz, d = x * x + y * y + z * z;
+        if (d < best_d) best_d = d, best = e, bx = x, by = y, bz = z;
+    }
+    if (!best) {
+        LOGR("hit test: no character in the level");
+        return;
+    }
+    static const uint32_t scratch = mem::AllocHostContiguous(0x30, 16);
+    const float len = std::sqrt(bx * bx + by * by + bz * bz) + 1e-3f;
+    const float vecs[12] = {mx + bx, my + by, mz + bz + 40, 0, bx / len, by / len, bz / len, 0, -bx / len, -by / len, -bz / len, 0};
+    std::memcpy(&kernel::G<uint8_t>(scratch), vecs, sizeof vecs);
+    // as a weapon's call (0x82413): damage an integer, knockback and flags 0, means of death 7 (taken whole, no hit
+    // location scaling or armour), -1 and -1, 1.0, location 0x22, no delay
+    const uint32_t dbits = 25;
+    last = best, last_health = Health(best);
+    float floor_health;
+    std::memcpy(&floor_health, &kernel::G<uint32_t>(best + 0x4F4), 4);
+    LOGR("hit test: player 1 hurts %08X, %.0f units away, health %.1f (1D0 %X, C8 %X, 18 %X, 1C4 %X, 2F4 %X, floor %.1f, immune %u)",
+         best, std::sqrt(best_d), Health(best), kernel::R32(best + 0x1D0), kernel::R32(best + 0xC8), kernel::R32(best + 0x18),
+         kernel::G<uint8_t>(best + 0x1C4), kernel::R32(best + 0x2F4), floor_health, kernel::R32(best + 0x364));
+    const uint32_t ecx = ctx.ecx;
+    ctx.ecx = best;
+    kernel::CallGuest(ctx, A(0xAC040), {player, player, dbits, scratch, scratch + 0x10, scratch + 0x20, 0, 0, 7, 0xFFFFFFFFu, 0xFFFFFFFFu, 0x3F800000u, 0x22, 0});
+    ctx.ecx = ecx;
 }
