@@ -22,6 +22,7 @@ bool aim_down_sights = true;
 bool weapon_sway = true;
 bool ragdolls = false;
 bool photo_mode = true;
+float photo_fov = 1.0f;
 uint32_t fov_percent = 100;
 
 float FovScale() {
@@ -31,7 +32,7 @@ float FovScale() {
         said = pct;
         LOGR("auf: field of view %u%% of the game's", pct);
     }
-    return float(pct) / 100;
+    return float(pct) / 100 * photo_fov;
 }
 
 float FrameWidth() {

@@ -34,6 +34,19 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-12 - Photo mode: field of view, depth of field, split screen, driving
+- bond_eng.xbe: [ ] the field of view (the refdef's fov, radians at +0x2D4, scaled before 0x15D5A0), , . the focus
+  distance, N M the blur, B depth of field, R back to the game's; the settings are restored on leaving. With several
+  players F10 works from a player's own pause (state [0x3B2200 + 16 i] 3): that view flies, the others draw as the
+  game has them, it ends with that pause. Split screen is untested (the test script cannot start one).
+- DRIVING.XBE (src/driving/photo_mode.cpp): the camera object's matrix (+0x10, rows right, up, back, position; Y up,
+  logged in Precious Cargo: right -0.92 0 0.39, up 0 1 0) is written at the top of 0x846B0 (the 3D view) and 0x7B7F0
+  (the frustum); the level state [0x1BEB1C] is held at 3 (paused: traffic stops); [ ] the field of view through
+  auf::photo_fov in FovScale. The HUD has more than the pass 0xBC530, so the SDK's Settings::hide_2d (never saved)
+  drops every 2D draw in the Vulkan backend while photo mode is on. The car's gun is a 3D model in the car: it stays
+  in the picture until the camera moves away. Checked in Precious Cargo.
+- FSR3: not done (the user chose FSR2 only). NightFire keeps FSR2 2.2.1; frame generation was judged not worth it.
+
 ### 2026-11-12 - Photo mode (bond_eng.xbe)
 - src/bond/photo_mode.cpp (option photo_mode, on): F10 on foot pauses ([0x3B2428], set here if it came during play)
   and flies player 1's camera: mouse, W A S D, Space and C, Shift and Ctrl. The camera matrix 0x15D5A0 makes the view,
