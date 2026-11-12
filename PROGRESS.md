@@ -34,6 +34,21 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-12 - Shader styles (Vulkan): Enhanced / Toon / Retro (stage 1 of the NightFire visual port)
+- app::Settings has a data-driven `fx[]` block (app.h `AUF_FX_LIST`, one line a setting: key, label, help, default,
+  range, gate; settings.cpp loads/saves each as an integer by its key; overlay.cpp `FxRows` draws them under the Graphics
+  page). Later stages add lines to the list only.
+- `shader_style` 0 Original, 1 Enhanced, 2 Toon, 3 Retro; `tonemap` (0 off, 1 filmic, 2 reinhard, with any style),
+  `style_clarity`; Toon `toon_bands`, `toon_outline` (tenths of a pixel), `toon_inner_lines`, `toon_edge_threshold`,
+  `toon_halftone`; Retro `retro_pixel`, `retro_color_bits`, `retro_dither`, `retro_tint`.
+- One post pass (`StylePass`, gpu/fx_hlsl.h `kStyleHlsl`) after the shafts and before auto exposure: outlines from the
+  scene depth (second difference of view depth, normals from depth for creases) and luma edges, lighting bands,
+  halftone dots, pixel blocks, ordered 4x4 dither to N bits, tint. The HUD stays unstyled: at the first 2D draw of a frame
+  the 3D target is copied (`SnapshotPreHud`) and the pass skips pixels where the frame differs from that copy.
+- Not done: vertex snapping and affine texturing (they are in the guest vertex shaders' translation; left out), and
+  `color_style` (the older colour grade rows) is kept as it was.
+- Tested Cold Reception (cutscene and gameplay) and Hong Kong on foot, toon/retro/enhanced against off.
+
 - 2026-11-12: on foot, number keys 1-9 pick the nth selectable (non-gadget) weapon of the inventory walk (player +0x2EC; the cycle's vfuncs +0x9C/+0xC0, 0xAF770; written as +0x444/+0x440/+0x458, hook in src/bond/pc_extras.cpp), options weapon_keys (default on) and previous_weapon_key (Z, a letter dropdown): back to the last weapon. The d-pad alternates 1/2/3 are gone from the default keys (arrows only). G stays the gadget key (the game's B). New option controller_scheme (Setup 1..4, default 1): during 0x24570 for player 1 with the keyboard, [0x205288] and [0x3B22A0] (indices 0..3) are forced and restored (src/bond/mouse.cpp). Verified in Cold Reception through AUF_KEY_TEST=frame:key,... (a test injection: this desktop session had no foreground window, real keys were not seen): the weapon in hand follows keys 1, 2, Z in the log; setup 3 logged and played. Quick grenade not done (gadget key and previous weapon instead). Gaps: only 2 weapons tested; the HUD/gun look is not visibly different between the pistol and the silenced one in screenshots; real key presses not tried.
 
 ### 2026-11-12 - FSR 2 temporal upscaler (Vulkan), ported from NightFire
