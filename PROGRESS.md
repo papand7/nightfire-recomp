@@ -34,6 +34,21 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-12 - Ray tracing (Vulkan), stage 2: reflections
+- Settings `reflections` (0 Off, 1 Shiny surfaces, 2 Shiny surfaces and floors; default 0) and `reflection_strength`
+  (percent, 50). RtReflectPass (NightFire's kRtReflectHlsl) needs no mask target: the pixel's own triangle (a ray from
+  the camera) carries the strength in its material word (6 bits). Sources: mods/reflections.toml beside the exe
+  (`[textures] "<16 hex digit texture pack key>" = 0..1`, the dump_textures PNG name; re-read when it changes), the
+  game's environment-mapped draws (a cube texture, or reflection-vector/sphere-map texgen: 0.5), and with 2 every
+  up-facing surface at 0.3 (faded out where the normal is more than ~37 degrees off the world's z up). The hit: the
+  scene's pixel where it shows on screen, else its texture x diffuse x lightmap as the game combines them; a miss uses
+  the sky where the direction shows sky on screen. NightFire's Fresnel.
+- Verified in Trouble in Paradise: XBE_RT_TEST=5 (everything reflects) mirrors the flag and railings on the wall and
+  steps in the right places; XBE_RT_TEST=4: green met on screen, blue off screen (lit from the lightmap). Mode 2 at
+  50%: steps and deck mirror the railings faintly. No environment-mapped draw was seen at the first mission's start,
+  so mode 1 changes nothing there without a list. Cost about 0.1-0.3 ms over stage 1 (RT total 1.0-2.0 ms, GPU shared
+  with another program). Shots: scratch rt_stage2_floors_off_on.png, rt_stage2_test5_test4.png.
+
 ### 2026-11-12 - Ray tracing (Vulkan), stage 1: capture, structure, traced occlusion before the HUD
 - Fixed the old RT AO's squashed scene: its TLAS instance was the identity while the pass rebuilt positions as
   ndc*(aspect*0.5774, 0.5774)*z. The capture now keeps the screen place times w and w (clip w is the view's z for
