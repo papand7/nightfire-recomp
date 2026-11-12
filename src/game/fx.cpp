@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <vector>
 
+#include "common/nightfire.h"
 #include "core/log.h"
 #include "gpu/style.h"
 #include "kernel/kernel.h"
@@ -95,6 +96,7 @@ X86_FUNC(sub_000690A0) {  // an explosion
         gpu::EmitParticles(gpu::kParticleExplosion, pos, up, std::min(radius, 50.0f), rgb);
         static int said = 0;
         if (said++ < 4) LOGR("fx: an explosion at %.1f %.1f %.1f, radius %.1f", pos[0], pos[1], pos[2], radius);
+        nf::PickupBlast(pos, radius);  // the pickups near it thrown (src/game/pickup_physics.cpp)
     }
     __imp__sub_000690A0(ctx, base);
 }

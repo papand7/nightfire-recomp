@@ -29,6 +29,7 @@ bool tight_movement = false;
 bool foot_ik = true;
 bool sight_tuner = false;
 bool ragdolls = false;
+bool pickup_physics = true;
 bool coop = false;
 bool coop_friendly_fire = false;
 bool coop_side = false;
@@ -77,6 +78,7 @@ void Init() {
     if (const char* e = std::getenv("NF_ADS"); e && *e) nf::aim_down_sights = *e == '1';
     if (const char* e = std::getenv("NF_IK"); e && *e) nf::foot_ik = *e == '1';
     if (const char* e = std::getenv("NF_RAGDOLL"); e && *e) nf::ragdolls = *e == '1';
+    if (const char* e = std::getenv("NF_PICKUP_PHYSICS"); e && *e) nf::pickup_physics = *e == '1';
     if (const char* e = std::getenv("NF_DRAW"); e && *e) nf::draw_distance = uint32_t(std::atoi(e));
     if (const char* e = std::getenv("NF_MODERN_BUTTONS"); e && *e) nf::modern_buttons = *e == '1';
     if (const char* e = std::getenv("NF_ROUNDED_FONT"); e && *e) nf::rounded_font = *e == '1';
@@ -290,6 +292,8 @@ const app::GameInfo app::kGame = {
                  "Characters' legs bend so each foot stands on the ground under it, on slopes and steps (the original's float or sink)."},
                 {"ragdolls", &nf::ragdolls, nullptr, "Ragdolls",
                  "Enemies go limp when they die and fall with their weight and the shot's push, onto the ground and against walls, instead of the death animations. Off in network play."},
+                {"pickup_physics", &nf::pickup_physics, nullptr, "Pickup physics",
+                 "Dropped weapons and ammo are tossed out, bounce, slide and tumble before they lie flat; walking into one you cannot take pushes it, explosions throw them. Off in network play."},
                 {"aim_down_sights", &nf::aim_down_sights, nullptr, "Aim down sights",
                  "L (the right mouse button) raises the gun and zooms in a little, instead of the game's manual aim and its red crosshair. Scopes stay as they are."},
                 {"rounded_font", &nf::rounded_font, nullptr, "Rounded font",

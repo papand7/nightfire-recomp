@@ -2,6 +2,34 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-12: pickup physics (dropped weapons, ammo and pickups)
+
+- Settings `pickup_physics` (settings.toml, F1 options and the launcher's Controls > Gameplay; default on; off in network
+  and LAN play; NF_PICKUP_PHYSICS=0/1). src/game/pickup_physics.cpp hooks the pickup think 0xA84D0, the drop 0xA7F10 and
+  (from fx.cpp's 0x690A0 hook) explosions.
+- Learned (static, then in play): a pickup's place is its matrix's translation (obj+0xA0; the spawner 0xA7380 sets +0xD6
+  0x04 and 0x40, so the matrix is never rebuilt from the angles and +0xA0 is copied to +0x24 after the thinks); +0x60 is
+  the model's bounds centre (model +0x0C, not obj+0x54) through the matrix; setting +0xD6 0x20 has the object loop
+  0x2DD00 rebuild +0x60 (0x2DB20) and re-room it (0x2D3A0 -> 0x21110) after the thinks. Data +0x00 velocity (a frame's
+  travel), +0x18 state, +0x24 respawn time (0 for drops), +0x26 removal countdown. 0xA1310 is the multiplayer pickup
+  slot (returns at once in story). 0xA7F10's first argument is a matrix (an enemy's obj+0x70, the dead player's gun's).
+  Gravity at 0x1F664C is -9.8.
+- A falling pickup (state 0) or a pushed one is ours: a sphere at its bounds centre (radius the model's +0x20, about
+  0.07-0.09 m), the game's gravity, a ray (0x2C4E0, mask 0x50D as the game's) along the move: bounce
+  v -= 1.3 (v.n) n with 25% scrape and a spin from it, then a ground ray (rest on it, slide down a slope, rolling
+  friction); it tumbles about its centre in the air and lies flat on the ground's normal as it slows; slow on ground
+  with n.y > 0.7 for 8 frames it is handed back as state 1 (+ 0xA1310 as the game's landing). The game's think still
+  runs each frame as for a resting pickup (spin off) so pickup, respawn and removal behave as before.
+- Drops get a toss (random but deterministic per object/frame/weapon: 1.4-2.8 m/s out, 2.6-3.8 up, 5-11 rad/s spin).
+  A resting drop a player walks into (one it cannot take, e.g. full ammo) is pushed with the player's speed; an
+  explosion throws the drops within 1.5x its radius away.
+- Checked in The Exchange (.local/pickup_test.py, NF_PICKUP_TEST=2 drops a pistol in front of player 1, NF_PICKUP_TRACE=1):
+  tossed, bounced off the floor (normal 0,1,0) and a wall (0.91,0,0.41), rested lying flat (.local/pk4_grid.png); pushed
+  by walking (6 m/s, flew to a wall, rested); thrown 6 m by a test explosion (NF_PICKUP_BLAST=1, .local/pk6_grid.png).
+  Nothing seen falling through the floor in about 20 drops; an item thrown off a ledge fell 8 m and landed.
+- Not seen: a real enemy's grenade drop (0x3DE00 drops only for grenadiers on some levels: none in Phoenix Base's
+  kills by NF_RAGDOLL_TEST) or a multiplayer death drop; both go through the same 0xA7F10 the test calls.
+
 ## 2026-11-11: the sight tuner (debug)
 
 - settings.toml `sight_tuner = true` (also in the F1 window's options): player 1 aims all the time and is given every weapon with
