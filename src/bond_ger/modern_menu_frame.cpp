@@ -31,6 +31,7 @@
 #include <unordered_set>
 
 #include "common/auf.h"
+#include "common/settings_page.h"
 #include "core/input.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
@@ -415,8 +416,11 @@ void ModernMenuFrame(X86Context& ctx, uint8_t* base, uint32_t file) {
         }
     }
     g_hiding = true;
+    // the PC Settings page open on the game's page: the host's settings pages (src/common/settings_page.cpp) replace its rows
+    const bool settings = PcSettingsHost(file, page, p);
     ModernMenuPublish(p);
-    Play(ctx, base, file, page);
+    if (settings) PcSettingsPlay(ctx, base, file, page);
+    else Play(ctx, base, file, page);
 }
 }  // namespace auf
 

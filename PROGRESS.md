@@ -35,6 +35,16 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-12 - Settings in the pause menu (modern menus)
+- The pause strip has a SETTINGS tab (RÉGLAGES, EINSTELLUNGEN) after Mission, Objectives and Briefing; the main menu's
+  PC Settings row opens the same pages: Display, Graphics, Effects, Ray Tracing (only when app::ray_query_ok, SDK
+  66f7d2d), Controls, Gameplay (`audio_occlusion` here; the SDK's `occlusion_filter` stays a settings.toml switch).
+  src/common/settings_page.{h,cpp} builds the rows; values apply and save as they change.
+- Sliders in the pause's narrower rows shrink their bar so the value and arrow stay clear of the label.
+- Verified: main menu set1 (perf overlay and render scale saved), pause Controls and Graphics pages in a mission
+  (scratch/set3, set5). Key binding and wheel setup stay in the F1 window; setting labels are English only.
+- Test: AUF_PAD="1:m1,4:a,7:a,10:a,13:a,16:a,50:start,54:dpad_right,56:dpad_right,58:dpad_right,62:dpad_down,64:a".
+
 ### 2026-11-12 - Sound through walls (bond_eng.xbe): occlusion by the game's ray, a low-pass in the mixer
 - Setting `audio_occlusion` (Game, on; AUF_AUDIO_OCCLUSION=0/1), the mixer's `occlusion_filter` (settings.toml, on).
   src/bond/audio_occlusion.cpp; SDK 194e30c (audio::SetOcclusion in xdk/dsound.cpp). As NightFire's audio3d.cpp.

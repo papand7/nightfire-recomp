@@ -308,12 +308,19 @@ void ModernMenuUi(double) {
             ImVec2 vs = body->CalcTextSizeA(fb, 1e9f, 0, v.c_str());
             float vr = b.x - 64 * s, vl = vr - vs.x;
             if (r.kind == kModernSlider && r.slider_max > 0) {
-                float bw = 220 * s, bx = vr - bw, by = y + rh * 0.5f;
+                // the bar narrower in a narrow row (the pause's), so the value and its arrow stay clear of the label
+                const float lw = body->CalcTextSizeA(fb, 1e9f, 0, label.c_str()).x;
+                const float room = vr - (a.x + 28 * s + lw + 24 * s) - 34 * s - 8 * s - 22 * s - vs.x;
+                float bw = std::clamp(room, 80 * s, 220 * s), bx = vr - bw, by = y + rh * 0.5f;
                 dl->AddRectFilled({bx, by - 3 * s}, {vr, by + 3 * s}, IM_COL32(255, 255, 255, 50), 3 * s);
                 float f = std::clamp(float(r.slider_value) / float(r.slider_max), 0.0f, 1.0f);
                 dl->AddRectFilled({bx, by - 3 * s}, {bx + bw * f, by + 3 * s}, kCyan, 3 * s);
                 dl->AddCircleFilled({bx + bw * f, by}, 9 * s, kWhite);
                 vl = bx;
+                if (!v.empty()) {  // its value, left of the bar
+                    vl = bx - 22 * s - vs.x;
+                    dl->AddText(body, fb, {vl, ty}, r.focused ? kWhite : kCyan, v.c_str());
+                }
             } else {
                 dl->AddText(body, fb, {vl, ty}, r.focused ? kWhite : kCyan, v.c_str());
             }

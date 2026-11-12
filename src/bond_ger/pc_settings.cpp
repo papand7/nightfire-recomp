@@ -19,6 +19,8 @@
 
 #include "app/app.h"
 #include "common/auf.h"
+#include "common/settings_page.h"
+#include "core/input.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
 #include "kernel/memory.h"
@@ -319,6 +321,7 @@ void OpenPage(X86Context& ctx, uint8_t* base, uint32_t file, uint32_t page) {
     // on the pause it opens as its other tabs do, no row chosen (the current item 0): left and right go between tabs, down to the rows
     kernel::W32(page + kCurrent, paused ? 0 : c.items);
     if (!paused) Call1(ctx, base, sub_00037A30, c.items);
+    auf::settings_page::Reset();
     LOGR("auf: PC Settings opened");
 }
 
@@ -357,6 +360,28 @@ void TabClick(const std::vector<uint32_t>& tabs) {
 }  // namespace
 
 namespace auf {
+// the modern menus' page of the PC Settings page that is open: the host's own rows (src/common/settings_page.cpp) in place of the game's
+bool PcSettingsHost(uint32_t file, uint32_t page, ModernPage& p) {
+    if (!g_open.page || g_open.page != page) return false;
+    settings_page::Build(p, file == PauseFile());
+    return true;
+}
+// the UI's clicks on it, as the game's presses would be
+void PcSettingsPlay(X86Context&, uint8_t*, uint32_t file, uint32_t page) {
+    ModernAction a;
+    while (ModernMenuAction(a)) {
+        if (a.page != page + settings_page::PageTag()) continue;  // meant for a page since left
+        const int c = a.control;
+        const int event = c == input::kA ? int(kEventA) : c == input::kB ? int(kEventB) : c == input::kLeft ? int(kEventLeft)
+                          : c == input::kRight ? int(kEventRight) : 6;  // 6: only the focus
+        if (event == 6 && a.id == 0) continue;
+        if (settings_page::Event(a.id, event, file == PauseFile()) == settings_page::kClose) {
+            ClosePage();
+            return;
+        }
+    }
+}
+
 // each frame a menu has the input (src/bond/pointer.cpp's hook of 0x56930)
 void PcSettingsFrame(X86Context& ctx, uint8_t* base, uint32_t file) {
     const uint32_t page = Page(file);
@@ -424,6 +449,12 @@ X86_FUNC(sub_00040A00) {
     const uint32_t file = kernel::R32(ctx.esp + 4), event = kernel::R32(ctx.esp + 8), page = Page(file);
     static const bool said = std::getenv("AUF_EVENT_LOG") != nullptr;
     if (said) LOGR("auf: menu event %u", event);
+    if (page && g_open.page == page && auf::modern_menus && event <= kEventB) {
+        // the modern menus show the host's settings page over this one (PcSettingsHost): the presses go to it
+        if (auf::settings_page::Event(auf::settings_page::kNoRow, int(event), file == PauseFile()) == auf::settings_page::kClose) ClosePage();
+        ctx.esp += 4;
+        return;
+    }
     if (page && g_open.page == page) {
         const uint32_t current = kernel::R32(page + kCurrent), items = g_open.items;
         if (event == kEventB) {
