@@ -1,5 +1,5 @@
 // Photo mode in the driving levels (auf::photo_mode): F10 stops the game and frees the camera: the mouse looks, W A S D
-// move, Space and C go up and down, Shift faster, Ctrl slower, [ and ] the field of view; the HUD is hidden, so F12 (the
+// move, Space and C go up and down, Shift faster, Ctrl slower, [ and ] the field of view, , . N M B R depth of field as on foot; the HUD is hidden, so F12 (the
 // screenshot key) takes the picture. F10 again leaves it.
 //
 // The camera object ([view+4], view the ecx of both functions below) keeps its matrix at +0x10 (64 bytes, rows, the
@@ -61,6 +61,8 @@ V Turn(V v, V axis, float a) {
 struct Photo {
     bool on = false, seeded = false;
     uint32_t state_before = 0;
+    bool had_dof = false;
+    uint32_t had_focus = 10, had_blur = 6;
     V r, u, b, p, up;  // right, up and back rows, the position, the fixed world up
     float rows[16] = {};  // the matrix written this frame
     std::chrono::steady_clock::time_point last{};
@@ -79,6 +81,8 @@ void Leave() {
     kernel::G<uint32_t>(kState) = g.state_before;
     g.on = false;
     app::Get().hide_2d = false;
+    app::Settings& st = app::Get();
+    st.depth_of_field = g.had_dof, st.focus_distance = g.had_focus, st.dof_blur = g.had_blur;
     auf::photo_fov = 1.0f;
     float x, y;
     input::TakeMouse(x, y);
@@ -94,6 +98,8 @@ void Toggle() {
             g.state_before = kernel::R32(kState);
             g.on = true, g.seeded = false;
             app::Get().hide_2d = true;
+            const app::Settings& st = app::Get();
+            g.had_dof = st.depth_of_field, g.had_focus = st.focus_distance, g.had_blur = st.dof_blur;
             auf::photo_fov = 1.0f;
             g.last = std::chrono::steady_clock::now();
             LOGR("auf: driving photo mode");
@@ -118,6 +124,20 @@ void Fly(uint32_t camera) {
     const float fov_rate = 0.6f * dt;
     if (Key(0xDB)) auf::photo_fov = std::clamp(auf::photo_fov - fov_rate, 0.3f, 2.0f);
     if (Key(0xDD)) auf::photo_fov = std::clamp(auf::photo_fov + fov_rate, 0.3f, 2.0f);
+    // depth of field as on foot: , . the focus distance, N M the blur, B on and off, R all as the game had them
+    app::Settings& st = app::Get();
+    if (Key(0xBC) || Key(0xBE))
+        st.focus_distance = uint32_t(std::clamp(float(st.focus_distance) + (Key(0xBE) - Key(0xBC)) * 30.0f * dt, 1.0f, 100.0f) + 0.5f);
+    if (Key('N') || Key('M'))
+        st.dof_blur = uint32_t(std::clamp(float(st.dof_blur) + (Key('M') - Key('N')) * 6.0f * dt, 0.0f, 12.0f) + 0.5f);
+    static bool was_b = false, was_r = false;
+    const bool kb = Key('B'), kr = Key('R');
+    if (kb && !was_b) st.depth_of_field = !st.depth_of_field;
+    if (kr && !was_r) {
+        auf::photo_fov = 1.0f;
+        st.depth_of_field = g.had_dof, st.focus_distance = g.had_focus, st.dof_blur = g.had_blur;
+    }
+    was_b = kb, was_r = kr;
     float mx = 0, my = 0;
     if (input::TakeMouse(mx, my)) {
         const float yaw = -mx * kTurn * dt * 3.14159265f / 180, pitch = my * kTurn * dt * 3.14159265f / 180;
