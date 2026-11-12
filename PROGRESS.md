@@ -34,6 +34,38 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-12 - Ray tracing (Vulkan), stage 1: capture, structure, traced occlusion before the HUD
+- Fixed the old RT AO's squashed scene: its TLAS instance was the identity while the pass rebuilt positions as
+  ndc*(aspect*0.5774, 0.5774)*z. The capture now keeps the screen place times w and w (clip w is the view's z for
+  AUF's fixed-function projection: P00 1.429, P11 1.732, P22 -1.001, P32 -10.013, near 10 units), the instance scales
+  x and y by the real half widths (1/P00, 1/P11 of the projection by the viewport, from the frame's first captured
+  draw), and every pass turns a depth into a distance with the same projection (w = zb / (d - za)): the traced space is
+  the true view space in game units. XBE_RT_TEST=3 (a ray from the camera through each pixel against the structure)
+  is green everywhere (it meets the depth).
+- New settings (app.h AUF_FX_LIST, F1 Graphics, Vulkan): `ray_tracing` (off; gates the capture, not
+  `ambient_occlusion`, which stays the screen-space pass), `rt_ao` (percent, 100), `rt_radius` (cm, 150),
+  `rt_rays` (4).
+- Capture (RtCapture, NightFire's RtCapture): the draw's own vertex shader swapped for its capture variant (no second
+  draw); 32 bytes a vertex: place, fog share, tc0, diffuse RGBA8, tc1 as halves. Two material words a triangle: the
+  diffuse texture's bindless slot, alpha test reference/function, cut-out, modulate-by-diffuse and D3D-lit flags;
+  the lightmap's slot (stage 1 MODULATE, AUF's lightmaps: stage 0 the diffuse DXT texture, stage 1 the A8R8G8B8
+  lightmap page on tc1, verified by logging the world's draws), its coordinate set and scale. Alpha-tested draws
+  (function other than ALWAYS: AUF leaves the test on with ALWAYS everywhere) are a second, non-opaque geometry tested
+  by their texture in the ray queries. Each vertex's triangles (rt_adj) for smooth normals. The sky box (another
+  projection, drawn before a depth clear) is left out: only the projection most of last frame's triangles had is
+  captured. The weapon: AUF clears the depth before drawing it, so that clear keeps the depth (RtKeepDepth) and later
+  draws are not captured; the passes leave pixels nearer than the kept depth alone.
+- Passes (RtScenePass) at the first 2D draw over the scene (before SnapshotPreHud, the style pass and FSR 2), or at
+  Present without one: RtBuild (BLAS fast trace, one TLAS, triangle/material/adjacency buffers, set 1 bindless
+  textures), then RtAoPass (NightFire's RtPass: half-res cosine rays from the pixel's own traced triangle, a 4x4
+  depth-weighted resolve). gpu/rt_hlsl.h holds the shared HLSL (kRtCommonHlsl) and the passes.
+- Cost: GPU timestamps about the RT work (XBE_PERF's "perf: ray tracing" line): 0.8-1.5 ms a frame in Trouble in
+  Paradise's start (10.7k triangles, 4 rays). Another GPU program (a bf1943 recomp) was running on this machine
+  meanwhile, so the whole-frame fps was 10.8 with ray tracing on and off alike; the game's own pace was 31 fps
+  before it started. Screenshots: scratch rt_stage1_ao_off_on.png, rt_stage1_ao_view.png (XBE_RT_TEST=2).
+- Diagnostics: AUF_RT_DIAG=1 logs the capture every 300 frames; XBE_RT_SKIP=1/2/3 leave out the build+passes, the
+  passes, the capture.
+
 ### 2026-11-12 - NightFire visual port, stages 2-4: what was left out and why
 - Snow, weather, footprints: dropped (no code kept). A snow/footprint effect was built and tried on the Vulkan post
   chain (depth to world position, up-facing cover, flakes, prints from the player's +0xA8), then removed on the
