@@ -55,9 +55,46 @@ function ask_nightfire($ip, $port) {
     });
 }
 
+// Battlefield 1943 and Bad Company PC (bf1943-recomp runtime/lan.cpp): the LAN browser's beacon answers
+// "<tag>?" on its UDP port with "<tag>!host|map|port[|players|max]" (tag BF43 on 19430, BFBC on 19431). The
+// beacon is asked on its own port; the answer must name the announced game port.
+function ask_bf_beacon($ip, $port, $tag, $beacon_port) {
+    return ask_udp($ip, $beacon_port, [$tag . '?'], function ($buf) use ($tag, $port) {
+        if (strlen($buf) < 6 || substr($buf, 0, 5) !== $tag . '!') return null;
+        $f = explode('|', substr($buf, 5));
+        if (count($f) < 3 || (int)$f[2] !== $port) return null;
+        return ['name' => text($f[0]), 'map' => text(str_replace('_', ' ', $f[1])),
+                'players' => isset($f[3]) ? max(0, min(64, (int)$f[3])) : 0];
+    });
+}
+function ask_bf1943($ip, $port) { return ask_bf_beacon($ip, $port, 'BF43', 19430); }
+function ask_bfbc1($ip, $port) { return ask_bf_beacon($ip, $port, 'BFBC', 19431); }
+
+// 007: Agent Under Fire PC (its SDK's core/netplay.cpp): a host waiting in its lobby answers "who hosts?" on its own
+// UDP port. A packet starts with an 8-byte header: magic (u32: 0x504E464E hashed with the title, h = (h ^ c) * 16777619
+// for each character of "007: Agent Under Fire"), type, from, players, delay. The query is the header alone with type
+// 7; the answer is type 8, players = the players it waits for, then session (u32), port (u16), joined (u8), name[33].
+function auf_magic() {
+    $h = 0x504E464E;
+    foreach (str_split('007: Agent Under Fire') as $c) $h = (($h ^ ord($c)) * 16777619) & 0xFFFFFFFF;
+    return $h;
+}
+function ask_auf($ip, $port) {
+    $magic = auf_magic();
+    return ask_udp($ip, $port, [pack('VCCCC', $magic, 7, 0, 1, 0)], function ($buf) use ($magic, $port) {
+        if (strlen($buf) < 48) return null;
+        $d = unpack('Vmagic/Ctype/Cfrom/Cwait/Cdelay/Vsession/vport/Cjoined/a33name', $buf);
+        if ($d['magic'] !== $magic || $d['type'] !== 8 || $d['port'] !== $port) return null;
+        return ['name' => text($d['name']), 'map' => 'Lobby', 'players' => max(0, min(4, $d['joined']))];
+    });
+}
+
 // id => the game's name, its accent colour on the website, and the function asking one of its servers
 const GAMES = [
     'nightfire' => ['name' => '007: NightFire', 'color' => '#3aa0ff', 'ask' => 'ask_nightfire'],
+    'auf' => ['name' => '007: Agent Under Fire', 'color' => '#e05a3a', 'ask' => 'ask_auf'],
+    'bf1943' => ['name' => 'Battlefield 1943', 'color' => '#d9a441', 'ask' => 'ask_bf1943'],
+    'bfbc1' => ['name' => 'Battlefield: Bad Company', 'color' => '#8fb04a', 'ask' => 'ask_bfbc1'],
 ];
 
 header('Content-Type: application/json');
@@ -130,7 +167,7 @@ if ($action === 'announce' || $action === 'remove') {
     if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4))
         done(['ok' => false, 'error' => 'IPv4 only for now'], 400);
     $port = (int)($_GET['port'] ?? $_POST['port'] ?? 0);
-    if ($port < 1024 || $port > 65535) done(['ok' => false, 'error' => 'bad port'], 400);
+    if ($port < 1000 || $port > 65535) done(['ok' => false, 'error' => 'bad port'], 400);  // (Battlefield: 1003)
     $mine = fn($s) => $s['game'] === $game && $s['ip'] === $ip && $s['port'] === $port;
 
     if ($action === 'remove') {
@@ -163,9 +200,11 @@ if ($action === 'announce' || $action === 'remove') {
     if ($check !== 'ok') done(['ok' => false, 'error' => 'too many servers listed from this address'], 429);
 
     $info = (GAMES[$game]['ask'])($ip, $port);  // outside the lock: it waits
-    if (!$info)
+    if (!$info) {
+        $also = $game === 'bf1943' ? ' and 19430' : ($game === 'bfbc1' ? ' and 19431' : '');
         done(['ok' => false, 'listed' => false,
-              'error' => "no answer from $ip:$port: start the lobby, and open UDP port $port in the firewall and router"]);
+              'error' => "no answer from $ip:$port: start the lobby, and open UDP port $port$also in the firewall and router"]);
+    }
     $entry = $info + ['game' => $game, 'ip' => $ip, 'port' => $port, 'version' => $version, 'mode' => $mode, 'max' => $max];
     with_servers($file, function (&$servers, $now) use ($mine, $entry) {
         $entry['seen'] = $now;
