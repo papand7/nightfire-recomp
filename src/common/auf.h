@@ -55,4 +55,42 @@ void PcStep(int row, int dir);   // row 0 the tab; More Settings opens the setti
 bool PointerWanted();             // the arrow shows: each image's own test
 void PcSettingsFrame(X86Context& ctx, uint8_t* base, uint32_t file);  // src/bond/pc_settings.cpp
 
+// modern menus (src/common/modern_menu.cpp draws them, src/bond/modern_menu_frame.cpp reads the game's page): the
+// game's menu pages drawn anew over its background, the game's own texts left out
+extern bool modern_menus;
+enum ModernKind { kModernButton, kModernChoice, kModernSlider, kModernList };
+struct ModernRow {
+    uint32_t id = 0;  // the item's place on its page, from 1
+    int kind = kModernButton;
+    std::string label, value;
+    uint32_t slider_value = 0, slider_max = 0;
+    bool list = false;
+    int list_step = 0;
+    bool focused = false, disabled = false;
+};
+struct ModernPage {
+    bool up = false;
+    uint32_t page = 0;  // the page's address
+    std::string title, help, prompt;
+    std::vector<std::string> tabs;  // the pause's tab strip
+    int tab = -1;
+    std::vector<std::string> texts;
+    std::vector<std::string> agents;
+    std::vector<ModernRow> rows;
+    int focus = -1;
+};
+struct ModernAction {
+    uint32_t id;    // the row to focus, 0 none
+    int control;    // then this pressed (input::kA, kB, kLeft, kRight), -1 none
+    uint32_t page;  // the page it was meant for
+    bool list = false;
+    int list_step = 0;
+};
+void ModernMenuPublish(const ModernPage& page);  // the game's thread, each frame in the menus
+bool ModernMenuAction(ModernAction& a);          // the game's thread: the UI's next click
+bool ModernMenuActive();                         // modern menus on and a page up
+void ModernMenuFonts(void* hwnd);                // GameInfo::window
+void ModernMenuUi(double fps);                   // GameInfo::ui
+void ModernMenuFrame(X86Context& ctx, uint8_t* base, uint32_t file);  // bond_eng.xbe: the menu file read each frame
+
 }  // namespace auf

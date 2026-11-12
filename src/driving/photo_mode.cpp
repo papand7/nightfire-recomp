@@ -9,7 +9,7 @@
 // the top of both. The way round of the axes was not confirmed, so the camera turns about its own rows, from where the
 // game's camera was: yaw about the up the seed had, pitch about its right. The pause is the level state [0x1BEB1C] 3
 // (also movies and a mission's end), held here each frame and put back; the HUD pass 0xBC530 (thiscall, no
-// arguments) is skipped. The field of view is auf::photo_fov, a factor FovScale takes.
+// arguments) is skipped, and the first person arms and gun (0x216E0, models with +0x50 1). The field of view is auf::photo_fov, a factor FovScale takes.
 // AUF_PHOTO_TRACE=1 logs the camera's matrix as photo mode starts.
 #include "driving/addr.h"
 #include <algorithm>
@@ -188,4 +188,16 @@ X86_FUNC(sub_000BC530) {
         return;
     }
     __imp__sub_000BC530(ctx, base);
+}
+
+// a model instance's draw (thiscall, the view and a pass byte, ret 8): the first person arms and gun are the only
+// models with byte +0x50 1 (0x2FAD3, the seven models 0x2F760 makes from "A.a_bond.b_arms.100" and a hardpoint); left
+// out meanwhile, which also keeps their own view set-up (0x846B0 again, near 0.4) from running
+X86_EXTERN_FUNC(__imp__sub_000216E0);
+X86_FUNC(sub_000216E0) {
+    if (g.on && kernel::G<uint8_t>(ctx.ecx + 0x50) == 1) {
+        ctx.esp += 4 + 8;  // the return address and the two arguments
+        return;
+    }
+    __imp__sub_000216E0(ctx, base);
 }

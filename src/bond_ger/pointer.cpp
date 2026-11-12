@@ -85,6 +85,7 @@ X86_FUNC(sub_00056940) {
     using namespace auf;
     const uint32_t file = kernel::R32(ctx.esp + 4);
     PcSettingsFrame(ctx, base, file);
+    ModernMenuFrame(ctx, base, file);
     uint32_t page = file ? kernel::R32(file + 0x44) : 0;
     uint32_t count = page ? kernel::R32(page + kPageItems) : 0;
     float x, y;

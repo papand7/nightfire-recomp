@@ -203,6 +203,7 @@ const app::GameInfo app::kGame = {
                 {"photo_mode", &auf::photo_mode, nullptr, "Photo mode (F10)", "F10 stops the game and frees the camera: mouse to look, W A S D to move, Space and C up and down, Shift faster, Ctrl slower; [ and ] the field of view, , and . the focus distance, N and M the blur, B depth of field on or off, R as the game had them; F12 takes the picture, F10 again goes back"},
                 {"ragdolls", &auf::ragdolls, nullptr, "Ragdolls", "Enemies go limp and fall when they die, in place of the death animations. Only their look; off by default"},
                 {"weapon_sway", &auf::weapon_sway, nullptr, "Weapon sway", "The gun trails your turns a little and settles back"},
+                {"modern_menus", &auf::modern_menus, nullptr, "Modern menus", "The menus and the pause drawn anew for the mouse, in the game's blues; off for the game's own"},
                 {"hit_flash", &auf::hit_flash, nullptr, "Hit flash", "The white flash on screen when Bond is hit. On by default; off for those it troubles"},
                 {"uncapped", &auf::uncapped, nullptr, "High frame rate",
                  "Paced by the frame rate cap instead of the console's 30 on foot; driving at 60 steps a second instead of 50 at the same speed, with frames in between above that. Vertical sync off gets the most. Takes effect at the next start"},
@@ -212,9 +213,9 @@ const app::GameInfo app::kGame = {
     .save = SaveKeys,
     .init = Init,                         // after the settings load, before the window and boot
     .loaded = nullptr,
-    .window = nullptr,
+    .window = auf::ModernMenuFonts,   // the modern menus' fonts
     .message = nullptr,
-    .ui = nullptr,
+    .ui = auf::ModernMenuUi,          // the modern menus (src/common/modern_menu.cpp)
     .pad = auf::MenuMouse,                // changes a polled pad: the mouse in the menus
     .rumble = nullptr,
     .hud_aspect = 4.0f / 3.0f,            // the game lays out its 2D for 4:3: kept in the middle of a wider frame
