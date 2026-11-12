@@ -1,0 +1,683 @@
+// Pickup physics (auf::pickup_physics, on by default; off in network play, which Agent Under Fire has none of yet: see
+// NetPlay()): dropped weapons, ammo and other pickups fly out with a toss and a spin, fall, bounce off floors and walls,
+// slide, tumble and come to rest lying flat, instead of the game's short drop that stops dead where it lands.
+//
+// The game (Ritual's Entity/Event system over Quake III): an entity is [edict+0x278] (the edicts at [0x329390], 0x2E0
+// each; the entity's edict is its +0xC, its number its +8). Entity +0x88 velocity, +0x98 angular velocity (degrees a
+// second), +0xA8 origin, +0xB8 angles (pitch, yaw, roll), +0x28 / +0x38 the box (mins, maxs), +0xC8 movetype (0 none,
+// 7 toss), +0x110 groundentity, +0x1C4 bit 7 frozen, +0x2CC an item's owner. Vtable +0x20 setOrigin(vector*, 0) and
+// +0x2C setAngles(vector*, 0) (both link the entity). A class's ClassDef: vtable +0 (mov eax, imm; ret), its +0 the
+// name, +0x18 the super: a dropped gun reads "KA57 < MachineGun < Weapon < Gadget < Item", so items are found by the
+// name "Item" up the chain (0x33C4FC, PlaceItem 0xE0470's class, is a subclass's).
+// - Physics_Toss 0xD9E80 (cdecl: the entity), movetype 7/8/9 from the physics dispatcher 0xA92C0: gravity 0xD8C70
+//   (edict, velocity*; 515 units/s^2 seen), the move traced with gi.trace [0x32917C] (out, start, end, mins, maxs, pass
+//   number, mask (edict +0x284, else 1), 0, 0x40; trace_t +0 allsolid, +4 startsolid, +8 fraction, +0x1C end, +0x30 the
+//   plane's normal); on a floor (normal z above 0.7, falling slower than 60) it stops dead. Frame seconds [0x329494].
+// - A weapon's drop (vtable +0x78: 0x79AB0, 0xA21C0; Item 0xE09A0), from a death (Actor::Killed's "dropweaponnow" ->
+//   Sentient::DropWeapon 0x73700) or a throw: at the owner's origin 40 up, velocity half the owner's plus about +-50
+//   sideways and 90 up, the owner's angles, no spin, movetype 7 (PlaceItem, vtable +0x6C); the owner (+0x2CC) cleared.
+// - A placed item: "item_droptofloor" -> Item::DropToFloor 0xE0EF0 (thiscall, the event): PlaceItem, traced down and
+//   put on the floor, movetype 0 (no physics at all). Item::Respawn 0xDFD20 (vtable +0x94, thiscall, the event) shows
+//   a taken respawning item again where it is. Hidden: edict +0x204 bit 0; solid type edict +0x274 (1 a trigger).
+// - RadiusDamage 0xF7CE0 (cdecl: inflictor edict, attacker edict, radius (float), damage (int), ignore, means of
+//   death): the explosions' damage, from the inflictor edict's +0x20 (its origin).
+//
+// Here: an item the game puts in toss physics (a drop) is ours in Physics_Toss's hook: a toss up and out with a spin
+// on its first frame, then each frame gravity (the game's), the move traced with its own box (a bounce off what it
+// meets: v -= (1 + e)(v.n)n, a scrape along it, a spin from the scrape; a box stuck in something lifted clear), a look
+// under it for the ground (rolling friction, slide down a steep slope), its angles turned by its spin and on the ground
+// laid down (pitch 0; a gun, whose model stands upright on its grip, on its side at roll +-90 and lowered onto the
+// floor; anything else roll 0 as the game places it). Slow on flat ground for a moment (or after 12 s) it is put at
+// rest as the game leaves a placed item (movetype 0, no velocity); one that falls out of the level (into the sea) is put
+// back where it last lay. The touch that picks it up is the game's, as it moves (setOrigin links it). A resting item a
+// player walks into (one the touch did not take: full ammo) is pushed along with the player's motion; an explosion
+// (RadiusDamage's hook) throws the items in its reach. The level's own items too: each one's origin and angles after
+// its DropToFloor are kept, and one moved goes back there when the game respawns it.
+// AUF_PICKUP_PHYSICS=0/1 overrides the setting; AUF_PICKUP_TRACE=1 logs classes, takes, bounces, rests, pushes and
+// blasts; AUF_PICKUP_TEST (diagnostic, changes the game): =1 player 1 drops the weapon in hand ahead of it every 6 s
+// once free, =2 also an explosion (RadiusDamage, no damage) at player 1 3 s after each drop, =3 pushes the nearest
+// level item at 10 s and respawns it (Item::Respawn) at 16 s, =4 puts the nearest lying item in front of player 1 every
+// 8 s and walks player 1 into it 1.5 s later. AUF_SKIP_CUTSCENES=0/1 overrides skip_cutscenes (for these tests).
+#include "bond/addr.h"
+#include <algorithm>
+#include <bit>
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <string>
+#include <unordered_map>
+
+#include "bond/ragdoll.h"
+#include "common/auf.h"
+#include "core/log.h"
+#include "kernel/kernel.h"
+#include "kernel/memory.h"
+#include "xdk/hle.h"
+
+namespace {
+constexpr uint32_t kGentities = A(0x329390), kGentitySize = 0x2E0, kMaxEntities = 1024;
+constexpr uint32_t kTrace = A(0x32917C), kGravity = A(0xD8C70);
+constexpr uint32_t kFrameTime = A(0x329494), kLevelTime = A(0x329490);
+constexpr uint32_t kFists = A(0x1E5FC8);
+
+constexpr float kBounce = 0.35f;     // the share of the speed into a surface kept out of it
+constexpr float kScrape = 0.2f;      // the share of the speed along a surface lost at a bounce
+constexpr float kRoll = 260.0f;      // units a second lost each second sliding on the ground
+constexpr float kRestSpeed = 8.0f;   // slower than this on flat ground it may rest
+constexpr float kRestTime = 0.2f, kMaxTime = 12.0f;
+
+struct V {
+    float x = 0, y = 0, z = 0;
+    V operator+(V o) const { return {x + o.x, y + o.y, z + o.z}; }
+    V operator-(V o) const { return {x - o.x, y - o.y, z - o.z}; }
+    V operator*(float k) const { return {x * k, y * k, z * k}; }
+};
+float Dot(V a, V b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+float Len(V a) { return std::sqrt(Dot(a, a)); }
+V Norm(V a) {
+    const float l = Len(a);
+    return l > 1e-6f ? a * (1 / l) : V{0, 0, 1};
+}
+bool Finite(V a) { return std::isfinite(a.x) && std::isfinite(a.y) && std::isfinite(a.z); }
+
+float F(uint32_t va) {
+    float f;
+    std::memcpy(&f, &kernel::G<uint32_t>(va), 4);
+    return f;
+}
+void SetF(uint32_t va, float f) { std::memcpy(&kernel::G<uint32_t>(va), &f, 4); }
+V GetV(uint32_t va) { return {F(va), F(va + 4), F(va + 8)}; }
+void SetV(uint32_t va, V v) { SetF(va, v.x), SetF(va + 4, v.y), SetF(va + 8, v.z); }
+
+bool Trace() {
+    static const bool on = [] {
+        const char* e = std::getenv("AUF_PICKUP_TRACE");
+        return e && *e == '1';
+    }();
+    return on;
+}
+
+// network play: Agent Under Fire has none yet; when it does, its test goes here (the physics off for everyone)
+bool NetPlay() { return false; }
+
+bool On() {
+    static const int env = [] {
+        const char* e = std::getenv("AUF_PICKUP_PHYSICS");
+        return e && *e ? (*e == '1' ? 1 : 0) : -1;
+    }();
+    return (env >= 0 ? env == 1 : auf::pickup_physics) && !NetPlay();
+}
+
+uint32_t Hash(uint32_t x) {
+    x ^= x >> 16, x *= 0x7FEB352Du, x ^= x >> 15, x *= 0x846CA68Bu, x ^= x >> 16;
+    return x;
+}
+float Unit01(uint32_t& seed) { return float((seed = Hash(seed + 0x9E3779B9u)) >> 8) / float(1u << 24); }
+
+uint32_t EdictOf(uint32_t ent) {
+    const uint32_t g = ent ? kernel::R32(ent + 0xC) : 0;
+    return g && kernel::R32(g + 0x278) == ent ? g : 0;
+}
+
+// a ClassDef's name (its +0, a C string), empty when it does not look like one
+const char* DefName(uint32_t def) {
+    static char buf[48];
+    buf[0] = 0;
+    const uint32_t name = def ? kernel::R32(def) : 0;
+    if (name < 0x10000 || name > 0x4000000) return buf;
+    for (int i = 0; i < 47; i++) {
+        const char ch = char(kernel::G<uint8_t>(name + i));
+        if (ch && (ch < 32 || ch > 126)) return buf[0] = 0, buf;
+        buf[i] = ch, buf[i + 1] = 0;
+        if (!ch) break;
+    }
+    return buf;
+}
+uint32_t DefOf(uint32_t ent) {  // vtable +0: mov eax, imm32; ret
+    const uint32_t vt = ent ? kernel::R32(ent) : 0;
+    const uint32_t f = vt ? kernel::R32(vt) : 0;
+    if (!f || kernel::G<uint8_t>(f) != 0xB8 || kernel::G<uint8_t>(f + 5) != 0xC3) return 0;
+    return kernel::R32(f + 1);
+}
+const char* ClassName(uint32_t ent) { return DefName(DefOf(ent)); }
+
+// an Item or a class under it (weapons, ammo, gadgets): "Item" up its ClassDef's supers (+0x18), the answer kept
+// for each ClassDef
+enum Kind { kNotItem, kItem, kWeapon };
+Kind KindOf(uint32_t ent) {
+    const uint32_t def = DefOf(ent);
+    if (!def) return kNotItem;
+    static std::unordered_map<uint32_t, Kind> known;
+    if (const auto k = known.find(def); k != known.end()) return k->second;
+    bool item = false, weapon = false;
+    std::string chain;
+    uint32_t c = def;
+    for (int i = 0; c && i < 16 && !item; i++, c = kernel::R32(c + 0x18)) {
+        const char* n = DefName(c);
+        item = std::strcmp(n, "Item") == 0;
+        weapon |= std::strcmp(n, "Weapon") == 0;
+        if (Trace()) chain += std::string(i ? " < " : "") + n;
+    }
+    const Kind kind = !item ? kNotItem : weapon ? kWeapon : kItem;
+    known[def] = kind;
+    if (Trace()) LOGR("pickup: class %08X %s: %s", def, chain.c_str(), !item ? "not an item" : weapon ? "a weapon" : "an item");
+    return kind;
+}
+bool IsItem(uint32_t ent) { return KindOf(ent) != kNotItem; }
+
+// a pickup lying in the world: an item with no owner, solid as a trigger, shown
+bool InWorld(uint32_t ent) {
+    const uint32_t g = EdictOf(ent);
+    return g && IsItem(ent) && !kernel::R32(ent + 0x2CC) && kernel::R32(g + 0x274) == 1 && !(kernel::R32(g + 0x204) & 1) &&
+           !(kernel::G<uint8_t>(ent + 0x1C4) & 0x80);
+}
+
+struct Item {
+    float age = 0, still = 0;
+    int bounces = 0;
+    bool tossed = false;  // the drop's toss given
+    bool grounded = false;  // has touched the ground: last_ground is where
+    bool has_o = false;     // o: its origin for the physics (the entity's is lower by Sink while a gun lies on its side)
+    V from, last_ground, o;
+};
+std::unordered_map<uint32_t, Item> g_items;
+float g_test_yaw = -1;  // AUF_PICKUP_TEST: the next toss straight ahead of player 1 (degrees), -1 a random one
+uint32_t g_frames = 0;  // our steps, for the trace's pace
+struct Spawn {
+    V origin, angles;
+};
+std::unordered_map<uint32_t, Spawn> g_spawns;  // the level's own items: where DropToFloor put them
+uint32_t g_calls[4];  // the trace's count of the hooks' calls: Physics_Toss, DropToFloor, Respawn, RadiusDamage
+
+// a new level (its time going back): everything forgotten
+void LevelCheck() {
+    static float last = 0;
+    const float now = F(kLevelTime);
+    if (now < last) g_items.clear(), g_spawns.clear();
+    last = now;
+}
+
+uint32_t Scratch() {
+    static const uint32_t s = mem::AllocHostContiguous(0x100, 16);
+    return s;
+}
+
+struct Hit {
+    bool solid = false;  // started inside something
+    float fraction = 1;
+    V end, n;
+};
+Hit Sweep(X86Context& ctx, uint32_t ent, V a, V b) {
+    const uint32_t s = Scratch(), out = s, start = s + 0x80, end = s + 0x90, mins = s + 0xA0, maxs = s + 0xB0;
+    std::memset(&kernel::G<uint8_t>(s), 0, 0xC0);
+    SetV(start, a), SetV(end, b);
+    SetV(mins, GetV(ent + 0x28)), SetV(maxs, GetV(ent + 0x38));
+    const uint32_t g = kernel::R32(ent + 0xC);
+    const uint32_t mask = g && kernel::R32(g + 0x284) ? kernel::R32(g + 0x284) : 1;
+    const uint32_t fn = kernel::R32(kTrace);
+    Hit h;
+    if (!fn) return h;
+    const uint32_t ecx = ctx.ecx;
+    kernel::CallGuest(ctx, fn, {out, start, end, mins, maxs, kernel::R32(ent + 8), mask, 0, 0x40});
+    ctx.ecx = ecx;
+    h.solid = kernel::R32(out) || kernel::R32(out + 4);
+    h.fraction = F(out + 8);
+    h.end = GetV(out + 0x1C);
+    h.n = GetV(out + 0x30);
+    if (!std::isfinite(h.fraction) || !Finite(h.end)) h.fraction = 1, h.end = b;
+    return h;
+}
+
+void Place(X86Context& ctx, uint32_t ent, V origin, V angles) {
+    const uint32_t s = Scratch() + 0xC0;
+    const uint32_t ecx = ctx.ecx, vt = kernel::R32(ent);
+    SetV(s, origin), SetF(s + 12, 0);
+    ctx.ecx = ent;
+    kernel::CallGuest(ctx, kernel::R32(vt + 0x20), {s, 0});
+    SetV(s + 0x10, angles), SetF(s + 0x1C, 0);
+    ctx.ecx = ent;
+    kernel::CallGuest(ctx, kernel::R32(vt + 0x2C), {s + 0x10, 0});
+    ctx.ecx = ecx;
+}
+
+float Wrap(float a) {  // to -180..180
+    a = std::fmod(a, 360.0f);
+    if (a > 180) a -= 360;
+    if (a < -180) a += 360;
+    return a;
+}
+// the pose it settles in: pitch 0; a gun (held upright, its model standing on its grip) on its side, roll 90 or -90
+// whichever is nearer; anything else as the game places it, roll 0
+V FlatOf(uint32_t ent, V a) {
+    if (KindOf(ent) != kWeapon) return {0, a.y, 0};
+    const float r = Wrap(a.z);
+    return {0, a.y, r >= 0 ? 90.0f : -90.0f};
+}
+// how far a gun's origin sits below its box's rest on the side: its box is the upright gun's, its bottom (mins z) the
+// grip's; lying on its side about 2 units hold it off the floor
+float Sink(uint32_t ent, V ang) {
+    if (KindOf(ent) != kWeapon) return 0;
+    const float depth = std::clamp(-F(ent + 0x30) - 2.0f, 0.0f, 16.0f);
+    return depth * std::abs(std::sin(Wrap(ang.z) * 0.017453293f)) * std::abs(std::cos(Wrap(ang.x) * 0.017453293f));
+}
+V Toward(V a, V target, float k) {  // pitch and roll eased toward the target's (the shortest way)
+    return {a.x + Wrap(target.x - a.x) * k, a.y, a.z + Wrap(target.z - a.z) * k};
+}
+
+// ours from now: movetype toss, off the ground
+void Take(uint32_t ent, V vel, V avel, bool tossed, const char* why) {
+    Item& it = g_items[ent];
+    it = Item{};
+    it.tossed = tossed;
+    it.from = GetV(ent + 0xA8);
+    SetV(ent + 0x88, vel), SetV(ent + 0x98, avel);
+    kernel::G<uint32_t>(ent + 0xC8) = 7;
+    kernel::G<uint32_t>(ent + 0x110) = 0;
+    if (Trace())
+        LOGR("pickup: %08X (%s) %s at %.0f %.0f %.0f, velocity %.0f %.0f %.0f, spin %.0f %.0f %.0f, box %.0f %.0f %.0f / %.0f %.0f %.0f",
+             ent, ClassName(ent), why, it.from.x, it.from.y, it.from.z, vel.x, vel.y, vel.z, avel.x, avel.y, avel.z,
+             F(ent + 0x28), F(ent + 0x2C), F(ent + 0x30), F(ent + 0x38), F(ent + 0x3C), F(ent + 0x40));
+}
+
+void Rest(X86Context& ctx, uint32_t ent, Item& it, V o, V ang, bool ground) {
+    if (ground) ang = FlatOf(ent, ang);
+    SetV(ent + 0x88, {}), SetV(ent + 0x98, {});
+    if (ground) o.z -= Sink(ent, ang);
+    Place(ctx, ent, o, ang);
+    kernel::G<uint32_t>(ent + 0xC8) = 0;  // as a placed item: no physics
+    if (Trace())
+        LOGR("pickup: %08X rests after %.2f s, %d bounces, at %.0f %.0f %.0f (%.0f units from its start), angles %.0f %.0f %.0f%s",
+             ent, it.age, it.bounces, o.x, o.y, o.z, Len(o - it.from), ang.x, ang.y, ang.z, ground ? "" : " (off the ground)");
+}
+
+// a frame of an item's flight
+void Step(X86Context& ctx, uint32_t ent, Item& it) {
+    const float dt = std::clamp(F(kFrameTime), 0.001f, 0.1f);
+    const uint32_t g = kernel::R32(ent + 0xC);
+    if (!it.tossed) {  // the drop's toss: up and out, random (the same for the same item and time), with a spin
+        it.tossed = true;
+        uint32_t seed = ent ^ std::bit_cast<uint32_t>(F(kLevelTime));
+        float angle = Unit01(seed) * 6.2831853f;
+        if (g_test_yaw >= 0) angle = g_test_yaw * 0.017453293f, g_test_yaw = -1;
+        const float out = 35 + 50 * Unit01(seed), up = 100 + 60 * Unit01(seed);
+        V v = GetV(ent + 0x88);
+        v = v + V{std::cos(angle) * out, std::sin(angle) * out, up};
+        const float sp = Unit01(seed) < 0.5f ? -1.0f : 1.0f, sr = Unit01(seed) < 0.5f ? -1.0f : 1.0f;
+        const V av{sp * (200 + 400 * Unit01(seed)), (Unit01(seed) - 0.5f) * 720, sr * (150 + 350 * Unit01(seed))};
+        SetV(ent + 0x88, v), SetV(ent + 0x98, av);
+        if (Trace())
+            LOGR("pickup: %08X (%s) dropped at %.0f %.0f %.0f: tossed %.0f %.0f %.0f, spin %.0f %.0f %.0f", ent, ClassName(ent),
+                 F(ent + 0xA8), F(ent + 0xAC), F(ent + 0xB0), v.x, v.y, v.z, av.x, av.y, av.z);
+    }
+    // the game's gravity (sv_gravity and the entity's own scale)
+    const V before = GetV(ent + 0x88);
+    {
+        const uint32_t ecx = ctx.ecx;
+        kernel::CallGuest(ctx, kGravity, {g, ent + 0x88});
+        ctx.ecx = ecx;
+    }
+    V v = GetV(ent + 0x88), avel = GetV(ent + 0x98);
+    if (!Finite(v)) v = before;
+    V ang = GetV(ent + 0xB8);
+    V o = it.has_o ? it.o : GetV(ent + 0xA8) + V{0, 0, Sink(ent, ang)};
+    const V was = o;
+    // the move, two passes after a bounce (off a wall into the floor)
+    V move = v * dt;
+    bool floor_hit = false;
+    for (int pass = 0; pass < 3 && Len(move) > 0.01f; pass++) {
+        Hit h = Sweep(ctx, ent, o, o + move);
+        if (h.solid) {  // its box stuck in something: lifted clear of it (a little), else it waits
+            for (float lift : {2.0f, 5.0f, 10.0f, 18.0f}) {
+                const V up = o + V{0, 0, lift};
+                if (!Sweep(ctx, ent, up, up).solid) {
+                    o = up;
+                    break;
+                }
+            }
+            h = Sweep(ctx, ent, o, o + move);
+        }
+        if (h.solid) {
+            if (Trace()) LOGR("pickup: %08X stuck at %.0f %.0f %.0f", ent, o.x, o.y, o.z);
+            break;
+        }
+        o = h.end;
+        if (h.fraction >= 1) break;
+        const V n = Norm(h.n);
+        const float vn = Dot(v, n);
+        if (vn < 0) {
+            const V along = v - n * vn;
+            const float hard = -vn;
+            const bool floor = n.z > 0.7f;
+            floor_hit |= floor;
+            // a soft landing does not bounce
+            const float e = floor && hard < 70 ? 0.0f : kBounce;
+            v = along * (1 - kScrape) - n * (vn * e);
+            // the scrape spins it (tumbling over), a hard hit more
+            uint32_t seed = ent ^ uint32_t(it.bounces * 7919) ^ std::bit_cast<uint32_t>(o.x);
+            const float k = std::min(1.0f, hard / 300.0f);
+            avel = avel * 0.6f + V{(Unit01(seed) - 0.5f) * 900 * k, (Unit01(seed) - 0.5f) * 400 * k, (Unit01(seed) - 0.5f) * 900 * k};
+            if (hard > 40) {
+                it.bounces++;
+                if (Trace())
+                    LOGR("pickup: %08X bounce %d at %.0f %.0f %.0f, normal %.2f %.2f %.2f, speed in %.0f, out %.0f %.0f %.0f", ent,
+                         it.bounces, o.x, o.y, o.z, n.x, n.y, n.z, hard, v.x, v.y, v.z);
+            }
+        }
+        move = v * (dt * (1 - h.fraction));
+    }
+    // the ground under it: rest on it, friction, slide down a steep one
+    bool ground = false;
+    V gn{0, 0, 1};
+    {
+        const Hit h = Sweep(ctx, ent, o, o - V{0, 0, 2});
+        if (!h.solid && h.fraction < 1 && Norm(h.n).z > 0.7f) {
+            ground = true, gn = Norm(h.n);
+            if (const float vn = Dot(v, gn); vn < 0 || (vn < 40 && floor_hit)) v = v - gn * vn;
+            if (Dot(v, gn) < 1) {  // on it, not bouncing off
+                V along = v - gn * Dot(v, gn);
+                const float speed = Len(along), lose = kRoll * dt;
+                along = speed > lose ? along * (1 - lose / speed) : V{};
+                v = along;
+                avel = avel * std::exp(-5.0f * dt);
+                ang = Toward(ang, FlatOf(ent, ang), 1 - std::exp(-10.0f * dt));
+            }
+        }
+    }
+    ang = ang + avel * dt;
+    if (!Finite(o)) o = was;
+    if (ground) it.grounded = true, it.last_ground = o;
+    // fallen out of the world (through a gap): back where it last lay, or where it started
+    if (!ground && o.z < it.from.z - 1200) {
+        if (Trace()) LOGR("pickup: %08X fell out of the level at %.0f %.0f %.0f: put back", ent, o.x, o.y, o.z);
+        o = it.grounded ? it.last_ground : it.from;
+        Rest(ctx, ent, it, o, ang, true);
+        g_items.erase(ent);
+        return;
+    }
+    if (!Finite(ang)) ang = GetV(ent + 0xB8);
+    SetV(ent + 0x88, v), SetV(ent + 0x98, avel);
+    it.o = o, it.has_o = true;
+    Place(ctx, ent, o - V{0, 0, Sink(ent, ang)}, ang);
+    it.age += dt;
+    it.still = ground && Len(v) < kRestSpeed ? it.still + dt : 0;
+    if (Trace() && ++g_frames % 10 == 0)
+        LOGR("pickup: %08X %.2f s at %.0f %.0f %.0f velocity %.0f %.0f %.0f spin %.0f %.0f %.0f%s", ent, it.age, o.x, o.y, o.z,
+             v.x, v.y, v.z, avel.x, avel.y, avel.z, ground ? " (on the ground)" : "");
+    if (it.still > kRestTime || it.age > kMaxTime || Len(o - it.from) > 4000) {
+        Rest(ctx, ent, it, o, ang, ground);
+        g_items.erase(ent);
+    }
+}
+}  // namespace
+
+// Physics_Toss (cdecl: the entity): the items' flight ours
+X86_EXTERN_FUNC(__imp__sub_000D9E80);
+X86_FUNC(sub_000D9E80) {
+    const uint32_t ent = kernel::R32(ctx.esp + 4);
+    g_calls[0]++;
+    if (!On() || !ent || (kernel::G<uint8_t>(ent + 0x1C4) & 0x80) || !EdictOf(ent) || !IsItem(ent) || kernel::R32(ent + 0x2CC)) {
+        if (!g_items.empty() && !On()) g_items.clear();
+        __imp__sub_000D9E80(ctx, base);
+        return;
+    }
+    LevelCheck();
+    auto it = g_items.find(ent);
+    if (Trace() && it == g_items.end())
+        LOGR("pickup: %08X (%s) in toss physics, movetype %u, velocity %.0f %.0f %.0f", ent, ClassName(ent), kernel::R32(ent + 0xC8),
+             F(ent + 0x88), F(ent + 0x8C), F(ent + 0x90));
+    if (it == g_items.end()) {  // the game's drop (or an item the game set falling): ours, tossed on this first frame
+        Item& n = g_items[ent];
+        n.from = GetV(ent + 0xA8);
+        n.tossed = Len(GetV(ent + 0x88)) < 1;  // still: no toss (it only falls)
+        it = g_items.find(ent);
+    }
+    Step(ctx, ent, it->second);
+    ctx.esp += 4;  // cdecl: the return address only
+}
+
+// Item::DropToFloor (thiscall: the event): an item in our flight is left flying; a placed one's spot kept
+X86_EXTERN_FUNC(__imp__sub_000E0EF0);
+X86_FUNC(sub_000E0EF0) {
+    const uint32_t ent = ctx.ecx;
+    g_calls[1]++;
+    if (On()) LevelCheck();
+    if (On() && g_items.count(ent)) {
+        ctx.esp += 8;  // the return address and the event
+        return;
+    }
+    __imp__sub_000E0EF0(ctx, base);
+    if (!ent || !EdictOf(ent) || !IsItem(ent) || kernel::R32(ent + 0x2CC) || g_spawns.count(ent)) return;
+    g_spawns[ent] = {GetV(ent + 0xA8), GetV(ent + 0xB8)};
+    if (Trace())
+        LOGR("pickup: %08X (%s) placed at %.0f %.0f %.0f, movetype %u", ent, ClassName(ent), F(ent + 0xA8), F(ent + 0xAC),
+             F(ent + 0xB0), kernel::R32(ent + 0xC8));
+}
+
+// Item::Respawn (thiscall: the event): a moved level item back where the level put it before it shows again
+X86_EXTERN_FUNC(__imp__sub_000DFD20);
+X86_FUNC(sub_000DFD20) {
+    const uint32_t ent = ctx.ecx;
+    g_calls[2]++;
+    const auto sp = g_spawns.find(ent);
+    if (On() && sp != g_spawns.end() && EdictOf(ent) && IsItem(ent)) {
+        const V at = GetV(ent + 0xA8);
+        g_items.erase(ent);
+        if (Len(at - sp->second.origin) > 0.5f) {
+            SetV(ent + 0x88, {}), SetV(ent + 0x98, {});
+            kernel::G<uint32_t>(ent + 0xC8) = 0;
+            Place(ctx, ent, sp->second.origin, sp->second.angles);
+            ctx.ecx = ent;
+            if (Trace())
+                LOGR("pickup: %08X respawns back at its spawn %.0f %.0f %.0f (it was %.0f units away)", ent, sp->second.origin.x,
+                     sp->second.origin.y, sp->second.origin.z, Len(at - sp->second.origin));
+        }
+    }
+    __imp__sub_000DFD20(ctx, base);
+}
+
+namespace {
+// an explosion at c with this radius: the items in reach thrown away from it
+void Blast(V c, float radius) {
+    const uint32_t base_g = kernel::R32(kGentities);
+    if (!base_g || !Finite(c) || !(radius > 0)) return;
+    const float reach = std::clamp(radius, 64.0f, 600.0f) * 1.25f;
+    for (uint32_t k = 1; k < kMaxEntities; k++) {
+        const uint32_t e = kernel::R32(base_g + k * kGentitySize + 0x278);
+        if (!e || !InWorld(e)) continue;
+        const V d = GetV(e + 0xA8) - c;
+        const float dist = Len(d);
+        if (dist > reach) continue;
+        const float k1 = 1 - dist / reach;
+        const V away = Norm(V{d.x, d.y, 0});
+        const V push = away * (90 + 320 * k1) + V{0, 0, 140 + 260 * k1};
+        uint32_t seed = e ^ std::bit_cast<uint32_t>(F(kLevelTime));
+        const V spin{(Unit01(seed) - 0.5f) * 1400 * k1 + 200, (Unit01(seed) - 0.5f) * 900, (Unit01(seed) - 0.5f) * 1400 * k1};
+        auto it = g_items.find(e);
+        if (it != g_items.end()) {
+            SetV(e + 0x88, GetV(e + 0x88) + push), SetV(e + 0x98, GetV(e + 0x98) + spin);
+            it->second.still = 0, it->second.age = 0;
+            if (Trace()) LOGR("pickup: %08X thrown further by an explosion %.0f units away (radius %.0f)", e, dist, radius);
+        } else {
+            Take(e, GetV(e + 0x88) + push, spin, true, "thrown by an explosion");
+        }
+    }
+}
+}  // namespace
+
+// RadiusDamage (cdecl: inflictor edict, attacker edict, radius, damage, ignore, means of death)
+X86_EXTERN_FUNC(__imp__sub_000F7CE0);
+X86_FUNC(sub_000F7CE0) {
+    const uint32_t inflictor = kernel::R32(ctx.esp + 4);
+    const float radius = F(ctx.esp + 0xC);
+    const V c = inflictor ? GetV(inflictor + 0x20) : V{};
+    g_calls[3]++;
+    __imp__sub_000F7CE0(ctx, base);
+    if (!On() || !inflictor) return;
+    LevelCheck();
+    if (Trace()) {
+        const uint32_t ie = kernel::R32(inflictor + 0x278);
+        LOGR("pickup: an explosion at %.0f %.0f %.0f radius %.0f damage %d (inflictor %08X at %.0f %.0f %.0f)", c.x, c.y, c.z,
+             radius, int32_t(kernel::R32(ctx.esp + 0xC)), ie, ie ? F(ie + 0xA8) : 0.0f, ie ? F(ie + 0xAC) : 0.0f,
+             ie ? F(ie + 0xB0) : 0.0f);
+    }
+    Blast(c, radius);
+}
+
+namespace {
+// AUF_PICKUP_TEST (diagnostic): see the top
+void PickupTest(X86Context& ctx, uint32_t player) {
+    static const int mode = [] {
+        const char* e = std::getenv("AUF_PICKUP_TEST");
+        return e && *e ? std::atoi(e) : 0;
+    }();
+    if (!mode) return;
+    static float clock = 0, last_level = 0, drop_at = 1e9f, blast_at = 1e9f, shove_until = 0;
+    static int stage = 0;
+    static uint32_t level_item = 0, dropped = 0;
+    const float now = F(kLevelTime);
+    if (now < last_level) clock = 0, drop_at = blast_at = 1e9f, stage = 0, level_item = dropped = 0;
+    last_level = now;
+    clock += std::clamp(F(kFrameTime), 0.0f, 0.1f);
+    const uint32_t g = EdictOf(player);
+    if (drop_at > 1e8f && auf::PlayerFree()) drop_at = clock + 2;  // the first 2 s after the player is free
+    // mode 4: the nearest resting item put 80 units in front of player 1 (it falls there), then 1.5 s later player 1
+    // shoved into it for 0.6 s (as walking into it): pushed along, or taken
+    if (mode == 4) {
+        if (dropped && clock < shove_until && EdictOf(dropped)) {
+            const V d = GetV(dropped + 0xA8) - GetV(player + 0xA8);
+            const V dir = Norm(V{d.x, d.y, 0});
+            SetV(player + 0x88, V{dir.x * 220, dir.y * 220, F(player + 0x90)});
+        }
+        if (dropped && shove_until > 0 && clock > shove_until + 1) {
+            const uint32_t gd = EdictOf(dropped);
+            LOGR("pickup test: after the walk %08X is at %.0f %.0f %.0f (player at %.0f %.0f %.0f), %s", dropped,
+                 F(dropped + 0xA8), F(dropped + 0xAC), F(dropped + 0xB0), F(player + 0xA8), F(player + 0xAC), F(player + 0xB0),
+                 !gd ? "gone" : kernel::R32(dropped + 0x2CC) ? "taken" : (kernel::R32(gd + 0x204) & 1) ? "hidden" : "in the world");
+            shove_until = 0, dropped = 0;
+        }
+        if (dropped && shove_until == 0 && clock >= drop_at - 6.5f) {
+            shove_until = clock + 0.6f;
+            LOGR("pickup test: player 1 at %.0f %.0f %.0f walks into %08X at %.0f %.0f %.0f", F(player + 0xA8),
+                 F(player + 0xAC), F(player + 0xB0), dropped, F(dropped + 0xA8), F(dropped + 0xAC), F(dropped + 0xB0));
+        }
+        if (clock < drop_at || !auf::PlayerFree()) return;
+        drop_at = clock + 8;
+        const uint32_t base_g = kernel::R32(kGentities);
+        const V me = GetV(player + 0xA8);
+        float best = 1e9f;
+        uint32_t pick = 0;
+        for (uint32_t k = 1; k < kMaxEntities && base_g; k++) {
+            const uint32_t e = kernel::R32(base_g + k * kGentitySize + 0x278);
+            if (!e || !InWorld(e) || g_items.count(e)) continue;
+            const float d = Len(GetV(e + 0xA8) - me);
+            if (d < best) best = d, pick = e;
+        }
+        if (!pick) {
+            LOGR("pickup test: no item lying in the level");
+            return;
+        }
+        const float yaw = F(player + 0xBC) * 0.017453293f;
+        const V to = me + V{std::cos(yaw) * 80, std::sin(yaw) * 80, 30};
+        Place(ctx, pick, to, GetV(pick + 0xB8));
+        Take(pick, V{}, V{}, true, "put in front of player 1 (test)");
+        dropped = pick, shove_until = 0;
+        return;
+    }
+    if (mode == 3) {
+        if (stage == 0 && clock >= 10) {
+            stage = 1;
+            const uint32_t base_g = kernel::R32(kGentities);
+            const V me = GetV(player + 0xA8);
+            float best = 1e9f;
+            for (uint32_t k = 1; k < kMaxEntities && base_g; k++) {
+                const uint32_t e = kernel::R32(base_g + k * kGentitySize + 0x278);
+                if (!e || !InWorld(e) || !g_spawns.count(e)) continue;
+                const float d = Len(GetV(e + 0xA8) - me);
+                if (d < best) best = d, level_item = e;
+            }
+            LOGR("pickup test: %zu level items kept; the nearest %08X (%s) %.0f units away", g_spawns.size(), level_item,
+                 level_item ? ClassName(level_item) : "", best);
+            if (level_item) {
+                const V away = Norm(GetV(level_item + 0xA8) - me);
+                Take(level_item, V{away.x * 250, away.y * 250, 160}, V{300, 200, -250}, true, "pushed (test)");
+            }
+        } else if (stage == 1 && clock >= 16) {
+            stage = 2;
+            if (level_item && EdictOf(level_item)) {
+                const V at = GetV(level_item + 0xA8);
+                LOGR("pickup test: %08X respawned from %.0f %.0f %.0f", level_item, at.x, at.y, at.z);
+                const uint32_t ecx = ctx.ecx;
+                ctx.ecx = level_item;
+                kernel::CallGuest(ctx, A(0xDFD20), {0});
+                ctx.ecx = ecx;
+                const V now_at = GetV(level_item + 0xA8);
+                const auto sp = g_spawns.find(level_item);
+                LOGR("pickup test: %08X now at %.0f %.0f %.0f, %.1f units from its spawn", level_item, now_at.x, now_at.y,
+                     now_at.z, sp != g_spawns.end() ? Len(now_at - sp->second.origin) : -1.0f);
+            }
+        }
+        return;
+    }
+    if (clock >= blast_at) {  // 3 s after a drop: the explosion (mode 2)
+        blast_at = 1e9f;
+        if (g) {
+            const uint32_t ecx = ctx.ecx;
+            LOGR("pickup test: an explosion at player 1");
+            kernel::CallGuest(ctx, A(0xF7CE0), {g, g, std::bit_cast<uint32_t>(200.0f), 0, g, 0x11});
+            ctx.ecx = ecx;
+        }
+    }
+    if (clock < drop_at || !auf::PlayerFree()) return;
+    drop_at = clock + 6;
+    if (mode == 2) blast_at = clock + 3;
+    const uint32_t weapon = kernel::R32(player + 0x2EC);
+    if (!weapon || kernel::R32(weapon) == kFists) {
+        LOGR("pickup test: no weapon in hand to drop");
+        return;
+    }
+    const uint32_t ecx = ctx.ecx;
+    ctx.ecx = weapon;
+    g_test_yaw = std::fmod(std::fmod(F(player + 0xBC), 360.0f) + 360.0f, 360.0f);
+    const uint32_t ok = kernel::CallGuest(ctx, kernel::R32(kernel::R32(weapon) + 0x78), {});
+    ctx.ecx = ecx;
+    dropped = ok & 0xFF ? weapon : 0;
+    LOGR("pickup test: player 1 (yaw %.0f) drops %08X (%s): %u", F(player + 0xBC), weapon, ClassName(weapon), ok & 0xFF);
+}
+}  // namespace
+
+// once a frame for each player (player 1's input handler's hook, src/bond/aim.cpp): a resting item it walks into is
+// pushed along
+void PickupTick(X86Context& ctx, uint32_t player, uint32_t index) {
+    if (Trace() && index == 0) {
+        static float every = 0;
+        if ((every -= std::clamp(F(kFrameTime), 0.0f, 0.1f)) <= 0) {
+            every = 5;
+            LOGR("pickup: tick player %08X edict %08X on %d free %d, %zu flying, %zu placed, level time %.1f; calls %u %u %u %u",
+                 player, EdictOf(player), On(), auf::PlayerFree(), g_items.size(), g_spawns.size(), F(kLevelTime), g_calls[0],
+                 g_calls[1], g_calls[2], g_calls[3]);
+        }
+    }
+    if (index >= 4 || !On() || !player || !EdictOf(player)) return;
+    LevelCheck();
+    if (index == 0) PickupTest(ctx, player);
+    const V at = GetV(player + 0xA8);
+    const V pv = GetV(player + 0x88);
+    const V flat{pv.x, pv.y, 0};
+    const float speed = Len(flat);
+    if (speed < 40) return;
+    const uint32_t base_g = kernel::R32(kGentities);
+    if (!base_g) return;
+    const float reach = std::max(F(player + 0x38), 16.0f) + 14;  // its box's half width and a little
+    const float feet = at.z + F(player + 0x30), head = at.z + F(player + 0x40);
+    for (uint32_t k = 1; k < kMaxEntities; k++) {
+        const uint32_t e = kernel::R32(base_g + k * kGentitySize + 0x278);
+        if (!e || e == player || g_items.count(e) || !InWorld(e)) continue;
+        const V c = GetV(e + 0xA8), d = c - at;
+        const V dflat{d.x, d.y, 0};
+        if (Len(dflat) > reach || c.z < feet - 24 || c.z > head || Dot(dflat, flat) <= 0) continue;
+        uint32_t seed = e ^ std::bit_cast<uint32_t>(F(kLevelTime));
+        const V push = flat * 1.15f + Norm(dflat) * 30 + V{0, 0, 70};
+        Take(e, push, V{(Unit01(seed) - 0.5f) * 300, (Unit01(seed) - 0.5f) * 600, (Unit01(seed) - 0.5f) * 300}, true,
+             "pushed by a player");
+    }
+}

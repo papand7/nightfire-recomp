@@ -21,6 +21,7 @@ bool hit_flash = true;
 bool aim_down_sights = true;
 bool weapon_sway = true;
 bool ragdolls = false;
+bool pickup_physics = true;
 bool photo_mode = true;
 uint32_t photo_key = 10;  // F10
 uint32_t restart_key = 0;
@@ -90,6 +91,7 @@ void Init() {
     if (const char* e = std::getenv("AUF_AUTO_AIM"); e && *e) auf::auto_aim = *e == '1';
     if (const char* e = std::getenv("AUF_HIT_FLASH"); e && *e) auf::hit_flash = *e == '1';
     if (const char* e = std::getenv("AUF_ADS"); e && *e) auf::aim_down_sights = *e == '1';
+    if (const char* e = std::getenv("AUF_SKIP_CUTSCENES"); e && *e) auf::skip_cutscenes = *e == '1';
     if (const char* e = std::getenv("AUF_FOV"); e && *e) auf::fov_percent = uint32_t(std::atoi(e));
     if (auf::skip_intro) LOGR("auf: the logo movies are skipped (skip_intro)");
     if (kDrv) gpu::g_draw_filter = DrivingFlashFilter;  // here, not a static initializer: those never ran in the Windows exe
@@ -227,6 +229,7 @@ const app::GameInfo app::kGame = {
                 {"tight_movement", &auf::tight_movement, nullptr, "Tight movement", "With the keyboard Bond starts and stops at once instead of easing as with a stick"},
                 {"photo_mode", &auf::photo_mode, nullptr, "Photo mode (F10)", "F10 stops the game and frees the camera: mouse to look, W A S D to move, Space and C up and down, Shift faster, Ctrl slower; [ and ] the field of view, , and . the focus distance, N and M the blur, B depth of field on or off, R as the game had them; F12 takes the picture, F10 again goes back"},
                 {"ragdolls", &auf::ragdolls, nullptr, "Ragdolls", "Enemies go limp and fall when they die, in place of the death animations. Only their look; off by default"},
+                {"pickup_physics", &auf::pickup_physics, nullptr, "Pickup physics", "Dropped weapons, ammo and pickups fly out with a toss and a spin, bounce, slide and come to rest; walking into one you cannot take nudges it, and explosions throw them. Off in network play"},
                 {"weapon_sway", &auf::weapon_sway, nullptr, "Weapon sway", "The gun trails your turns a little and settles back"},
                 {"modern_menus", &auf::modern_menus, nullptr, "Modern menus", "The menus and the pause drawn anew for the mouse, in the game's blues; off for the game's own"},
                 {"hit_flash", &auf::hit_flash, nullptr, "Hit flash", "The white flash on screen when Bond is hit. On by default; off for those it troubles"},

@@ -34,6 +34,24 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-12 - Pickup physics (bond_eng.xbe)
+- src/bond/pickup_physics.cpp, option pickup_physics (on; off in network play: NetPlay(), a stub as AUF has none).
+  Physics_Toss 0xD9E80 is hooked for items (found by the ClassDef name chain: "KA57 < MachineGun < Weapon < Gadget <
+  Item"; 0x33C4FC is a subclass's, not Item's): a drop (Weapon::Drop 0x79AB0 puts movetype 7, +-50 sideways, 90 up)
+  gets a toss (35-85 out, 100-160 up) and a spin, then our own step: the game's gravity 0xD8C70 (515), the move traced
+  with the item's box through gi.trace [0x32917C], bounce 0.35 with a scrape and a spin kick, ground friction, pitch
+  eased to 0 and roll to 0 (guns to +-90, on their side, lowered onto the floor), at rest movetype 0 as a placed item.
+  Item::DropToFloor 0xE0EF0 keeps each level item's spot; Item::Respawn 0xDFD20 puts a moved one back there first.
+  RadiusDamage 0xF7CE0 (inflictor edict +0x20 the centre) throws items in reach; a player moving into a resting item
+  (PickupTick, from aim.cpp's 0xBB990 hook) pushes it along.
+- Verified in Trouble in Paradise (AUF_MISSION=0, AUF_HIT_TEST=2, AUF_PICKUP_TRACE=1): the killed guards' KA57 and
+  P2KNS fly, bounce once or twice and rest 70-240 units away in 1.2-2.2 s; an explosion (AUF_PICKUP_TEST=2) throws a
+  resting KA57 157 units with 3 bounces; AUF_PICKUP_TEST=4: a FragGrenadeLauncher walked into is pushed 130 units, the
+  next one walked into is taken; AUF_PICKUP_TEST=3: a level item pushed 57 units is back at its spawn (0.0) on
+  respawn. Screenshot: a dropped KA57 resting on the floor. AUF_SKIP_CUTSCENES=0/1 added for these tests.
+- Gaps: an item tossed off a walkway into the sea (no floor below) is put back where it last lay; the Cold Reception
+  crash at 79 s under AUF_HIT_TEST=2 also happens with pickup physics off (the hit test kills cutscene characters).
+
 ### 2026-11-12 - Shader styles (Vulkan): Enhanced / Toon / Retro (stage 1 of the NightFire visual port)
 - app::Settings has a data-driven `fx[]` block (app.h `AUF_FX_LIST`, one line a setting: key, label, help, default,
   range, gate; settings.cpp loads/saves each as an integer by its key; overlay.cpp `FxRows` draws them under the Graphics

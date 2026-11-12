@@ -85,6 +85,7 @@ X86_FUNC(sub_000BB8A0) {
     const float dt = std::clamp(GetF(kFrameSeconds), 0.0f, 0.1f);
     g_aim[i] = std::clamp(g_aim[i] + (held ? dt : -dt) / kEase, 0.0f, 1.0f);
     if (i == 0) HitTestTick(ctx, p, dt);
+    PickupTick(ctx, p, i);
     __imp__sub_000BB8A0(ctx, base);
 }
 
