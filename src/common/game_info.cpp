@@ -22,6 +22,16 @@ bool aim_down_sights = true;
 bool weapon_sway = true;
 bool ragdolls = false;
 bool photo_mode = true;
+uint32_t photo_key = 10;  // F10
+uint32_t restart_key = 0;
+bool skip_cutscenes = false;
+bool tight_movement = false;  // off until tried in play
+const char* const kKeyNames[] = {"None", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
+                                 "Print Screen", "Pause", "Insert", "Delete", "Home", "End", nullptr};
+int KeyOf(uint32_t choice) {
+    static const int vks[] = {0, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7A, 0x7B, 0x2C, 0x13, 0x2D, 0x2E, 0x24, 0x23};
+    return choice < sizeof vks / sizeof vks[0] ? vks[choice] : 0;
+}
 float photo_fov = 1.0f;
 uint32_t fov_percent = 100;
 
@@ -65,6 +75,7 @@ void DrivingFlashFilter(const gpu::State& s, gpu::DrawAdjust& adjust) {
 
 // after the settings load: the harness's environment overrides them; each setting in effect is logged
 void Init() {
+    if (app::Get().discord_app_id.empty()) app::Get().discord_app_id = "1568872521061765140";  // 007 Remastered's Discord application
     // every achievement's condition parses (a typo would leave it never met)
     for (const achievements::Def& d : app::kGame.achievements)
         if (std::string e = achievements::Check(d.condition); !e.empty()) LOGE("auf: achievement %s: %s", d.id, e.c_str());
@@ -200,6 +211,10 @@ const app::GameInfo app::kGame = {
                 {"auto_aim", &auf::auto_aim, nullptr, "Auto-aim", "The game's aim assist, on foot and on mounted guns. Off by default"},
                 {"aim_down_sights", &auf::aim_down_sights, nullptr, "Aim down sights",
                  "The left trigger (right mouse) raises the gun to the middle and zooms in a little, instead of the game's manual aim. Scopes stay as they are"},
+                {"photo_key", nullptr, &auf::photo_key, "Photo mode key", "The key that starts and ends photo mode", auf::kKeyNames},
+                {"restart_key", nullptr, &auf::restart_key, "Restart mission key", "Restarts the mission at once, with no question", auf::kKeyNames},
+                {"skip_cutscenes", &auf::skip_cutscenes, nullptr, "Skip cutscenes", "A mission's cutscenes are skipped as they start. Off by default"},
+                {"tight_movement", &auf::tight_movement, nullptr, "Tight movement", "With the keyboard Bond starts and stops at once instead of easing as with a stick"},
                 {"photo_mode", &auf::photo_mode, nullptr, "Photo mode (F10)", "F10 stops the game and frees the camera: mouse to look, W A S D to move, Space and C up and down, Shift faster, Ctrl slower; [ and ] the field of view, , and . the focus distance, N and M the blur, B depth of field on or off, R as the game had them; F12 takes the picture, F10 again goes back"},
                 {"ragdolls", &auf::ragdolls, nullptr, "Ragdolls", "Enemies go limp and fall when they die, in place of the death animations. Only their look; off by default"},
                 {"weapon_sway", &auf::weapon_sway, nullptr, "Weapon sway", "The gun trails your turns a little and settles back"},

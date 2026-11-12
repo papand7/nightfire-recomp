@@ -18,6 +18,13 @@ extern bool skip_intro;
 extern bool uncapped;         // on foot paced by the frame rate cap, not the console's 30 (src/bond/framerate.cpp); driving at 60, not 50 (src/driving/hooks.cpp)
 extern bool hit_flash;        // the white flash when Bond is hit, on by default (src/bond/hooks.cpp)
 extern bool auto_aim;         // the game's auto-aim, off by default (src/bond/mouse.cpp, src/driving/mouse.cpp)
+extern uint32_t photo_key;       // photo mode's key, a choice of kKeyNames (F10)
+extern uint32_t restart_key;     // the mission restarted at once, a choice of kKeyNames (none)
+extern bool skip_cutscenes;      // a mission's cutscenes skipped as they start (src/bond/pc_extras.cpp)
+extern bool tight_movement;      // keyboard movement without the stick's slow start (src/bond/pc_extras.cpp)
+extern const char* const kKeyNames[];  // None, F1 .. F12, Print Screen, Pause, Insert, Delete, Home, End
+int KeyOf(uint32_t choice);      // the Windows virtual key of a kKeyNames choice, 0 none
+void BondFrame(X86Context& ctx, uint8_t* base);  // bond_eng.xbe once a frame: presence, the restart key
 extern float photo_fov;         // photo mode's field of view, a factor on top of fov_percent (1 outside it)
 extern bool photo_mode;        // F10 frees the camera (src/bond/photo_mode.cpp)
 extern bool ragdolls;          // dead enemies go limp and fall (src/bond/ragdoll.cpp), off by default

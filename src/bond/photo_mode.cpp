@@ -96,7 +96,7 @@ void Leave() {
 // Start), the view of the lowest pause owner flying
 void Toggle() {
     static bool was = false;
-    const bool down = Key(VK_F10);
+    const bool down = Key(auf::KeyOf(auf::photo_key));
     const bool several = kernel::R32(kPlayers) > 1;
     if (down && !was) {
         if (g.on) Leave();

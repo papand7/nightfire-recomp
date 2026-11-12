@@ -91,7 +91,7 @@ void Leave() {
 
 void Toggle() {
     static bool was = false;
-    const bool down = Key(VK_F10);
+    const bool down = Key(auf::KeyOf(auf::photo_key));
     if (down && !was) {
         if (g.on) Leave();
         else if (auf::photo_mode && !app::OverlayOpen() && !auf::MenuUp()) {

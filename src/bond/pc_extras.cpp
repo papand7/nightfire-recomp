@@ -1,0 +1,144 @@
+// PC extras in bond_eng.xbe: Discord presence, the restart key, skipping cutscenes, tight keyboard movement.
+//
+// Presence (app::SetPresence): the front end's state name ([[0x3B2414]+0x10] "frontend") is the menus; else the mission
+// [0x2A9F98] (0 to 11) at the difficulty [0x207320] (0 Operative, 1 Agent, 2 00 Agent), "Paused" while [0x3B2428].
+// Restart (auf::restart_key, a key from kKeys): the pause's Restart Mission is the menu action 0x1B, 0x33510 (cdecl, no
+// arguments: fade mode 4, the state reloaded by 0x33390 and 0x25C30); called in a mission, unpaused, with no fade under
+// way ([0x2A977C] 0), the key's press once.
+// Skip cutscenes (auf::skip_cutscenes): player think 0xBDA00 (thiscall player) runs a level's skip thread when a
+// cinematic is on (level +0x180, level 0x329480) and the player presses a button of [player+0x4D0] & 0x23; that press is
+// made once each cinematic, when its skip thread is named.
+// Tight movement (auf::tight_movement): Quake III's pmove 0xC7400 accelerates by pm_accelerate (10, 0x1E3160) and slows
+// by pm_friction (6, 0x1E3178); with the keyboard they are raised for player 1's move (a key is all or nothing: the
+// stick's slow start feels like lag) and put back after.
+#include "bond/addr.h"
+#include <cstring>
+#include <ctime>
+#include <string>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
+#include "app/app.h"
+#include "common/auf.h"
+#include "core/input.h"
+#include "core/log.h"
+#include "kernel/kernel.h"
+#include "xdk/hle.h"
+
+X86_EXTERN_FUNC(sub_00033510);
+
+namespace {
+constexpr uint32_t kMission = A(0x2A9F98), kDifficulty = A(0x207320), kState = A(0x3B2414), kPaused = A(0x3B2428);
+constexpr uint32_t kFade = A(0x2A977C), kLevel = A(0x329480);
+constexpr uint32_t kAccelerate = A(0x1E3160), kFriction = A(0x1E3178);
+
+const char* const kMissionNames[12] = {"Trouble in Paradise", "Precious Cargo", "Dangerous Pursuit", "Bad Diplomacy",
+                                       "Cold Reception", "Night of the Jackal", "Streets of Bucharest", "Fire & Water",
+                                       "Forbidden Depths", "Poseidon", "Mediterranean Crisis", "Evil Summit"};
+const char* const kDifficulties[3] = {"Operative", "Agent", "00 Agent"};
+
+bool InFrontend() {
+    const uint32_t state = kernel::R32(kState), name = state ? kernel::R32(state + 0x10) : 0;
+    return !state || (name && !std::strncmp(reinterpret_cast<const char*>(&kernel::G<uint8_t>(name)), "frontend", 8));
+}
+
+bool KeyDown(uint32_t choice) {
+#ifdef _WIN32
+    const int vk = auf::KeyOf(choice);
+    return vk && (GetAsyncKeyState(vk) & 0x8000) && GetForegroundWindow() == static_cast<HWND>(app::Window()) &&
+           !app::OverlayOpen();
+#else
+    (void)choice;
+    return false;
+#endif
+}
+
+void Presence() {
+    static std::string said;
+    static int64_t since = 0;
+    std::string details, state;
+    if (InFrontend()) details = "In the menus";
+    else {
+        const uint32_t m = kernel::R32(kMission), d = kernel::R32(kDifficulty);
+        details = std::string("Playing ") + (m < 12 ? kMissionNames[m] : "a mission");
+        state = d < 3 ? kDifficulties[d] : "";
+        if (kernel::R32(kPaused)) state += state.empty() ? "Paused" : ", paused";
+    }
+    const std::string key = details + "\n" + state;
+    if (key == said) return;
+    if (said.substr(0, said.find('\n')) != details) since = int64_t(std::time(nullptr));  // a new mission: its own time
+    said = key;
+    app::SetPresence(details, state, since);
+}
+
+void RestartKey(X86Context& ctx, uint8_t* base) {
+    static bool was = false;
+    const bool down = KeyDown(auf::restart_key);
+    if (down && !was && (InFrontend() || kernel::R32(kPaused) || kernel::R32(kFade) != 0))
+        LOGR("auf: the restart key refused: menus %d, paused %u, fade %u", InFrontend(), kernel::R32(kPaused), kernel::R32(kFade));
+    if (down && !was && !InFrontend() && !kernel::R32(kPaused) && kernel::R32(kFade) == 0) {
+        LOGR("auf: the restart key: the mission again");
+        X86_PUSH32(0x15DDF0u);  // no arguments: the return address only
+        sub_00033510(ctx, base);
+    }
+    was = down;
+}
+}  // namespace
+
+namespace auf {
+// once a frame (the full screen 2D pass's hook, src/bond/hooks.cpp)
+void BondFrame(X86Context& ctx, uint8_t* base) {
+    Presence();
+    RestartKey(ctx, base);
+}
+}  // namespace auf
+
+// a cinematic's skip, pressed once as it starts
+// the press once a cinematic's skip thread is set (the world's +0x20C, [0x33BCC4]): pressed at the very start, before
+// the script names it, the press is spent on nothing; a restarted level (its time [0x329490] going back) is a new one
+X86_EXTERN_FUNC(__imp__sub_000BDA00);
+X86_FUNC(sub_000BDA00) {
+    static bool pressed = false;
+    static float last_time = 0;
+    float now;
+    std::memcpy(&now, &kernel::G<uint32_t>(A(0x329490)), 4);
+    if (now < last_time) pressed = false;
+    last_time = now;
+    const bool cinematic = kernel::R32(kLevel + 0x180) != 0;
+    const uint32_t world = kernel::R32(A(0x33BCC4));
+    const bool skippable = world && kernel::R32(world + 0x20C) != 0;
+    if (!cinematic) pressed = false;
+    else if (auf::skip_cutscenes && skippable && !pressed && ctx.ecx) {
+        pressed = true;
+        kernel::G<uint32_t>(ctx.ecx + 0x4D0) |= 0x1;
+        LOGR("auf: a cutscene skipped (skip_cutscenes)");
+    }
+    __imp__sub_000BDA00(ctx, base);
+}
+
+// player movement: sharper with the keyboard
+X86_EXTERN_FUNC(__imp__sub_000C7400);
+X86_FUNC(sub_000C7400) {
+    const bool tight = auf::tight_movement && input::UsingKeyboard() && !auf::MenuUp();
+    float accelerate = 0, friction = 0;
+    if (tight) {
+        std::memcpy(&accelerate, &kernel::G<uint32_t>(kAccelerate), 4);
+        std::memcpy(&friction, &kernel::G<uint32_t>(kFriction), 4);
+        const float a = accelerate * 2.5f, f = friction * 1.7f;
+        std::memcpy(&kernel::G<uint32_t>(kAccelerate), &a, 4);
+        std::memcpy(&kernel::G<uint32_t>(kFriction), &f, 4);
+    }
+    __imp__sub_000C7400(ctx, base);
+    if (tight) {
+        std::memcpy(&kernel::G<uint32_t>(kAccelerate), &accelerate, 4);
+        std::memcpy(&kernel::G<uint32_t>(kFriction), &friction, 4);
+    }
+}
