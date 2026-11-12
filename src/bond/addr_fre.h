@@ -27,6 +27,7 @@
         case 0x358780: return 0x358FC0; \
         case 0x3587C4: return 0x359004; \
         case 0x3587FC: return 0x35903C; \
+        case 0x3B2200: return 0x3B2A40; \
         case 0x3B22D5: return 0x3B2B15; \
         case 0x3B2414: return 0x3B2C54; \
         case 0x3B2418: return 0x3B2C58; \
