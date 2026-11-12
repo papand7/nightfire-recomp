@@ -25,11 +25,15 @@
 // pickup test and the countdown go on.
 // Drops get a toss (0xA7F10's hook): up and out with a spin, random but the same for the same object and frame.
 // A resting pickup a player walks into (one it does not take: full ammo) is pushed along by the player's motion; an
-// explosion (0x690A0, src/game/fx.cpp) throws the pickups within its radius away from it.
+// explosion (0x690A0, src/game/fx.cpp) throws the pickups within its radius away from it. The level's own pickups
+// (made resting by the placement 0xA4BC0) too: each one's matrix when first seen resting is kept, and one taken goes
+// back there while hidden (state 2; the game's respawn, 0xA84D0's state 2, only shows it again), one lost (ending
+// off the ground or 150 m away) at once.
 // NF_PICKUP_PHYSICS=0/1 overrides the setting; NF_PICKUP_TRACE=1 logs each pickup taken, its bounces and its rest;
 // NF_PICKUP_TEST=<weapon> (diagnostic) drops that weapon (0xA7F10, 30 rounds) in front of player 1 every 4 s
 // (NF_PICKUP_TEST_AT=ahead,up metres; NF_PICKUP_TOSS=k scales the toss sideways; NF_PICKUP_BLAST=1 an explosion
-// beside each 2 s later) (the first 8 s into a level).
+// beside each 2 s later; the first 8 s into a level); NF_PICKUP_LEVEL_TEST=1 pushes the nearest level pickup,
+// takes it and follows its respawn.
 #include <algorithm>
 #include <bit>
 #include <cmath>
@@ -64,8 +68,20 @@ struct Item {
     V from;                     // its centre when taken
     int age = 0, still = 0, bounces = 0;
     bool resting = false;       // the game's state was 1 when we took it (pushed): it stays 1
+    bool lost = false;          // came to its end off the ground or far away
 };
 std::unordered_map<uint32_t, Item> g_items;
+
+// the level's own pickups' places (the matrix each had resting when first seen, before any push): one taken comes
+// back there when it respawns (state 2), one lost (off the ground, out of the level) at once. Forgotten with the level
+// (its id and its world)
+constexpr uint32_t kLevelId = 0x1F658C;
+struct Spawn {
+    uint32_t data = 0;
+    M m;
+};
+std::unordered_map<uint32_t, Spawn> g_spawns;
+uint32_t g_spawn_level = 0;
 
 bool Trace() {
     static const bool on = [] {
@@ -248,6 +264,7 @@ bool Step(X86Context& ctx, uint32_t obj, Item& it) {
         if (Trace()) LOGR("pickup: %08X left %.0f m from its start: given back", obj, Len(c - it.from));
         it.age = kMaxFrames;
     }
+    it.lost = !ground || Len(c - it.from) > 150;
     if (++it.age > kMaxFrames || it.still > kRestFrames) {
         if (ground) Put(obj, Flatten(Matrix(obj), gn, 1.0f), c);  // lying flat
         SetF(it.data + 0, 0), SetF(it.data + 4, 0), SetF(it.data + 8, 0);
@@ -290,7 +307,6 @@ void TrackPlayers() {
 // a resting pickup a player walks into: pushed along (true: it is ours now)
 bool Pushed(uint32_t obj, uint32_t data, V& vel, V& spin) {
     if (kernel::G<uint32_t>(obj + 0xCC) & 0x10) return false;  // hidden (taken, waiting)
-    if (kernel::G<uint16_t>(data + 0x24)) return false;  // a respawning pickup keeps its place
     TrackPlayers();
     const V c{F(obj + 0x60), F(obj + 0x64), F(obj + 0x68)};
     for (const Mover& mv : g_movers) {
@@ -320,7 +336,23 @@ X86_FUNC(sub_000A84D0) {  // a pickup's think (cdecl: the object)
     const uint32_t data = R32(obj + kActor), frame = R32(kFrameCounter);
     const uint32_t state_va = data + 0x18;
     const uint16_t state = kernel::G<uint16_t>(state_va);
+    // a level started (its id, or its world [0x1F6674] made anew on a restart): its pickups' places anew
+    if (const uint32_t level = R32(kLevelId) ^ (R32(0x1F6674) * 0x9E3779B1u); level != g_spawn_level)
+        g_spawns.clear(), g_spawn_level = level;
     auto found = g_items.find(obj);
+    auto spawn = g_spawns.find(obj);
+    // (an object made anew: another pickup)
+    if (spawn != g_spawns.end() && spawn->second.data != data)
+        g_spawns.erase(spawn), spawn = g_spawns.end();
+    if (spawn == g_spawns.end() && state == 1 && found == g_items.end()) {  // resting where the level put it
+        spawn = g_spawns.emplace(obj, Spawn{data, Matrix(obj)}).first;
+    }
+    if (state == 2 && spawn != g_spawns.end() && Len(Matrix(obj).t - spawn->second.m.t) > 0.01f) {
+        // taken and waiting to respawn (hidden): back to its place now, so it reappears there
+        const M& m = spawn->second.m;
+        Put(obj, m, m.t + Rows(LocalCentre(obj), m.r));
+        if (Trace()) LOGR("pickup: %08X taken: back to its spawn at %.2f %.2f %.2f for its respawn", obj, m.t.x, m.t.y, m.t.z);
+    }
     if (found != g_items.end() && (found->second.data != data || state == 2 || frame - found->second.seen > 30)) {
         g_items.erase(found);
         found = g_items.end();
@@ -360,6 +392,11 @@ X86_FUNC(sub_000A84D0) {  // a pickup's think (cdecl: the object)
         return;
     }
     if (rests) {
+        if (it.lost && spawn != g_spawns.end()) {  // a level pickup lost: back to its place
+            const M& m = spawn->second.m;
+            Put(obj, m, m.t + Rows(LocalCentre(obj), m.r));
+            if (Trace()) LOGR("pickup: %08X lost: back to its spawn at %.2f %.2f %.2f", obj, m.t.x, m.t.y, m.t.z);
+        }
         g_items.erase(obj);
         if (!resting) kernel::CallGuest(ctx, 0xA1310, {obj});  // the game's landing: its multiplayer slot
         return;
@@ -400,7 +437,7 @@ void PickupBlast(const float pos[3], float radius) {
     for (uint32_t o = R32(0x1DF34C); Plausible(o) && n < 4096; o = R32(o + 0x14), n++) {
         if (kernel::G<uint8_t>(o + 0xDB) != kClass || (kernel::G<uint32_t>(o + 0xCC) & 0x10)) continue;
         const uint32_t data = R32(o + kActor);
-        if (!Plausible(data) || kernel::G<uint16_t>(data + 0x18) == 2 || kernel::G<uint16_t>(data + 0x24)) continue;
+        if (!Plausible(data) || kernel::G<uint16_t>(data + 0x18) == 2) continue;
         const V c{F(o + 0x60), F(o + 0x64), F(o + 0x68)};
         const V d = c - at;
         const float dist = Len(d);
@@ -421,6 +458,68 @@ void PickupBlast(const float pos[3], float radius) {
     }
 }
 
+// NF_PICKUP_LEVEL_TEST=1 (diagnostic): 5 s into a level the level pickup nearest player 1 is pushed (as a player's
+// push, 4 m/s away from player 1), 4 s later taken as the game takes a respawning one (state 2, hidden, its time at
+// +0xC8; a respawn time of 1 if it had none), then followed until the game shows it again: where, against its spawn
+void LevelTest(X86Context& ctx) {
+    static const bool on = [] {
+        const char* e = std::getenv("NF_PICKUP_LEVEL_TEST");
+        return e && *e == '1';
+    }();
+    static uint32_t frames = 0, obj = 0, data = 0;
+    if (!on || !On() || MenuUp()) return;
+    (void)ctx;
+    ++frames;
+    const uint32_t me = R32(kPlayers);
+    if (!Plausible(me)) return;
+    const V at{F(me + kPos), F(me + kPos + 4), F(me + kPos + 8)};
+    if (frames == 300) {
+        float best = 1e9f;
+        int count = 0;
+        int n = 0;
+        for (uint32_t o = R32(0x1DF34C); Plausible(o) && n < 4096; o = R32(o + 0x14), n++) {
+            if (kernel::G<uint8_t>(o + 0xDB) != kClass || !g_spawns.count(o)) continue;
+            const uint32_t d = R32(o + kActor);
+            if (!Plausible(d) || kernel::G<uint16_t>(d + 0x18) != 1 || (kernel::G<uint32_t>(o + 0xCC) & 0x10)) continue;
+            count++;
+            const float dist = Len(V{F(o + 0x60), F(o + 0x64), F(o + 0x68)} - at);
+            if (dist < best) best = dist, obj = o, data = d;
+        }
+        LOGR("pickup level test: %d level pickups resting; the nearest %08X at %.1f m", count, obj, best);
+        if (!obj) return;
+        LOGR("pickup level test: %08X item %u type %u ammo %u respawn %u, spawn %.2f %.2f %.2f", obj,
+             kernel::G<uint16_t>(data + 0x1C), kernel::G<uint16_t>(data + 0x1A), kernel::G<uint16_t>(data + 0x1E),
+             kernel::G<uint16_t>(data + 0x24), F(obj + 0xA0), F(obj + 0xA4), F(obj + 0xA8));
+        const V c{F(obj + 0x60), F(obj + 0x64), F(obj + 0x68)};
+        const V away = Unit(V{c.x - at.x, 0, c.z - at.z});
+        Start(obj, g_items[obj], away * 4.0f + V{0, 1.5f, 0}, Cross(V{0, 1, 0}, away) * 6.0f, true);
+        return;
+    }
+    if (!obj || R32(obj + kActor) != data || kernel::G<uint8_t>(obj + 0xDB) != kClass) return;
+    const auto sp = g_spawns.find(obj);
+    const V spawn = sp != g_spawns.end() ? sp->second.m.t : V{};
+    const V now{F(obj + 0xA0), F(obj + 0xA4), F(obj + 0xA8)};
+    const uint16_t state = kernel::G<uint16_t>(data + 0x18);
+    const bool hidden = kernel::G<uint32_t>(obj + 0xCC) & 0x10;
+    if (frames == 540) {
+        LOGR("pickup level test: %08X pushed to %.2f %.2f %.2f, %.2f m from its spawn (state %u); taken now", obj, now.x,
+             now.y, now.z, Len(now - spawn), state);
+        if (!kernel::G<uint16_t>(data + 0x24)) kernel::G<uint16_t>(data + 0x24) = 1;
+        kernel::G<uint16_t>(data + 0x18) = 2;
+        kernel::G<uint32_t>(obj + 0xCC) |= 0x10;
+        kernel::G<uint32_t>(obj + 0xC8) = R32(0x1F65B4);
+        return;
+    }
+    if (frames > 540 && frames % 30 == 0) {
+        LOGR("pickup level test: %08X state %u%s at %.2f %.2f %.2f, %.2f m from its spawn", obj, state,
+             hidden ? " hidden" : "", now.x, now.y, now.z, Len(now - spawn));
+        if (state == 1 && !hidden) {
+            LOGR("pickup level test: %08X respawned %s", obj, Len(now - spawn) < 0.01f ? "at its spawn" : "ELSEWHERE");
+            obj = 0;
+        }
+    }
+}
+
 // NF_PICKUP_TEST=<weapon> (diagnostic): that weapon dropped (0xA7F10, 30 rounds) 2 m in front of player 1 and 1.3 m
 // up, every 4 s (from the 2D pass); when its model is not in the level, the next weapon whose model is
 void PickupTest(X86Context& ctx) {
@@ -429,6 +528,7 @@ void PickupTest(X86Context& ctx) {
         return e && *e ? std::atoi(e) : 0;
     }();
     static uint32_t frames = 0, last = 0;
+    LevelTest(ctx);
     if (weapon <= 0 || MenuUp()) return;
     ++frames;
     // NF_PICKUP_BLAST=1: 2 s after each drop an explosion (0x690A0, radius 2) 1 m past where it lies

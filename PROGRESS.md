@@ -2,6 +2,18 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-12: pickup physics for the level's own pickups (respawn at the spawn)
+
+- Pushes (walking into one you cannot take) and explosions now move the level's placed pickups too (0xA4BC0 makes
+  them resting, state 1), not only drops. Each pickup's matrix when first seen resting is kept (forgotten when the
+  level id or its world [0x1F6674] changes); when one is taken and waits to respawn (state 2, hidden) it is put back
+  there at once, so the game's respawn (state 2 -> 1 after +0x24 * 600 ticks of [0x1F65B4]) shows it at its spawn. One
+  that ends its flight off the ground or 150 m away goes straight back too. Off in network/LAN play as before.
+- Checked (The Exchange, NF_PICKUP_LEVEL_TEST=1, .local/pkl1.log): 4 level pickups found; the nearest (item 6, type 3)
+  pushed 2.35 m, taken as the game takes one (state 2, hidden, +0xC8 the time, respawn time 1) and put back at once at
+  72.79 5.04 78.71; the game showed it again 16 s later there, 0.00 m from its spawn. Story pickups have respawn 0
+  (taken ones are removed); respawning ones are the multiplayer's, not played here.
+
 ## 2026-11-12: pickup physics (dropped weapons, ammo and pickups)
 
 - Settings `pickup_physics` (settings.toml, F1 options and the launcher's Controls > Gameplay; default on; off in network
