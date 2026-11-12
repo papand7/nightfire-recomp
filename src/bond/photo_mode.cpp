@@ -1,5 +1,6 @@
 // Photo mode (auf::photo_mode, on foot, one player): F10 stops the game and frees the camera: the mouse looks, W A S D
-// move, Space and C go up and down, Shift faster, Ctrl slower; the HUD, the menus and the gun are hidden, so F12
+// move, Space and C go up and down, Shift faster, Ctrl slower; [ and ] the field of view, , and . the focus distance, N and
+// M the blur, B depth of field on or off, R all as the game had them; the HUD, the menus and the gun are hidden, so F12
 // (the screenshot key) takes the picture. F10 again leaves it: the game as it was.
 //
 // The game stays in its pause ([0x3B2428], set here when F10 came during play): the game step 0x293B0 is skipped
@@ -42,6 +43,9 @@ constexpr float kPi = 3.14159265f, kSpeed = 220.0f, kTurn = 160.0f;  // units, d
 
 struct Photo {
     bool on = false, paused_here = false, seeded = false;
+    float fov = 1.0f;  // a factor on the game's field of view
+    bool had_dof = false;
+    uint32_t had_focus = 10, had_blur = 6;
     float x = 0, y = 0, z = 0, pitch = 0, yaw = 0;
     uint32_t draw_2d = 1, draw_gun = 1;
     std::chrono::steady_clock::time_point last{};
@@ -60,7 +64,9 @@ void Enter() {
     g.paused_here = kernel::R32(kPaused) == 0;
     if (g.paused_here) kernel::G<uint32_t>(kPaused) = 1;
     g.draw_2d = kernel::R32(kDraw2D), g.draw_gun = kernel::R32(kDrawGun);
-    g.on = true, g.seeded = false;
+    g.on = true, g.seeded = false, g.fov = 1.0f;
+    app::Settings& st = app::Get();  // depth of field is the photo mode's own while it lasts: put back on leaving
+    g.had_dof = st.depth_of_field, g.had_focus = st.focus_distance, g.had_blur = st.dof_blur;
     g.last = std::chrono::steady_clock::now();
     LOGR("auf: photo mode");
 }
@@ -68,6 +74,8 @@ void Enter() {
 void Leave() {
     kernel::G<uint32_t>(kDraw2D) = g.draw_2d, kernel::G<uint32_t>(kDrawGun) = g.draw_gun;
     if (g.paused_here) kernel::G<uint32_t>(kPaused) = 0;
+    app::Settings& st = app::Get();
+    st.depth_of_field = g.had_dof, st.focus_distance = g.had_focus, st.dof_blur = g.had_blur;
     g.on = false;
     float x, y;
     input::TakeMouse(x, y);  // what moved meanwhile is not the game's
@@ -86,6 +94,32 @@ void Toggle() {
     was = down;
 }
 
+// the picture's own controls, one press at a time (held keys repeat at the frame rate): [ ] the field of view, , . the
+// focus distance, N M the blur, B depth of field on and off, R all as the game had them
+void Controls(float dt) {
+    app::Settings& st = app::Get();
+    static bool was_b = false, was_r = false;
+    const float fov_rate = 0.6f * dt;
+    if (Key(0xDB)) g.fov = std::clamp(g.fov - fov_rate, 0.3f, 2.0f);  // [ narrower
+    if (Key(0xDD)) g.fov = std::clamp(g.fov + fov_rate, 0.3f, 2.0f);  // ] wider
+    static float focus = 0, blur = 0;
+    focus = std::clamp(float(st.focus_distance) + (Key(0xBE) - Key(0xBC)) * 30.0f * dt, 1.0f, 100.0f);  // , nearer . further
+    if (Key(0xBC) || Key(0xBE)) st.focus_distance = uint32_t(focus + 0.5f);
+    blur = std::clamp(float(st.dof_blur) + (Key('M') - Key('N')) * 6.0f * dt, 0.0f, 12.0f);  // N less M more
+    if (Key('N') || Key('M')) st.dof_blur = uint32_t(blur + 0.5f);
+    const bool b = Key('B'), r = Key('R');
+    if (b && !was_b) {
+        st.depth_of_field = !st.depth_of_field;
+        LOGR("auf: photo mode: depth of field %s", st.depth_of_field ? "on" : "off");
+    }
+    if (r && !was_r) {
+        g.fov = 1.0f;
+        st.depth_of_field = g.had_dof, st.focus_distance = g.had_focus, st.dof_blur = g.had_blur;
+        LOGR("auf: photo mode: field of view, depth of field as the game had them");
+    }
+    was_b = b, was_r = r;
+}
+
 void Fly(uint32_t m) {
     float* f = reinterpret_cast<float*>(&kernel::G<uint32_t>(m));
     if (!g.seeded) {  // from where the game's camera is
@@ -97,6 +131,7 @@ void Fly(uint32_t m) {
     const auto now = std::chrono::steady_clock::now();
     const float dt = std::clamp(std::chrono::duration<float>(now - g.last).count(), 0.0f, 0.1f);
     g.last = now;
+    Controls(dt);
     float mx = 0, my = 0;
     if (input::TakeMouse(mx, my)) {
         g.yaw -= mx * kTurn * dt;
@@ -125,6 +160,8 @@ X86_FUNC(sub_0015D5A0) {
             else {
                 kernel::G<uint32_t>(kDraw2D) = 0, kernel::G<uint32_t>(kDrawGun) = 0;
                 Fly(kernel::R32(ctx.esp + 8));
+                float& fov = *reinterpret_cast<float*>(&kernel::G<uint32_t>(kRefdef + 0x2D4));  // radians, set before this call
+                fov = std::clamp(fov * g.fov, 0.15f, 2.7f);
             }
         }
     }
