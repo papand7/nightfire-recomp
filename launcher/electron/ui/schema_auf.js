@@ -46,6 +46,22 @@ window.SCHEMA_AUF = [
     {
         id: 'effects', title: 'Effects', icon: 'palette', groups: [
             {
+                title: 'Shader style', items: [
+                    { f: 's', key: 'shader_style', label: 'Shader style', def: 0, options: pick([0, 'Original'], [1, 'Enhanced'], [2, 'Toon'], [3, 'Retro']) },
+                    { f: 's', key: 'tonemap', label: 'Tone mapping', def: 0, options: pick([0, 'Off'], [1, 'Filmic'], [2, 'Reinhard']), help: 'With a style other than Original.' },
+                    { f: 's', key: 'style_clarity', label: 'Clarity (Enhanced)', def: 30, type: 'range', min: 0, max: 100, step: 5, unit: '%' },
+                    { f: 's', key: 'toon_bands', label: 'Lighting bands (Toon)', def: 4, type: 'range', min: 2, max: 12, step: 1 },
+                    { f: 's', key: 'toon_outline', label: 'Outline thickness (Toon)', def: 15, type: 'range', min: 0, max: 60, step: 1 },
+                    { f: 's', key: 'toon_inner_lines', label: 'Inner lines (Toon)', def: 1, options: pick([1, 'On'], [0, 'Off']) },
+                    { f: 's', key: 'toon_edge_threshold', label: 'Edge threshold (Toon)', def: 20, type: 'range', min: 2, max: 100, step: 2, unit: '%' },
+                    { f: 's', key: 'toon_halftone', label: 'Halftone (Toon)', def: 0, type: 'range', min: 0, max: 100, step: 5, unit: '%' },
+                    { f: 's', key: 'retro_pixel', label: 'Pixel size (Retro)', def: 3, type: 'range', min: 1, max: 8, step: 1 },
+                    { f: 's', key: 'retro_color_bits', label: 'Colour depth (Retro)', def: 5, type: 'range', min: 2, max: 8, step: 1, unit: ' bits' },
+                    { f: 's', key: 'retro_dither', label: 'Ordered dithering (Retro)', def: 1, options: pick([1, 'On'], [0, 'Off']) },
+                    { f: 's', key: 'retro_tint', label: 'Retro grading', def: 40, type: 'range', min: 0, max: 100, step: 5, unit: '%' },
+                ],
+            },
+            {
                 title: 'Style', items: [
                     { f: 's', key: 'color_style', label: 'Colour style', def: 0, options: pick([0, 'Original'], [1, 'Enhanced colour'], [2, 'Toon'], [3, 'Retro'], [4, 'Noir']) },
                     { f: 's', key: 'bloom', label: 'Bloom', def: 0, type: 'range', min: 0, max: 100, step: 5, unit: '%' },
