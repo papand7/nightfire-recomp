@@ -89,6 +89,9 @@ struct ModernAction {
 void ModernMenuPublish(const ModernPage& page);  // the game's thread, each frame in the menus
 bool ModernMenuAction(ModernAction& a);          // the game's thread: the UI's next click
 bool ModernMenuActive();                         // modern menus on and a page up
+void ModernMenuTestClick(uint32_t row, int control);  // a test's click (AUF_PAD): row from 1 (0 none), control or -1
+void ModernMenuSeen();                           // a page of rows has been up (AUF_PAD's clock starts)
+bool ModernMenuWasSeen();
 void ModernMenuFonts(void* hwnd);                // GameInfo::window
 void ModernMenuUi(double fps);                   // GameInfo::ui
 void ModernMenuFrame(X86Context& ctx, uint8_t* base, uint32_t file);  // bond_eng.xbe: the menu file read each frame

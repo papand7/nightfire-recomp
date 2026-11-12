@@ -4,20 +4,31 @@
 // file's pad reader, src/bond/pointer.cpp) the page up is read as it is now and handed to the UI, and the UI's clicks
 // are played as the game's own: the focus moved onto the item (0x37AD0 off the old one, 0x37A30 onto the new, the
 // page's +0x60), then the press through the page's handler 0x40A00 (file, event: 0 left, 1 right, 4 A, 5 B).
-// A page (file +0x44): items at +0x5C, +0x54 of them, 0xDC each, the current one +0x60; an item's texts are a chain
-// from +0xB0 (0x2CC each, the string at +0x24, y +0x94, the next at +0x2C8): the first its label, a second its value.
-// The page's own texts (+0x2C, +0x24 of them) that no item's chain holds are its title (the topmost) and its lines;
-// the pause's tab strip is the page's plain texts (+8, +0 of them, 0x278 each) at y 113, the red one (+0xA4 over 0.6)
-// the tab showing. Pages of one item or of items all in one place (Select Mission's carousel, the multiplayer choices,
-// a briefing) stay the game's own. While a page is up the game's menu texts are not drawn: the item texts (0x36730),
-// the plain texts (0x5B750), the bands (0x350A0) and the highlight (0x36090, 0x36950, 0x369B0), all cdecl.
-// AUF_MM_DUMP=1 logs each page's rows as they change.
+//
+// A page (file +0x44, drawn by 0x38320): plain texts +0 (count) and +8 (0x278 each, 0x5B750), bands +0xC and +0x14
+// (0x1C4 each, 0x350A0), pictures +0x3C and +0x44 (0x1F4 each, 0x373A0), items +0x54 and +0x5C (0xDC each), the current
+// one +0x60. An item (flag 1 at +0xD8: not shown) has a chain of texts from +0xB0 (0x2CC each, the next +0x2C8; drawn
+// by 0x36730), of bands from +0xBC (the next +0x204) and of pictures from +0xC4 (the next +0x1F0): its label the first
+// text, its value a second. What a text shows is made as it is drawn (a choice's word picked from a comma list by
+// +0x23C and +0x244, numbers printed into it, a marquee's window), so the strings are taken where they are drawn: every
+// text's draw (0x36730, 0x5B750) is followed down to the glyph call 0x443E0 (cdecl: font, x, y, the string, ...),
+// whose string is kept for the text, and left undrawn while a modern page is up. The main menu's rows are pictures
+// (textures/interface/fe/main_icons, a row of it each 20 texels high: +0xB0 its top), named here.
+// The page's title is its topmost plain text, the help line its lowest; the pause's tab strip the plain texts at y 113,
+// the red one (+0xA4 over 0.6) the tab showing. Pages of one item or of items all in one place (Select Mission's
+// carousel, the multiplayer choices, a briefing) stay the game's own. While a modern page is up the game's menu texts,
+// the items' bands and pictures and the highlight (0x36090, 0x36950, 0x369B0) are not drawn; the backgrounds, movies
+// and the Bond figure (0x41A60) are.
+// AUF_MM_DUMP=1 logs each page's records and rows as they change.
 #include "bond/addr.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "common/auf.h"
 #include "core/input.h"
@@ -31,10 +42,20 @@ X86_EXTERN_FUNC(sub_00039CC0);
 X86_EXTERN_FUNC(sub_00040A00);
 
 namespace {
-constexpr uint32_t kItemSize = 0xDC, kTextSize = 0x2CC, kPlainSize = 0x278;
+constexpr uint32_t kItemSize = 0xDC, kTextSize = 0x2CC, kPlainSize = 0x278, kBandSize = 0x1C4, kPicSize = 0x1F4;
 constexpr uint32_t kEventLeft = 0, kEventRight = 1, kEventA = 4, kEventB = 5;
+#if defined(AUF_LANG_FRE)
+constexpr int kLang = 1;
+#elif defined(AUF_LANG_GER)
+constexpr int kLang = 2;
+#else
+constexpr int kLang = 0;
+#endif
 
-bool g_hiding = false;  // a modern page is up this frame: the game's menu texts left out
+bool g_hiding = false;      // a modern page is up this frame: the game's menu drawing replaced
+uint32_t g_capture = 0;     // the text being drawn: its strings kept
+std::unordered_map<uint32_t, std::string> g_drawn;  // a text record -> what it last drew
+std::unordered_set<uint32_t> g_owned;  // the items' bands and pictures of the modern page up: not drawn
 
 // a guest pointer the game's heap could hold (null and the low pages are not)
 bool Plausible(uint32_t va) { return va >= 0x10000 && va < 0xF0000000u; }
@@ -48,7 +69,7 @@ std::string Str(uint32_t at, size_t most = 255) {
     const char* p = reinterpret_cast<const char*>(&kernel::G<uint8_t>(at));
     return std::string(p, strnlen(p, most));
 }
-// the game's strings carry button marks and colour codes: the readable words only
+// the game's strings carry colour codes: the readable words only (button marks, ~A and the like, stay for the UI)
 std::string Clean(std::string s) {
     std::string o;
     for (size_t i = 0; i < s.size(); i++) {
@@ -57,11 +78,17 @@ std::string Clean(std::string s) {
             i++;
             continue;
         }
-        if (c >= 32) o += char(c);
+        if (c >= 32 || c == '\t') o += char(c);
     }
-    while (!o.empty() && o.back() == ' ') o.pop_back();
+    while (!o.empty() && (o.back() == ' ' || o.back() == ':')) o.pop_back();
     while (!o.empty() && o.front() == ' ') o.erase(o.begin());
     return o;
+}
+// what a text showed when last drawn, else its string
+std::string Shown(uint32_t text) {
+    if (GetF(text + 0x248) > 0) return Clean(Str(text + 0x24));  // a marquee draws a window of it
+    auto d = g_drawn.find(text);
+    return Clean(d != g_drawn.end() ? d->second : Str(text + 0x24));
 }
 
 // cdecl calls, as src/bond/pointer.cpp makes them: the arguments, the return address (the callee's ret takes it)
@@ -84,54 +111,195 @@ bool Trace() {
     return on;
 }
 
+// the main menu's rows: rows of textures/interface/fe/main_icons, 20 texels each
+const char* MainIcon(uint32_t pic) {
+    if (Str(pic + 0x48, 64).find("main_icons") == std::string::npos) return nullptr;
+    static const char* const kNames[3][5] = {
+        {"Select Mission", "Load Mission", "Save Mission", "Multiplayer", "Options"},
+        {"Choisir une mission", "Charger une mission", "Sauvegarder une mission", "Multijoueur", "Options"},
+        {"Mission w\xC3\xA4hlen", "Mission laden", "Mission speichern", "Mehrspieler", "Optionen"}};
+    const int row = int(std::lround(GetF(pic + 0xB0) / 20));
+    return row >= 0 && row < 5 ? kNames[kLang][row] : nullptr;
+}
+const char* MainTitle() {
+    static const char* const kTitle[3] = {"Main Menu", "Menu principal", "Hauptmen\xC3\xBC"};
+    return kTitle[kLang];
+}
+
+// where an item stands: its first text's place, else its first picture's
+bool Where(uint32_t item, float& x, float& y) {
+    const uint32_t t = kernel::R32(item + 0xB0), p = kernel::R32(item + 0xC4);
+    if (Plausible(t)) {
+        const bool k = kernel::R32(t + 0x8C) == 1;  // mode 1: fractions of 640x480
+        x = GetF(t + 0x90) * (k ? 640 : 1), y = GetF(t + 0x94) * (k ? 480 : 1);
+        return true;
+    }
+    if (Plausible(p)) {
+        const bool k = kernel::R32(p + 0x90) == 1;
+        x = GetF(p + 0x94) * (k ? 640 : 1), y = GetF(p + 0x98) * (k ? 480 : 1);
+        return true;
+    }
+    return false;
+}
+
 // the page as rows; false when it is one the game keeps drawing itself
 bool Read(uint32_t page, auf::ModernPage& out) {
-    const uint32_t count = kernel::R32(page + 0x54), list = kernel::R32(page + 0x5C), current = kernel::R32(page + 0x60);
-    if (count < 2 || count > 64 || !Plausible(list)) return false;
-    // all in one place: a carousel (an item without a text: a picture, the game's own page)
-    const uint32_t t0 = kernel::R32(list + 0xB0), t1 = kernel::R32(list + kItemSize + 0xB0);
-    if (!Plausible(t0) || !Plausible(t1)) return false;
-    if (std::fabs(GetF(t0 + 0x94) - GetF(t1 + 0x94)) < 1 && std::fabs(GetF(t0 + 0x90) - GetF(t1 + 0x90)) < 1) return false;
+    uint32_t count = kernel::R32(page + 0x54);
+    const uint32_t list = kernel::R32(page + 0x5C), current = kernel::R32(page + 0x60);
+    if (count > 64 || !Plausible(list)) count = 0;
+    // the pause's tab strip: its plain texts at y 113
+    const uint32_t nplain = std::min<uint32_t>(kernel::R32(page + 0), 64), plains = kernel::R32(page + 8);
+    for (uint32_t i = 0; Plausible(plains) && i < nplain; i++) {
+        const uint32_t t = plains + i * kPlainSize;
+        const std::string s = Clean(Str(t + 0x24));
+        if (s.empty() || GetF(t + 0xB0) <= 0 || kernel::R32(t + 0x8C) == 1 || std::fabs(GetF(t + 0x94) - 113) > 2) continue;
+        if (GetF(t + 0xA4) > 0.6f) out.tab = int(out.tabs.size());
+        out.tabs.push_back(s);
+    }
+    if (out.tabs.size() < 2) out.tabs.clear(), out.tab = -1;
+    if (count < 2 && out.tabs.empty()) return false;
+    // all in one place: a carousel, the game's own page
+    if (count >= 2) {
+        float x0, y0, x1, y1;
+        if (!Where(list, x0, y0) || !Where(list + kItemSize, x1, y1)) return false;
+        if (std::fabs(y0 - y1) < 1 && std::fabs(x0 - x1) < 1) return false;
+    }
     out.page = page;
-    std::vector<uint32_t> held;  // the texts the items hold
+    bool main_menu = false;
+    std::unordered_set<uint32_t> owned;
     for (uint32_t i = 0; i < count; i++) {
         const uint32_t item = list + i * kItemSize;
+        for (uint32_t b = kernel::R32(item + 0xBC), k = 0; Plausible(b) && k < 16; b = kernel::R32(b + 0x204), k++) owned.insert(b);
+        for (uint32_t p = kernel::R32(item + 0xC4), k = 0; Plausible(p) && k < 16; p = kernel::R32(p + 0x1F0), k++) owned.insert(p);
+        if (kernel::R32(item + 0xD8) & 1) continue;  // not shown
         auf::ModernRow r;
         r.id = i + 1;
-        uint32_t t = kernel::R32(item + 0xB0);
-        for (int k = 0; Plausible(t) && k < 4; k++, t = kernel::R32(t + 0x2C8)) {
-            held.push_back(t);
-            const std::string s = Clean(Str(t + 0x24));
-            if (k == 0) r.label = s;
-            else if (k == 1 && !s.empty()) r.value = s, r.kind = auf::kModernChoice;
+        // the texts left to right: the label, then the value (a choice's word stands first in some chains)
+        std::vector<std::pair<float, std::string>> said;
+        for (uint32_t t = kernel::R32(item + 0xB0), k = 0; Plausible(t) && k < 6; t = kernel::R32(t + 0x2C8), k++) {
+            const std::string s = Shown(t);
+            if (s.empty()) continue;
+            said.push_back({GetF(t + 0x90) * (kernel::R32(t + 0x8C) == 1 ? 640 : 1), s});
         }
-        if (r.label.empty()) r.label = r.value, r.value.clear(), r.kind = auf::kModernButton;
+        std::stable_sort(said.begin(), said.end(), [](const auto& a, const auto& b) { return a.first < b.first - 4; });
+        if (said.empty()) {
+            const uint32_t pic = kernel::R32(item + 0xC4);
+            const char* name = Plausible(pic) ? MainIcon(pic) : nullptr;
+            if (!name) continue;  // nothing to call it
+            main_menu = true;
+            said.push_back({0, name});
+        }
+        r.label = said[0].second;
+        if (said.size() >= 2) {
+            r.value = said[1].second;
+            for (size_t k = 2; k < said.size(); k++) r.value += "  " + said[k].second;
+            if (r.value.size() >= 4 && r.value.compare(0, 2, "< ") == 0 && r.value.compare(r.value.size() - 2, 2, " >") == 0)
+                r.value = r.value.substr(2, r.value.size() - 4);  // its own arrows: the UI draws them
+            r.kind = auf::kModernChoice;
+        }
+        // a volume: a page model bound (+0x234 0x4E) to the music's (+0x238 16) or the effects' (17), its fill's width
+        // (+0x58) 228 at the most, on the row's line
+        if (r.kind == auf::kModernButton && Plausible(kernel::R32(item + 0xB0))) {
+            const uint32_t t = kernel::R32(item + 0xB0);
+            const float ty = GetF(t + 0x94) * (kernel::R32(t + 0x8C) == 1 ? 480 : 1);
+            const uint32_t nother = std::min<uint32_t>(kernel::R32(page + 0x18), 64), others = kernel::R32(page + 0x20);
+            for (uint32_t m = 0; Plausible(others) && m < nother; m++) {
+                const uint32_t o = others + m * 0x2E4;
+                const uint32_t what = kernel::R32(o + 0x238);
+                if (kernel::R32(o + 0x234) != 0x4E || (what != 16 && what != 17)) continue;
+                if (std::fabs(GetF(o + 0x50) + GetF(o + 0x5C) * 0.5f - ty) > 24) continue;
+                const int pct = std::clamp(int(std::lround(GetF(o + 0x58) / 228 * 100)), 0, 100);
+                r.kind = auf::kModernSlider;
+                r.slider_value = uint32_t(pct), r.slider_max = 100;
+                r.value = std::to_string(pct) + "%";
+                break;
+            }
+        }
+        // a slider: a band drawn the width of its value (+0x1FC) over its most (+0x1F8)
+        for (uint32_t b = kernel::R32(item + 0xBC), k = 0; Plausible(b) && k < 16 && r.kind == auf::kModernButton; b = kernel::R32(b + 0x204), k++) {
+            const int v = int(kernel::R32(b + 0x1FC)), most = int(kernel::R32(b + 0x1F8));
+            if (kernel::R32(b + 0x1F4) && most > 0 && most <= 1000 && v >= 0 && v <= most) {
+                r.kind = auf::kModernSlider;
+                r.slider_value = uint32_t(v), r.slider_max = uint32_t(most);
+                r.value = std::to_string(v * 100 / most) + "%";
+            }
+        }
         r.focused = item == current;
         if (r.focused) out.focus = int(out.rows.size());
         out.rows.push_back(r);
     }
-    // the title: the topmost of the page's own texts no item holds
-    const uint32_t ntexts = std::min<uint32_t>(kernel::R32(page + 0x24), 64), texts = kernel::R32(page + 0x2C);
-    float top = 1e9f;
-    for (uint32_t i = 0; Plausible(texts) && i < ntexts; i++) {
-        const uint32_t t = texts + i * kTextSize;
-        if (std::find(held.begin(), held.end(), t) != held.end()) continue;
-        const std::string s = Clean(Str(t + 0x24));
-        if (s.empty()) continue;
-        const float y = GetF(t + 0x94);
-        if (y < top) top = y, out.title = s;
+    if (out.rows.size() < 2 && out.tabs.empty()) return false;
+    if (Trace()) {
+        const uint32_t nother = std::min<uint32_t>(kernel::R32(page + 0x18), 64), others = kernel::R32(page + 0x20);
+        static std::string said;
+        std::string now;
+        for (uint32_t i = 0; Plausible(others) && i < nother; i++) {
+            const uint32_t o = others + i * 0x2E4;
+            if (kernel::R32(o + 0x234) != 0x4E) continue;
+            char b[96];
+            std::snprintf(b, sizeof b, "[%u: y %.1f w %.2f u %.2f-%.2f] ", kernel::R32(o + 0x238), GetF(o + 0x50), GetF(o + 0x58),
+                          GetF(o + 0x64), GetF(o + 0x6C));
+            now += b;
+        }
+        if (now != said) said = now, LOGR("modern menu: bound models %s", now.c_str());
     }
-    // the pause's tabs
-    const uint32_t nplain = std::min<uint32_t>(kernel::R32(page + 0), 16), plains = kernel::R32(page + 8);
+    // the button pictures' lines (the page's models of interface/buttons and the pause's pause_tex2): the words beside
+    // them (BACK, SELECT ...) are the UI's own line's
+    std::vector<float> button_ys;
+    const uint32_t nmodel = std::min<uint32_t>(kernel::R32(page + 0x18), 64), models = kernel::R32(page + 0x20);
+    for (uint32_t m = 0; Plausible(models) && m < nmodel; m++) {
+        const uint32_t o = models + m * 0x2E4;
+        const std::string name = Str(o + 4, 96);
+        if (name.find("interface/buttons/") == std::string::npos && name.find("pause_tex2") == std::string::npos) continue;
+        button_ys.push_back(GetF(o + 0x50) * (kernel::R32(o + 0x48) == 1 ? 480 : 1) + GetF(o + 0x5C) * 0.5f);
+    }
+    // the rest of the page's plain texts: the title (the topmost; the tab showing on the pause), then lines of text, a
+    // line's parts left to right (a "label :" starts a pair of its own)
+    struct Plain {
+        float x, y;
+        std::string s;
+        bool label;
+    };
+    std::vector<Plain> rest;
     for (uint32_t i = 0; Plausible(plains) && i < nplain; i++) {
         const uint32_t t = plains + i * kPlainSize;
-        if (std::fabs(GetF(t + 0x94) - 113) > 2) continue;
-        const std::string s = Clean(Str(t + 0x24));
-        if (s.empty()) continue;
-        if (GetF(t + 0xA4) > 0.6f) out.tab = int(out.tabs.size());
-        out.tabs.push_back(s);
+        const std::string raw = Str(t + 0x24);
+        std::string s = Clean(raw);  // its whole string: a title types itself in
+        if (s.empty()) s = Shown(t);
+        if (s.empty() || GetF(t + 0xB0) <= 0) continue;  // nothing, or not shown
+        const bool frac = kernel::R32(t + 0x8C) == 1;
+        const float x = GetF(t + 0x90) * (frac ? 640 : 1), y = GetF(t + 0x94) * (frac ? 480 : 1);
+        if (!frac && std::fabs(y - 113) <= 2 && !out.tabs.empty()) continue;  // a tab
+        if (s.find('~') != std::string::npos) {  // the button line
+            out.prompt = s;
+            continue;
+        }
+        if (std::any_of(button_ys.begin(), button_ys.end(), [&](float by) { return std::fabs(by - y) < 20; })) continue;
+        const size_t end = raw.find_last_not_of(' ');
+        rest.push_back({x, y, s, end != std::string::npos && raw[end] == ':'});
     }
+    if (!out.tabs.empty()) {  // the pause's own frame: its tab strip and boxes (the page's bands) left out too
+        const uint32_t nband = std::min<uint32_t>(kernel::R32(page + 0xC), 64), bands = kernel::R32(page + 0x14);
+        for (uint32_t b = 0; Plausible(bands) && b < nband; b++) owned.insert(bands + b * kBandSize);
+    }
+    if (out.tab >= 0) {
+        out.title = out.tabs[out.tab];
+    } else if (!rest.empty()) {
+        auto top = std::min_element(rest.begin(), rest.end(), [](const Plain& a, const Plain& b) { return a.y < b.y; });
+        out.title = top->s;
+        rest.erase(top);
+    }
+    std::stable_sort(rest.begin(), rest.end(), [](const Plain& a, const Plain& b) {
+        return std::fabs(a.y - b.y) > 4 ? a.y < b.y : a.x < b.x;
+    });
+    for (size_t k = 0; k < rest.size(); k++) {
+        const bool same = k > 0 && std::fabs(rest[k].y - rest[k - 1].y) <= 4 && !rest[k].label;
+        if (same && !out.texts.empty()) out.texts.back() += "\t" + rest[k].s;
+        else out.texts.push_back(rest[k].s);
+    }
+    if (out.title.empty() && main_menu) out.title = MainTitle();
     out.up = true;
+    g_owned = std::move(owned);
     return true;
 }
 
@@ -161,51 +329,89 @@ void Play(X86Context& ctx, uint8_t* base, uint32_t file, uint32_t page) {
         }
     }
 }
+
+void Dump(uint32_t page) {
+    const uint32_t count = std::min<uint32_t>(kernel::R32(page + 0x54), 32), list = kernel::R32(page + 0x5C);
+    LOGR("modern menu: page %08X, %u items, current %08X", page, count, kernel::R32(page + 0x60));
+    for (uint32_t i = 0; Plausible(list) && i < count; i++) {
+        const uint32_t item = list + i * kItemSize;
+        std::string w;
+        for (uint32_t t = kernel::R32(item + 0xB0), k = 0; Plausible(t) && k < 6; t = kernel::R32(t + 0x2C8), k++) {
+            char b[96];
+            std::snprintf(b, sizeof b, " [%.0f,%.0f list %u/%d slider %d]", GetF(t + 0x90), GetF(t + 0x94), kernel::R32(t + 0x23C),
+                          int(kernel::R32(t + 0x244)), int(kernel::R32(t + 0x2AC)));
+            w += " \"" + Str(t + 0x24, 80) + "\" -> \"" + Shown(t) + "\"" + b;
+        }
+        const uint32_t pic = kernel::R32(item + 0xC4);
+        LOGR("modern menu:  item %u flags %X help %d pic %s:%s", i, kernel::R32(item + 0xD8), int(kernel::R32(item + 0xAC)),
+             Plausible(pic) ? Str(pic + 0x48, 64).c_str() : "-", w.c_str());
+    }
+    const uint32_t nplain = std::min<uint32_t>(kernel::R32(page + 0), 64), plains = kernel::R32(page + 8);
+    for (uint32_t i = 0; Plausible(plains) && i < nplain; i++) {
+        const uint32_t t = plains + i * kPlainSize;
+        LOGR("modern menu:  plain %u at %.0f,%.0f mode %u alpha %.2f red %.2f: \"%s\" -> \"%s\"", i, GetF(t + 0x90), GetF(t + 0x94),
+             kernel::R32(t + 0x8C), GetF(t + 0xB0), GetF(t + 0xA4), Str(t + 0x24, 80).c_str(), Shown(t).c_str());
+    }
+    auto band = [](const char* what, uint32_t i, uint32_t b) {
+        LOGR("modern menu:  %s %u at %08X mode %u %.2f,%.2f %.2fx%.2f layer %u type %u flags %u/%u/%u/%u tex %08X", what, i, b,
+             kernel::R32(b + 0x14), GetF(b + 0x18), GetF(b + 0x1C), GetF(b + 0x20), GetF(b + 0x24), kernel::R32(b + 0x1C0),
+             kernel::R32(b + 0x44), kernel::R32(b + 0x1F0), kernel::R32(b + 0x1F4), kernel::R32(b + 0x1F8), kernel::R32(b + 0x1FC),
+             kernel::R32(b + 0));
+    };
+    const uint32_t nband = std::min<uint32_t>(kernel::R32(page + 0xC), 64), bands = kernel::R32(page + 0x14);
+    for (uint32_t i = 0; Plausible(bands) && i < nband; i++) band("band", i, bands + i * kBandSize);
+    for (uint32_t i = 0; Plausible(list) && i < count; i++)
+        for (uint32_t b = kernel::R32(list + i * kItemSize + 0xBC), k = 0; Plausible(b) && k < 8; b = kernel::R32(b + 0x204), k++)
+            band("item band", i, b);
+    const uint32_t nother = std::min<uint32_t>(kernel::R32(page + 0x18), 64), others = kernel::R32(page + 0x20);
+    for (uint32_t i = 0; Plausible(others) && i < nother; i++) {
+        const uint32_t o = others + i * 0x2E4;
+        LOGR("modern menu:  model %u at %08X layer %u %.2f,%.2f %.0fx%.0f bound %X/%u: %s", i, o, kernel::R32(o + 0x84), GetF(o + 0x4C),
+             GetF(o + 0x50), GetF(o + 0x58), GetF(o + 0x5C), kernel::R32(o + 0x234), kernel::R32(o + 0x238), Str(o + 4, 64).c_str());
+    }
+    const uint32_t npic = std::min<uint32_t>(kernel::R32(page + 0x3C), 64), pics = kernel::R32(page + 0x44);
+    for (uint32_t i = 0; Plausible(pics) && i < npic; i++) {
+        const uint32_t p = pics + i * kPicSize;
+        LOGR("modern menu:  picture %u at %.2f,%.2f size %.0fx%.0f: %s", i, GetF(p + 0x94), GetF(p + 0x98), GetF(p + 0xA0),
+             GetF(p + 0xA4), Str(p + 0x48, 64).c_str());
+    }
+}
 }  // namespace
 
 namespace auf {
 void ModernMenuFrame(X86Context& ctx, uint8_t* base, uint32_t file) {
     g_hiding = false;
-    if (!modern_menus || !file) return;
+    if (!file) return;
     const uint32_t page = kernel::R32(file + 0x44);
     if (!page) return;
-    ModernPage p;
-    if (Trace()) {  // each new page's items: their texts and pictures, printable runs in the records
-        static uint32_t dumped = 0;
-        if (dumped != page) {
+    if (kernel::R32(page + 0x54) >= 2) ModernMenuSeen();
+    if (!modern_menus) return;
+    if (Trace()) {  // each page a moment after it opens (its texts drawn once by then)
+        static uint32_t dumped = 0, seen = 0;
+        static int frames = 0;
+        if (page != seen) seen = page, frames = 0;
+        if (++frames == 20 && dumped != page) {
             dumped = page;
-            const uint32_t count = std::min<uint32_t>(kernel::R32(page + 0x54), 16), list = kernel::R32(page + 0x5C);
-            LOGR("modern menu: page %08X, %u items", page, count);
-            auto runs = [](uint32_t at, uint32_t len) {
-                std::string o, cur;
-                for (uint32_t k = 0; k < len; k++) {
-                    const char c = char(kernel::G<uint8_t>(at + k));
-                    if (c >= 32 && c < 127) cur += c;
-                    else {
-                        if (cur.size() >= 4) o += "[" + std::to_string(k - cur.size()) + "]" + cur + " ";
-                        cur.clear();
-                    }
-                }
-                return o;
-            };
-            for (uint32_t i = 0; Plausible(list) && i < count; i++) {
-                const uint32_t item = list + i * kItemSize, t = kernel::R32(item + 0xB0), pic = kernel::R32(item + 0xC4);
-                LOGR("modern menu:  item %u text %08X pic %08X: %s | %s", i, t, pic, Plausible(t) ? runs(t, 0x2CC).c_str() : "",
-                     Plausible(pic) ? runs(pic, 0x1F4).c_str() : "");
-            }
+            Dump(page);
         }
     }
+    ModernPage p;
     if (!Read(page, p)) {
+        g_owned.clear();
         ModernMenuPublish(ModernPage{});
         return;
     }
     if (Trace()) {
-        static uint32_t said = 0;
-        static size_t said_rows = 0;
-        if (said != page || said_rows != p.rows.size()) {
-            said = page, said_rows = p.rows.size();
-            LOGR("modern menu: page %08X \"%s\", %zu rows, tabs %zu", page, p.title.c_str(), p.rows.size(), p.tabs.size());
-            for (const ModernRow& r : p.rows) LOGR("modern menu:   %u \"%s\" \"%s\"", r.id, r.label.c_str(), r.value.c_str());
+        static std::string said;
+        std::string now = p.title + "|" + p.help + "|" + std::to_string(p.tab);
+        for (const ModernRow& r : p.rows) now += "|" + r.label + "=" + r.value;
+        for (const std::string& t : p.texts) now += "|" + t;
+        if (now != said) {
+            said = now;
+            LOGR("modern menu: page %08X \"%s\" help \"%s\" prompt \"%s\", %zu rows, tab %d of %zu", page, p.title.c_str(),
+                 p.help.c_str(), p.prompt.c_str(), p.rows.size(), p.tab, p.tabs.size());
+            for (const std::string& t : p.texts) LOGR("modern menu:   text \"%s\"", t.c_str());
+            for (const ModernRow& r : p.rows) LOGR("modern menu:   %u%s \"%s\" \"%s\"", r.id, r.focused ? "*" : "", r.label.c_str(), r.value.c_str());
         }
     }
     g_hiding = true;
@@ -214,41 +420,82 @@ void ModernMenuFrame(X86Context& ctx, uint8_t* base, uint32_t file) {
 }
 }  // namespace auf
 
-// the game's menu texts, left out while a modern page is up (each cdecl, a plain ret)
+// the game's menu drawing, left out while a modern page is up (each cdecl, a plain ret)
 namespace {
 bool Hide() { return g_hiding && auf::ModernMenuActive() && auf::MenuUp(); }
 }  // namespace
 
+// a text's draw: what it draws kept (0x443E0 below)
 X86_EXTERN_FUNC(__imp__sub_00036730);
 X86_FUNC(sub_00036730) {
-    if (Hide()) {
-        ctx.eax = 0;
-        ctx.esp += 4;
-        return;
-    }
+    const bool outer = !g_capture;
+    if (outer) g_capture = kernel::R32(ctx.esp + 4), g_drawn[g_capture].clear();
     __imp__sub_00036730(ctx, base);
+    if (outer) g_capture = 0;
 }
 
 X86_EXTERN_FUNC(__imp__sub_0005B710);
 X86_FUNC(sub_0005B710) {
-    if (Hide()) {
-        ctx.eax = 0;
-        ctx.esp += 4;
-        return;
-    }
+    const bool outer = !g_capture;
+    if (outer) g_capture = kernel::R32(ctx.esp + 4), g_drawn[g_capture].clear();
     __imp__sub_0005B710(ctx, base);
+    if (outer) g_capture = 0;
 }
 
+// the glyphs: (font, x, y, string, -1, colour, mode)
+X86_EXTERN_FUNC(__imp__sub_000443E0);
+X86_FUNC(sub_000443E0) {
+    if (g_capture) {
+        const uint32_t s = kernel::R32(ctx.esp + 16);
+        if (Plausible(s)) {
+            std::string& d = g_drawn[g_capture];
+            if (!d.empty()) d += ' ';
+            d += Str(s);
+        }
+        if (Hide()) {
+            ctx.esp += 4;
+            return;
+        }
+    }
+    __imp__sub_000443E0(ctx, base);
+}
+
+// a band: the items' own left out
 X86_EXTERN_FUNC(__imp__sub_000350A0);
 X86_FUNC(sub_000350A0) {
-    if (Hide()) {
-        ctx.eax = 0;
+    if (Hide() && g_owned.count(kernel::R32(ctx.esp + 4))) {
         ctx.esp += 4;
         return;
     }
     __imp__sub_000350A0(ctx, base);
 }
 
+// a picture: the items' own left out (the main menu's icons, the chevrons)
+X86_EXTERN_FUNC(__imp__sub_000373A0);
+X86_FUNC(sub_000373A0) {
+    if (Hide() && g_owned.count(kernel::R32(ctx.esp + 4))) {
+        ctx.esp += 4;
+        return;
+    }
+    __imp__sub_000373A0(ctx, base);
+}
+
+// a page's model (0x2E4 bytes, its texture's name at +4): the button pictures of the prompt line and the menu's own
+// marks (fe/asset1: arrows, sliders) left out; the backgrounds, silhouettes and logos drawn
+X86_EXTERN_FUNC(__imp__sub_00035A50);
+X86_FUNC(sub_00035A50) {
+    if (Hide()) {
+        const std::string name = Str(kernel::R32(ctx.esp + 4) + 4, 96);
+        if (name.find("interface/buttons/") != std::string::npos || name.find("fe/asset1") != std::string::npos ||
+            name.find("pause_tex2") != std::string::npos) {
+            ctx.esp += 4;
+            return;
+        }
+    }
+    __imp__sub_00035A50(ctx, base);
+}
+
+// the highlight
 X86_EXTERN_FUNC(__imp__sub_00036090);
 X86_FUNC(sub_00036090) {
     if (Hide()) {

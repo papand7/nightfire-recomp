@@ -7,6 +7,7 @@
 // go back (B), the keyboard and controllers drive the game as they always do, and the bars follow its focus. The game's own
 // menu texts are not drawn meanwhile (src/bond/modern_menu_frame.cpp).
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -26,7 +27,7 @@
 
 namespace auf {
 
-bool modern_menus = false;  // off until the pages are all read (main menu icons, Options labels): on in settings.toml to try
+bool modern_menus = true;  // the default; off in the settings window or settings.toml for the game's own menus
 
 namespace {
 std::mutex g_lock;
@@ -65,6 +66,19 @@ bool ModernMenuAction(ModernAction& a) {
     a = g_actions.front();
     g_actions.pop_front();
     return true;
+}
+
+namespace {
+std::atomic<bool> g_seen{false};
+}
+void ModernMenuSeen() { g_seen.store(true, std::memory_order_relaxed); }
+bool ModernMenuWasSeen() { return g_seen.load(std::memory_order_relaxed); }
+
+void ModernMenuTestClick(uint32_t row, int control) {
+    std::lock_guard lock(g_lock);
+    if (!g_page.up) return;
+    const uint32_t id = row >= 1 && row <= g_page.rows.size() ? g_page.rows[row - 1].id : 0;
+    g_actions.push_back({id, control, g_page.page, false, 0});
 }
 
 bool ModernMenuActive() {
@@ -264,6 +278,7 @@ void ModernMenuUi(double) {
     int hover = -1;
     bool over_ui = ImGui::GetIO().WantCaptureMouse;  // the settings window (F1) open over it
     dl->PushClipRect({0, top - 4 * s}, {W, bottom + 4 * s}, true);
+    const int rows_from = dl->VtxBuffer.Size;
     for (int i = 0; i < n; i++) {
         const ModernRow& r = page.rows[i];
         float y = top + i * (rh + gap) - scroll;
@@ -319,6 +334,16 @@ void ModernMenuUi(double) {
         dl->AddRect(a, b, IM_COL32(255, 200, 70, 220), 10 * s, 0, 2 * s);
         dl->AddRectFilled({a.x, a.y + 10 * s}, {a.x + 6 * s, b.y - 10 * s}, kCyan, 3 * s);
     }
+    // more above or below: the rows fade out at the edge they go on past
+    for (int k = rows_from; k < dl->VtxBuffer.Size; k++) {
+        ImDrawVert& v = dl->VtxBuffer[k];
+        float f = 1;
+        if (scroll > 1) f = std::min(f, (v.pos.y - (top - 4 * s)) / (48 * s));
+        if (scroll < most - 1) f = std::min(f, (bottom + 4 * s - v.pos.y) / (48 * s));
+        if (f >= 1) continue;
+        const uint32_t a = (v.col >> IM_COL32_A_SHIFT) & 0xFF;
+        v.col = (v.col & ~IM_COL32_A_MASK) | (uint32_t(float(a) * std::clamp(f, 0.0f, 1.0f)) << IM_COL32_A_SHIFT);
+    }
     dl->PopClipRect();
     if (content_t < 1) {
         const float ct = 1 - (1 - content_t) * (1 - content_t), dy = (1 - ct) * 20 * s;  // eased out
@@ -346,12 +371,6 @@ void ModernMenuUi(double) {
             dl->VtxBuffer[k].pos.x += shift_x;
             dl->VtxBuffer[k].pos.y += shift_y;
         }
-    // more above or below: a fade
-    if (scroll > 1) dl->AddRectFilledMultiColor({0, top - 4 * s}, {pw, top + 40 * s}, IM_COL32(5, 14, 36, 230),
-                                                IM_COL32(5, 14, 36, 230), IM_COL32(5, 14, 36, 0), IM_COL32(5, 14, 36, 0));
-    if (scroll < most - 1)
-        dl->AddRectFilledMultiColor({0, bottom - 40 * s}, {pw, bottom + 4 * s}, IM_COL32(5, 14, 36, 0),
-                                    IM_COL32(5, 14, 36, 0), IM_COL32(5, 14, 36, 230), IM_COL32(5, 14, 36, 230));
 
     // the split screen's agents: four cards on the right, the first the keyboard's and controller 1's
     if (page.agents.size() >= 2) {

@@ -10,6 +10,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
+#include <cstring>
 
 #include "common/auf.h"
 #include "core/input.h"
@@ -58,6 +60,53 @@ void ForcedPoll() {
         g_forced.x = x, g_forced.y = y, g_forced.buttons = b;
         e += used;
         if (*e == ',') e++;
+    }
+}
+
+void Press(input::Pad& p, int c);
+
+// AUF_PAD=secs:what,... a test's presses in bond_eng.xbe (Start pressed until the main menu is up), timed from then: what a control's settings name
+// (start, a, dpad_down ...) held 150 ms, or a modern menu row's click: mN (A on row N), mNl / mNr (left / right on it),
+// mNf (only focus it), mb (back)
+void ScriptedPoll(input::Pad& p) {
+    static const char* e = std::getenv("AUF_PAD");
+    if (!e || !*e || kImage != kBond) return;
+    using namespace std::chrono;
+    // until the main menu is up Start is pressed every 2 s (the title screen); the clock starts with it
+    static steady_clock::time_point t0{};
+    static const auto boot = steady_clock::now();
+    if (!ModernMenuWasSeen()) {
+        const double b = duration<double>(steady_clock::now() - boot).count();
+        if (b > 4 && std::fmod(b, 2.0) < 0.15) Press(p, input::kStart);
+        return;
+    }
+    if (t0 == steady_clock::time_point{}) t0 = steady_clock::now();
+    const double t = duration<double>(steady_clock::now() - t0).count();
+    static size_t done = 0;  // the steps already played (each click once)
+    const char* s = e;
+    size_t k = 0;
+    double at;
+    char what[32];
+    int used;
+    while (std::sscanf(s, "%lf:%31[^,]%n", &at, what, &used) == 2) {
+        s += used;
+        if (*s == ',') s++;
+        if (t < at) break;
+        if (what[0] == 'm' && (what[1] == 'b' || (what[1] >= '0' && what[1] <= '9'))) {
+            if (k++ < done) continue;
+            done = k;
+            int row = what[1] == 'b' ? 0 : std::atoi(what + 1);
+            const char last = what[std::strlen(what) - 1];
+            const int c = what[1] == 'b' ? input::kB : last == 'l' ? input::kLeft : last == 'r' ? input::kRight
+                                                       : last == 'f' ? -1 : input::kA;
+            LOGR("auf: test click row %d control %d", row, c);
+            ModernMenuTestClick(uint32_t(row), c);
+            continue;
+        }
+        k++;
+        if (t >= at + 0.15) continue;
+        const int c = input::ControlByName(what);
+        if (c >= 0) Press(p, c);
     }
 }
 
@@ -124,6 +173,7 @@ void MenuMouse(int port, input::Pad& p) {
     static bool was_menu = false;
     int notches = input::TakeWheel();  // taken in play too, so none wait for the next menu
     ForcedPoll();
+    ScriptedPoll(p);
     uint32_t held = PointerButtons();
     using namespace std::chrono;
     int64_t now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
