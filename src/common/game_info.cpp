@@ -26,6 +26,13 @@ uint32_t photo_key = 10;  // F10
 uint32_t restart_key = 0;
 bool skip_cutscenes = false;
 bool tight_movement = false;  // off until tried in play
+bool weapon_keys = true;
+uint32_t previous_weapon_key = 26;  // Z
+uint32_t controller_scheme = 0;     // Setup 1
+const char* const kLetterKeyNames[] = {"None", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N",
+                                       "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", nullptr};
+int LetterKeyOf(uint32_t choice) { return choice >= 1 && choice <= 26 ? int('A' + choice - 1) : 0; }
+const char* const kSchemeNames[] = {"Setup 1", "Setup 2", "Setup 3", "Setup 4", nullptr};
 const char* const kKeyNames[] = {"None", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
                                  "Print Screen", "Pause", "Insert", "Delete", "Home", "End", nullptr};
 int KeyOf(uint32_t choice) {
@@ -109,10 +116,10 @@ std::array<uint16_t, 2> ShooterKeys(int c) {
         case kB: return {'G', kBackspace};   // use gadget; back in the menus
         case kWhite: return {'Q', 0};        // cycle weapon
         case kBlack: return {'F', kMouseMiddle};  // alt. fire
-        case kUp: return {kArrowUp, '3'};    // the d-pad: up and down the weapon, left and right the gadget (tried in play: right
-        case kDown: return {kArrowDown, '1'};  // Q-Laser, Q-Claw; down the gun); 1 the next weapon, 3 the one before, 2 the next
-        case kLeft: return {kArrowLeft, 0};    // gadget, the wheel the weapon (src/common/menu_mouse.cpp)
-        case kRight: return {kArrowRight, '2'};
+        case kUp: return {kArrowUp, 0};      // the d-pad: up and down the weapon, left and right the gadget (tried in play: right
+        case kDown: return {kArrowDown, 0};  // Q-Laser, Q-Claw; down the gun). The number keys 1 to 9 pick the weapon in that place
+        case kLeft: return {kArrowLeft, 0};  // (auf::weapon_keys, src/bond/weapon_keys.cpp), so they are not the d-pad's any more;
+        case kRight: return {kArrowRight, 0};  // the wheel the weapon (src/common/menu_mouse.cpp)
         case kBack: return {kTab, 'V'};      // center view
         case kStart: return {kEscape, 'P'};
         default: return {0, 0};
@@ -213,6 +220,9 @@ const app::GameInfo app::kGame = {
                  "The left trigger (right mouse) raises the gun to the middle and zooms in a little, instead of the game's manual aim. Scopes stay as they are"},
                 {"photo_key", nullptr, &auf::photo_key, "Photo mode key", "The key that starts and ends photo mode", auf::kKeyNames},
                 {"restart_key", nullptr, &auf::restart_key, "Restart mission key", "Restarts the mission at once, with no question", auf::kKeyNames},
+                {"weapon_keys", &auf::weapon_keys, nullptr, "Number keys pick weapons", "1 to 9 select the weapon in that place of the inventory (the order the weapon button cycles in); the key of the weapon in hand does nothing"},
+                {"previous_weapon_key", nullptr, &auf::previous_weapon_key, "Previous weapon key", "Back to the weapon held before this one", auf::kLetterKeyNames},
+                {"controller_scheme", nullptr, &auf::controller_scheme, "Keyboard controller setup", "Which of the game's four controller setups the keyboard and mouse play (the keys are laid out for Setup 1); pads keep the setup chosen in the game's menu", auf::kSchemeNames},
                 {"skip_cutscenes", &auf::skip_cutscenes, nullptr, "Skip cutscenes", "A mission's cutscenes are skipped as they start. Off by default"},
                 {"tight_movement", &auf::tight_movement, nullptr, "Tight movement", "With the keyboard Bond starts and stops at once instead of easing as with a stick"},
                 {"photo_mode", &auf::photo_mode, nullptr, "Photo mode (F10)", "F10 stops the game and frees the camera: mouse to look, W A S D to move, Space and C up and down, Shift faster, Ctrl slower; [ and ] the field of view, , and . the focus distance, N and M the blur, B depth of field on or off, R as the game had them; F12 takes the picture, F10 again goes back"},

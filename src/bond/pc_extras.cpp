@@ -11,8 +11,16 @@
 // Tight movement (auf::tight_movement): Quake III's pmove 0xC7400 accelerates by pm_accelerate (10, 0x1E3160) and slows
 // by pm_friction (6, 0x1E3178); with the keyboard they are raised for player 1's move (a key is all or nothing: the
 // stick's slow start feels like lag) and put back after.
+// Weapon keys (auf::weapon_keys, auf::previous_weapon_key): the player is [[0x329390]+0x278]: weapon +0x2EC, inventory count
+// +0x318. The cycle 0xB4810 walks the inventory with the vfuncs +0x9C (first, 3 args) and +0xC0 (item, 0: next); an item with
+// byte +0x395 is a gadget, 0xAF770 (thiscall player, item) says it may be selected. Choosing a weapon is what the cycle does:
+// +0x444 and +0x440 the item, +0x458 the level's time; the think then selects it (vfunc +0x1C0). The key 1 to 9 takes the nth
+// selectable weapon of that walk.
 #include "bond/addr.h"
+#include <algorithm>
+#include <cstdlib>
 #include <cstring>
+#include <initializer_list>
 #include <ctime>
 #include <string>
 
@@ -91,6 +99,101 @@ void RestartKey(X86Context& ctx, uint8_t* base) {
     }
     was = down;
 }
+
+// ---- weapon keys
+uint32_t GuestCall(X86Context& ctx, uint32_t ecx, uint32_t fn, std::initializer_list<uint32_t> args) {
+    const uint32_t saved = ctx.ecx;
+    ctx.ecx = ecx;
+    const uint32_t r = kernel::CallGuest(ctx, fn, args);
+    ctx.ecx = saved;
+    return r;
+}
+
+// the weapons the cycle would offer, in its order
+int Weapons(X86Context& ctx, uint32_t player, uint32_t* out, int most) {
+    const uint32_t vt = kernel::R32(player), count = std::min<uint32_t>(kernel::R32(player + 0x318), 64);
+    uint32_t item = GuestCall(ctx, player, kernel::R32(vt + 0x9C), {0, 0, 0});
+    int n = 0;
+    const uint32_t first = item;
+    for (uint32_t i = 0; i < count && item && n < most; i++) {
+        if (!kernel::G<uint8_t>(item + 0x395) && (GuestCall(ctx, player, A(0xAF770), {item}) & 0xFF)) out[n++] = item;
+        item = GuestCall(ctx, player, kernel::R32(vt + 0xC0), {item, 0});
+        if (item == first) break;
+    }
+    return n;
+}
+
+// Headless or without a desktop: AUF_KEY_TEST=frame:key,... holds that key (a vk, or a digit or letter) for 8 weapon frames from
+// the frame on (a frame is a call of the player's think)
+bool Injected(int vk, uint32_t frame) {
+    static const char* e = std::getenv("AUF_KEY_TEST");
+    for (const char* p = e; p && *p;) {
+        char* end;
+        const unsigned long at = std::strtoul(p, &end, 10);
+        if (*end != ':') break;
+        if (end[1] == vk && frame >= at && frame < at + 8) return true;
+        p = std::strchr(end, ',');
+        if (p) p++;
+    }
+    return false;
+}
+uint32_t g_frame = 0;
+
+bool Held(int vk) {
+    if (Injected(vk, g_frame)) return true;
+#ifdef _WIN32
+    return vk && (GetAsyncKeyState(vk) & 0x8000) && GetForegroundWindow() == static_cast<HWND>(app::Window()) && !app::OverlayOpen();
+#else
+    (void)vk;
+    return false;
+#endif
+}
+
+void WeaponKeys(X86Context& ctx, uint32_t player) {
+    g_frame++;
+    static uint32_t current = 0, previous = 0;
+    static bool was[10] = {};
+    static uint32_t check_at = 0, check_for = 0;
+    if (check_at && g_frame >= check_at) {
+        LOGR("auf: weapon in hand %08X after the key (wanted %08X)", kernel::R32(player + 0x2EC), check_for);
+        check_at = 0;
+    }
+    const uint32_t now = kernel::R32(player + 0x2EC);
+    if (now && now != current) {
+        if (current) previous = current;
+        current = now;
+    }
+    if (!InFrontend() && kernel::R32(kPaused) == 0 && !auf::MenuUp() && input::UsingKeyboard() &&
+        kernel::R32(player + 0x1C0) == 0 && kernel::R32(player + 0x2F0) == 0 && now && kernel::R32(now + 0x3D4) == 0) {
+        int want = -1;  // a weapon's place, or 9 for the previous one
+        bool down[10];
+        for (int k = 0; k < 9; k++) down[k] = auf::weapon_keys && Held('1' + k);
+        down[9] = Held(auf::LetterKeyOf(auf::previous_weapon_key));
+        for (int k = 0; k < 10; k++)
+            if (down[k] && !was[k] && want < 0) want = k;
+        std::copy(down, down + 10, was);
+        if (want >= 0) {
+            uint32_t list[16];
+            const int n = Weapons(ctx, player, list, 16);
+            uint32_t pick = 0;
+            if (want == 9) {
+                for (int i = 0; i < n; i++)
+                    if (list[i] == previous) pick = previous;
+            } else if (want < n) pick = list[want];
+            LOGR("auf: weapon key %d: %d weapons, picks %08X (now %08X, previous %08X)", want + 1, n, pick, now, previous);
+            if (pick && pick != now) {
+                check_at = g_frame + 90, check_for = pick;
+                kernel::G<uint32_t>(player + 0x444) = pick;
+                kernel::G<uint32_t>(player + 0x440) = pick;
+                kernel::G<uint32_t>(player + 0x458) = kernel::R32(A(0x329490));
+            }
+        }
+    } else {
+        std::fill(std::begin(was), std::end(was), true);  // a key held through a menu is not a press
+        for (int k = 0; k < 9; k++) was[k] = Held('1' + k);
+        was[9] = Held(auf::LetterKeyOf(auf::previous_weapon_key));
+    }
+}
 }  // namespace
 
 namespace auf {
@@ -121,6 +224,9 @@ X86_FUNC(sub_000BDA00) {
         kernel::G<uint32_t>(ctx.ecx + 0x4D0) |= 0x1;
         LOGR("auf: a cutscene skipped (skip_cutscenes)");
     }
+    const uint32_t me = ctx.ecx;
+    if (me && !cinematic && kernel::R32(A(0x329390)) && me == kernel::R32(kernel::R32(A(0x329390)) + 0x278)) WeaponKeys(ctx, me);
+    ctx.ecx = me;
     __imp__sub_000BDA00(ctx, base);
 }
 

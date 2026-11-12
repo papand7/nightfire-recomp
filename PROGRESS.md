@@ -34,6 +34,8 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+- 2026-11-12: on foot, number keys 1-9 pick the nth selectable (non-gadget) weapon of the inventory walk (player +0x2EC; the cycle's vfuncs +0x9C/+0xC0, 0xAF770; written as +0x444/+0x440/+0x458, hook in src/bond/pc_extras.cpp), options weapon_keys (default on) and previous_weapon_key (Z, a letter dropdown): back to the last weapon. The d-pad alternates 1/2/3 are gone from the default keys (arrows only). G stays the gadget key (the game's B). New option controller_scheme (Setup 1..4, default 1): during 0x24570 for player 1 with the keyboard, [0x205288] and [0x3B22A0] (indices 0..3) are forced and restored (src/bond/mouse.cpp). Verified in Cold Reception through AUF_KEY_TEST=frame:key,... (a test injection: this desktop session had no foreground window, real keys were not seen): the weapon in hand follows keys 1, 2, Z in the log; setup 3 logged and played. Quick grenade not done (gadget key and previous weapon instead). Gaps: only 2 weapons tested; the HUD/gun look is not visibly different between the pistol and the silenced one in screenshots; real key presses not tried.
+
 ### 2026-11-12 - FSR 2 temporal upscaler (Vulkan), ported from NightFire
 - settings.toml `upscaler` (0 off, 1 AMD FSR 2), `upscale_quality` (0 Quality 1.5x, 1 Balanced 1.7x, 2 Performance 2x,
   3 Ultra Performance 3x), `upscale_sharpness` (percent, RCAS); in the F1 Graphics page. Default off. FSR 2.2.1 is

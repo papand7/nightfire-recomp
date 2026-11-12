@@ -3,10 +3,12 @@
         case 0x73F40: return 0x73E50; \
         case 0xAC040: return 0xABF50; \
         case 0xAE770: return 0xAE680; \
+        case 0xAF770: return 0xAF680; \
         case 0x14B654: return 0x14B564; \
         case 0x1E3160: return 0x1E3978; \
         case 0x1E3178: return 0x1E3990; \
         case 0x1E5FC8: return 0x1E67F0; \
+        case 0x205288: return 0x205AE8; \
         case 0x205408: return 0x205C68; \
         case 0x207320: return 0x207B80; \
         case 0x207630: return 0x207E90; \
@@ -35,6 +37,7 @@
         case 0x3587C4: return 0x359004; \
         case 0x3587FC: return 0x35903C; \
         case 0x3B2200: return 0x3B2A40; \
+        case 0x3B22A0: return 0x3B2AE0; \
         case 0x3B22D5: return 0x3B2B15; \
         case 0x3B2414: return 0x3B2C54; \
         case 0x3B2418: return 0x3B2C58; \

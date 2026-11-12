@@ -22,6 +22,12 @@ extern uint32_t photo_key;       // photo mode's key, a choice of kKeyNames (F10
 extern uint32_t restart_key;     // the mission restarted at once, a choice of kKeyNames (none)
 extern bool skip_cutscenes;      // a mission's cutscenes skipped as they start (src/bond/pc_extras.cpp)
 extern bool tight_movement;      // keyboard movement without the stick's slow start (src/bond/pc_extras.cpp)
+extern bool weapon_keys;         // the number keys 1 to 9 pick a weapon (src/bond/weapon_keys.cpp)
+extern uint32_t previous_weapon_key;  // a choice of kLetterKeyNames: back to the last weapon (Z)
+extern uint32_t controller_scheme;    // the game's controller setup the keyboard plays, 0 to 3 (src/bond/mouse.cpp)
+extern const char* const kLetterKeyNames[];  // None, A .. Z
+extern const char* const kSchemeNames[];
+int LetterKeyOf(uint32_t choice);
 extern const char* const kKeyNames[];  // None, F1 .. F12, Print Screen, Pause, Insert, Delete, Home, End
 int KeyOf(uint32_t choice);      // the Windows virtual key of a kKeyNames choice, 0 none
 void BondFrame(X86Context& ctx, uint8_t* base);  // bond_eng.xbe once a frame: presence, the restart key

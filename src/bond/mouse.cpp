@@ -72,7 +72,22 @@ X86_FUNC(sub_00024570) {
             LOGR("auf: the mouse turns the view directly");
         }
     }
+    // The keyboard plays controller setup auf::controller_scheme: the single player's scheme [0x205288] (more players:
+    // [0x3B22A0 + 0x3C p]) is an index 0 to 3 into the tables at 0x20503C, set for this call only
+    const bool force = kernel::R32(ctx.esp + 8) == 0 && input::UsingKeyboard() && !auf::MenuUp();
+    const uint32_t scheme = std::min<uint32_t>(auf::controller_scheme, 3);
+    uint32_t was_single = 0, was_multi = 0;
+    if (force) {
+        was_single = kernel::R32(A(0x205288)), was_multi = kernel::R32(A(0x3B22A0));
+        kernel::G<uint32_t>(A(0x205288)) = scheme, kernel::G<uint32_t>(A(0x3B22A0)) = scheme;
+        static uint32_t said = 99;
+        if (said != scheme) {
+            said = scheme;
+            LOGR("auf: the keyboard plays controller setup %u (the game's was %u)", scheme + 1, was_single + 1);
+        }
+    }
     __imp__sub_00024570(ctx, base);
+    if (force) kernel::G<uint32_t>(A(0x205288)) = was_single, kernel::G<uint32_t>(A(0x3B22A0)) = was_multi;
 }
 
 // The wheel through a scope: a weapon's zoom is its +0x51C, read each frame at 0xBD768 (esi the weapon, only when +0x52C says it
