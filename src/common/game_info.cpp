@@ -95,6 +95,7 @@ void Init() {
     if (const char* e = std::getenv("AUF_FOV"); e && *e) auf::fov_percent = uint32_t(std::atoi(e));
     if (auf::skip_intro) LOGR("auf: the logo movies are skipped (skip_intro)");
     if (kDrv) gpu::g_draw_filter = DrivingFlashFilter;  // here, not a static initializer: those never ran in the Windows exe
+    if (auf::kImage == auf::kBond) auf::WatchLevelSun();
 }
 
 // keyboard and mouse (Windows virtual key codes: this file builds for the headless harness too)

@@ -32,6 +32,7 @@ int LetterKeyOf(uint32_t choice);
 extern const char* const kKeyNames[];  // None, F1 .. F12, Print Screen, Pause, Insert, Delete, Home, End
 int KeyOf(uint32_t choice);      // the Windows virtual key of a kKeyNames choice, 0 none
 void BondFrame(X86Context& ctx, uint8_t* base);  // bond_eng.xbe once a frame: presence, the restart key
+void WatchLevelSun();  // bond_eng.xbe: the loading map's sun handed to the ray tracing (level_sun.cpp)
 extern float photo_fov;         // photo mode's field of view, a factor on top of fov_percent (1 outside it)
 extern bool photo_mode;        // F10 frees the camera (src/bond/photo_mode.cpp)
 extern bool ragdolls;          // dead enemies go limp and fall (src/bond/ragdoll.cpp), off by default

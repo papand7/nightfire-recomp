@@ -34,6 +34,39 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-12 - Ray tracing (Vulkan), stage 5: bounced light and volumetric light, built up over frames
+- Settings `rt_gi` (off), `rt_gi_strength` (percent, 100), `rt_volumetric` (off), `rt_vol_strength` (percent, 100),
+  `rt_denoise` (on). gi (half size, 4 cosine rays to 40 m): what a ray meets lit as the game lights it (its lightmap,
+  the sun where open, dynamic lamps) times its colour, added in the relight like the other added light (so the scene
+  gets albedo x bounce). vol (half size, 8 jittered steps to 60 m): the sun's shafts (forward-scattering phase, a ray
+  toward the sun a step) and the short-reach lamps' glow with their shadows; volc adds it, dimming what is behind a
+  little. Both are blended with last frame's (20% new) through the camera's move: RtReproject maps the traced space to
+  last frame's from the two view matrices (no TAA needed), the history kept where its distance agrees.
+- The far fill lights the game places about each model (reach 10000) are not air lamps: with them the first try
+  whited the screen out (scratch rt_s5all at 4.4 ms of air); now 0.35 ms.
+- Cost, Trouble in Paradise, 1280x960, GPU timestamps (XBE_PERF "ray tracing steps"): build 0.42 ms, relight 1.40
+  (sun, model shadows) / 2.1 with the bounce, occlusion 0.33-0.66, air 0.35; everything on 3.2 ms. Another program
+  shared the GPU in these runs (10.8 fps whole frames with and without ray tracing); unshared runs paced at the game's
+  own 31 fps. Shot: scratch rt_stage5_gi_vol_off_on.png (steps and deck a little lighter, a faint warm haze).
+
+### 2026-11-12 - Ray tracing (Vulkan), stage 4: a sun
+- src/common/level_sun.cpp (bond_eng.xbe, registered in GameInfo init): kernel::SetReadObserver (new SDK hook) sees
+  the game's pack reads; a read inside maps\<name>.xbc of a BIGF .viv is that map loading. Its bytes are searched for
+  the worldspawn's q3map2 sun, "sun1" "R G B intensity degrees elevation" (only emstel_1, m6_1, m6_2, m6_3 have one:
+  emstel_1 "193 193 230 0 60 60"), handed to gpu::SetRtSun (z up). Logged: "auf: map maps\emstel_1.xbc loading: its
+  sun for the ray tracing"; orc_1: "no sun named".
+- Without a map sun (the per-level choice, automatic): the key light the game shades its models by, the most coloured
+  bright point light with a reach of 5000+ units, its direction from the model. In Trouble in Paradise: colour 0.71
+  0.54 0.36 from 37 degrees up behind the start, a sunset.
+- Setting `rt_sun` (percent, 100). In the relight: added colour x 0.35 x strength x N.L where a ray toward it is open
+  (traced shadows show as less added light: the baked shadows are never darkened again); taken (with rt_shadows) where
+  a model within 25 m stands toward it and the sky is open past it. The far fill lights (reach 5000+) no longer cast
+  model shadows (they sit about each model, so their shadows pointed anywhere: black blobs behind props in Bad
+  Diplomacy). A first model shadow query that walked every candidate to the far plane cost 24 ms indoors; the bounded
+  closest-hit one keeps the relight about 1.4 ms.
+- Shots: scratch rt_stage4_sun_off_on.png (railing shadows on the deck, the warm sun, the flag's shadow on the dome).
+- Committed with stage 5 in one SDK commit (the code shares RtLightConstants).
+
 ### 2026-11-12 - Ray tracing (Vulkan), stage 3: shadows from the game's lights, relit over the lightmaps
 - Settings `rt_shadows` (on) and `rt_lighting` (off). RtHarvestLights reads the D3DLIGHT8s every lit draw sets
   (g_state.lights in the SDK's State): point/spot lights listed once a frame (key: place, colour, reach), the strongest
