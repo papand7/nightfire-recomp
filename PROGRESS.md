@@ -2,6 +2,26 @@
 
 Newest first. Each entry: date, what changed, what was learned, what's next.
 
+## 2026-11-13: bug hunt (recent work): netplay browser, More Settings, LAN events, launcher
+
+- Netplay page: the Online row's LAN games and the Game row shared g_net_shown, so when the LAN list changed the
+  Online refresh took it over and the Game row was never redrawn (it kept "Searching...", and Join Game joined a game
+  not shown). The Online row keeps its own copy (g_online_lan).
+- More Settings page 2: passing through it wrote back the nearest listed crosshair colour and size and Aim Zoom,
+  overwriting settings.toml's own (the launcher's Aim Zoom slider sets any 5%). Now only a changed choice is written.
+- LAN play: an event's weapon index (u16 from the network) became a guest address unchecked (0x18CFA0 + w * 0x10C)
+  for the shot spawner and the hit code; one bad packet (the host's port is public when published) could crash every
+  copy. Events with a weapon of 0x80 or more are dropped.
+- Sight tuner panel: g_tune indexed by the held weapon without the 0-63 bound.
+- Launcher: Android export's re-check after the save dialog read the state from before it; the update picks
+  007Remastered.* (else NightFireLauncher.*) rather than any .exe; Logs and launcher.log buttons use the path's own
+  separator (they opened `play\logs` on Linux).
+- Left (reviewed, not changed): the old publish thread's "remove" can land after a new host's announce (off the list
+  up to 30 s); concurrent curl calls inherit each other's pipe handles (a fetch waits for the other, up to ~8 s);
+  detached online/publish threads may touch globals at exit; client-side kRoster/kSnap/kWelcome not checked against
+  the host's address. Vulkan changes since 11-09 reviewed (descriptor push elision, point quads, stains, relight):
+  nothing found. Agent Under Fire's launcher keys (schema_auf.js) not checked against that game's code (other repo).
+
 ## 2026-11-12: pickup physics for the level's own pickups (respawn at the spawn)
 
 - Pushes (walking into one you cannot take) and explosions now move the level's placed pickups too (0xA4BC0 makes

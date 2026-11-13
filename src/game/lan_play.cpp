@@ -2082,6 +2082,10 @@ void ApplyEvents(X86Context& ctx) {
         in.swap(g_events_in);
     }
     for (const Event& e : in) {
+        // the weapon becomes a guest address (the table 0x18CFA0, 0x10C an entry, an int8 index in the game): one past
+        // it, from a broken or hostile packet (the host's port is public when published), would hand the game's shot
+        // and hit code a pointer into anything
+        if (e.weapon >= 0x80) continue;
         uint32_t victim = ObjectOf(e.victim_peer, e.victim_local);
         uint32_t killer = e.killer_peer == 0xFF ? 0 : ObjectOf(e.killer_peer, e.killer_local);
         if (!victim && e.kind != kShotEvent) continue;

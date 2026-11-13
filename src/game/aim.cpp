@@ -409,7 +409,7 @@ void SightTunerFrame(X86Context& ctx, uint32_t obj, int held) {
 }
 // its panel (from nf::GameUi): the true centre (where the shots go) and the held weapon's place
 void SightTunerUi() {
-    if (!nf::sight_tuner || g_tuner.weapon < 0) return;
+    if (!nf::sight_tuner || g_tuner.weapon < 0 || g_tuner.weapon >= 64) return;  // (g_tune's rows: 0 to 63)
     ImGuiViewport* vp = ImGui::GetMainViewport();
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     const ImVec2 c(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f);

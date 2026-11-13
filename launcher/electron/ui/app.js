@@ -176,8 +176,10 @@ $('btn-scan').onclick = () => nf.command({ cmd: 'scan' });
 $('btn-pick').onclick = async () => { const p = await nf.pick('iso'); if (p) nf.command({ cmd: 'set_game', path: p }); };
 $('btn-play').onclick = () => { if (S.built) { setMsg($('build-msg'), ''); nf.command({ cmd: 'play' }); } else build(); };
 $('btn-folder').onclick = () => nf.open(S.play_dir);
-$('btn-logs').onclick = () => nf.open(S.play_dir + '\\logs');
-$('btn-launcher-log').onclick = () => S && nf.open(S.root + '\\launcher.log');
+// (the service's own separator: Linux and macOS paths have no backslashes)
+const sub = (dir, name) => dir + (String(dir).includes('\\') ? '\\' : '/') + name;
+$('btn-logs').onclick = () => nf.open(sub(S.play_dir, 'logs'));
+$('btn-launcher-log').onclick = () => S && nf.open(sub(S.root, 'launcher.log'));
 $('btn-music').onclick = async () => { const p = await nf.pick('music'); if (p) { setMsg($('music-msg'), 'Converting…', true); nf.command({ cmd: 'music', path: p }); } };
 $('btn-music-again').onclick = () => { setMsg($('music-msg'), 'Converting…', true); nf.command({ cmd: 'music', path: S.music_dir }); };
 

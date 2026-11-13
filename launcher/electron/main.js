@@ -263,7 +263,7 @@ ipcMain.handle('android:run', async (_, options = {}) => {
         filters: [{ name: 'Android game package', extensions: ['zip'] }] });
     if (output.canceled) return { ok: false, cancelled: true };
     // Check again after the native dialog: a service job may have started while it was open.
-    if (android || state.busy) return { ok: false, message: 'Another job is running.' };
+    if (android || (nf.state && nf.state.busy)) return { ok: false, message: 'Another job is running.' };  // (its state now, not the one before)
     const args = [repo, path.join(playDir(nf), 'assets'), output.filePath,
         options.textures === true ? path.join(playDir(nf), 'mods', 'textures') : '',
         options.abi === 'x86_64' ? 'x86_64' : 'arm64-v8a'];
@@ -324,7 +324,10 @@ const SELF = process.env.PORTABLE_EXECUTABLE_FILE || process.env.APPIMAGE || nul
 // that NightFireLauncher.*)
 function launcherAsset(assets) {
     const want = WINDOWS ? /\.exe$/i : process.platform === 'linux' ? /x86_64\.AppImage$/i : null;
-    return want && (assets || []).find(a => want.test(a.name)) || null;
+    if (!want) return null;
+    const all = (assets || []).filter(a => want.test(a.name));
+    // 007Remastered.* first: a release may also carry the ImGui launcher (CI's NightFireLauncher.exe), not this one
+    return all.find(a => /^007Remastered/i.test(a.name)) || all.find(a => /^NightFireLauncher/i.test(a.name)) || null;
 }
 ipcMain.handle('launcher:update', async () => {
     const latest = await latestRelease();

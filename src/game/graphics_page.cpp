@@ -1035,7 +1035,9 @@ void KeepMore2(X86Context& ctx, uint32_t player) {
     uint32_t ads = ChoiceValue(ctx, player, kAds), discord = ChoiceValue(ctx, player, kDiscord);
     std::lock_guard<std::recursive_mutex> lock(app::UiLock());
     if (ads <= 1) nf::aim_down_sights = ads > 0;
-    nf::ads_zoom = uint32_t(ReadOption(ctx, player, kAdsZoom, kAdsZooms));
+    // (only a choice changed here: the launcher's slider sets any 5% between, which the list shows as its nearest)
+    if (ChoiceValue(ctx, player, kAdsZoom) != Nearest(kAdsZooms, float(nf::ads_zoom)))
+        nf::ads_zoom = uint32_t(ReadOption(ctx, player, kAdsZoom, kAdsZooms));
     nf::view_motion = ReadOption(ctx, player, kMotion, kOffOn) > 0;
     nf::ragdolls = ReadOption(ctx, player, kRagdolls, kOffOn) > 0;
     if (const uint32_t hit = ChoiceValue(ctx, player, kHurtFx); hit <= 3)
@@ -1045,8 +1047,10 @@ void KeepMore2(X86Context& ctx, uint32_t player) {
         const uint32_t style = ChoiceValue(ctx, player, kCrossStyle), color = ChoiceValue(ctx, player, kCrossColor),
                        size = ChoiceValue(ctx, player, kCrossSize);
         if (style <= 4) app::Get().crosshair_style = style;
-        if (color <= 5) app::Get().crosshair_color = CrossColors()[color];
-        if (size <= 2) app::Get().crosshair_size = CrossSizes()[size];
+        // only a choice changed here: a colour or size of settings.toml's own (not in these lists, shown as White
+        // and Medium) kept when the page is only passed through
+        if (color <= 5 && color != CrossColorIndex(app::Get().crosshair_color)) app::Get().crosshair_color = CrossColors()[color];
+        if (size <= 2 && size != CrossSizeIndex(app::Get().crosshair_size)) app::Get().crosshair_size = CrossSizes()[size];
     }
     if (discord <= 1) app::Get().discord = discord == 1;
     app::Save();
@@ -1289,15 +1293,17 @@ void ShowServers(X86Context& ctx, uint32_t player) {
 }
 std::vector<std::string> g_online_labels;  // the Online row's items as shown
 std::vector<nf::OnlineServer> g_online_shown;
+std::vector<nf::LanServer> g_online_lan;  // the LAN games at the Online row's head as drawn (apart from the Game row's)
 bool g_online_busy_shown = false;  // the fetch's state the Online row was last drawn for
 // the browser's games: the LAN games found on this network first (their labels marked "LAN"), then the online list.
-// g_net_shown (the LAN games) and g_online_shown are kept as drawn; an index runs over the LAN games, then the online
+// g_online_lan (the LAN games) and g_online_shown are kept as drawn; an index runs over the LAN games, then the online.
+// (Not g_net_shown: that is the Game row's, redrawn on its own when the LAN list changes)
 void ShowOnline(X86Context& ctx, uint32_t player) {
     g_online_busy_shown = nf::OnlineSearching();
     g_online_shown = nf::OnlineServers();
-    g_net_shown = nf::NetServers();
+    g_online_lan = nf::NetServers();
     g_online_labels.clear();
-    for (const auto& sv : g_net_shown) {  // "PC - map, N players" as "LAN  PC  map  N", the online list's width
+    for (const auto& sv : g_online_lan) {  // "PC - map, N players" as "LAN  PC  map  N", the online list's width
         std::string text = sv.label, pc = text, map, players;
         if (size_t dash = text.find(" - "); dash != std::string::npos) pc = text.substr(0, dash), text = text.substr(dash + 3);
         if (size_t comma = text.find(", "); comma != std::string::npos) map = text.substr(0, comma), players = text.substr(comma + 2);
@@ -1351,19 +1357,19 @@ bool NetActivate(X86Context& ctx, uint32_t player, uint32_t on) {
     }
     if (on == Wid(kNetOnlineJoin) || on == Wid(kNetOnline)) {
         const uint32_t i = ChoiceValue(ctx, player, kNetOnline);
-        if (i < g_net_shown.size()) {  // a LAN game
-            const nf::LanServer lan = g_net_shown[i];
+        if (i < g_online_lan.size()) {  // a LAN game
+            const nf::LanServer lan = g_online_lan[i];
             nf::NetSearch(false), g_net_open = false;
             nf::NetJoin(lan.ip, lan.port);
             MenuGoTo(ctx, player, kJoinPage);
             LOGR("nightfire: Netplay: joining LAN %s", lan.label.c_str());
             return true;
         }
-        if (i - g_net_shown.size() >= g_online_shown.size()) {
+        if (i - g_online_lan.size() >= g_online_shown.size()) {
             MenuHelp(ctx, player, "No game chosen: pick one from the list, or Refresh Online.");
             return true;
         }
-        const nf::OnlineServer sv = g_online_shown[i - g_net_shown.size()];
+        const nf::OnlineServer sv = g_online_shown[i - g_online_lan.size()];
         nf::NetSearch(false), g_net_open = false;
         nf::NetJoin(sv.ip, sv.port);
         MenuGoTo(ctx, player, kJoinPage);
@@ -1888,8 +1894,8 @@ void NetplayPageFrame(X86Context& ctx) {
         const bool busy = nf::OnlineSearching();
         const size_t count = nf::OnlineServers().size();
         std::vector<nf::LanServer> lan = nf::NetServers();
-        bool lan_same = lan.size() == g_net_shown.size();
-        for (size_t k = 0; lan_same && k < lan.size(); k++) lan_same = lan[k].label == g_net_shown[k].label;
+        bool lan_same = lan.size() == g_online_lan.size();
+        for (size_t k = 0; lan_same && k < lan.size(); k++) lan_same = lan[k].label == g_online_lan[k].label;
         if (busy != g_online_busy_shown || (!busy && count != g_online_shown.size()) || !lan_same) {
             uint32_t eax = ctx.eax;
             ShowOnline(ctx, g_net_player);
