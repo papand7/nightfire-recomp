@@ -1,8 +1,15 @@
 # 007 Remastered
 
-The original Xbox 007: NightFire, running natively on PC and remastered: ray traced lighting, sharper and richer
-graphics, HD textures, story co-op, LAN multiplayer, a modern menu and full mouse, keyboard, controller and steering
-wheel support. Everything is set from the game's own menus. For **Windows**, with **Linux** and **macOS** in beta.
+Two Xbox Bond games, running natively on PC from one launcher:
+
+- **007: NightFire**, remastered: ray traced lighting, sharper and richer graphics, HD textures, story co-op, LAN
+  multiplayer, a modern menu and full mouse, keyboard, controller and steering wheel support. For **Windows**, with
+  **Linux**, **macOS** and **Android** in beta.
+- **007: Agent Under Fire** (new): on foot, driving and on the guns, with aim down sights, story co-op, LAN
+  multiplayer and the PC settings in the game's own menus. For **Windows**; Linux, macOS and Android are being worked
+  on. See [Agent Under Fire](#007-agent-under-fire) below.
+
+Everything is set from the games' own menus.
 
 ![The Exchange: Original, Enhanced with ray tracing, Toon and Noir](docs/images/exchange_looks.webp)
 
@@ -110,11 +117,50 @@ wheel support. Everything is set from the game's own menus. For **Windows**, wit
   screenshots.
 - Both the European and US discs, on foot and the driving missions.
 
+## 007: Agent Under Fire
+
+The original Xbox 007: Agent Under Fire, its own code recompiled to run natively on PC (not an emulator), in the same
+launcher as NightFire. **Windows** for now.
+
+![007: Agent Under Fire on PC](docs/images/auf/agentunderfire-pc-port.webp)
+
+<table>
+<tr><td><img src="docs/images/auf/agentunderfire-on-foot.webp" alt="On foot at night, an armed guard running along a cobbled street"></td>
+<td><img src="docs/images/auf/agentunderfire-driving.webp" alt="The Aston Martin on a night street, with the radar and the weapon panel"></td></tr>
+<tr><td><img src="docs/images/auf/agentunderfire-gadget.webp" alt="The Q-Decryptor in hand outside the helipad door at sunset"></td>
+<td><img src="docs/images/auf/agentunderfire-mounted-gun.webp" alt="A rifle mounted on a moving truck on a highway"></td></tr>
+</table>
+
+*On foot, driving, the first mission and a mounted gun.*
+
+![Split-screen story co-op in Trouble in Paradise](docs/images/auf/agentunderfire-coop-split.webp)
+
+*Story co-op in split screen.*
+
+**Features**
+- **Vulkan renderer** with ray traced effects (RTX-class graphics cards), widescreen and ultrawide with the HUD kept
+  in a 4:3 centre, any resolution, field of view, and high frame rates on foot (60 by default, up to 240 or
+  unlimited).
+- **Aim down sights:** every gun's sights lined up on the centre, with no sway while you aim (the Calypso, PS100 and
+  rocket launcher keep the game's red dot), weapon sway, hit effects and number keys for weapons.
+- **Mouse and keyboard** on foot, driving and on the mounted guns, every key rebindable; controllers with rumble.
+- **Story co-op:** a friend joins the missions in split screen or over the network, and co-op saves your progress.
+- **LAN multiplayer:** host or join matches on your network, with every map, character, weapon and mode unlocked for
+  the match (multiplayer does not change your saved game).
+- **Modern menus** made for the mouse, and the PC settings in the game's own menus: a row on the main menu and a
+  RECOMP tab on the pause screen.
+- **Ragdolls, pickups you can knock about, 3D sound** through walls, **photo mode**, achievements, screenshots (F12).
+- English, French and German; both the European and US discs.
+
+![The RECOMP tab of the pause screen](docs/images/auf/agentunderfire-pc-settings-pause.webp)
+
+*The pause screen's RECOMP tab, on foot and driving.*
+
 ## The launcher
 
 ![NightFire PC Launcher](docs/images/launcher.png)
 
-The **NightFire PC Launcher** sets everything up:
+The **007 Remastered launcher** sets up both games, each on its own tab (Agent Under Fire on Windows):
 - **Mission:** choose your disc image and press **Install**: the launcher builds the game on your PC from your own
   disc. Then **Play**, and **Update** when a new version is out. Nothing is installed in Windows.
 - **Settings:** every option, also outside the game.
@@ -135,15 +181,20 @@ The **NightFire PC Launcher** sets everything up:
   fixed; expect more problems and please report them with the game's log. Ray tracing and DLSS are off on the Mac;
   the HD texture pack tool is built but untested.
 
+- **Android (beta, NightFire):** `NightFire-Android.apk`, sideloaded. The game itself is built on your PC: in the
+  Windows or Linux launcher's **Android** page choose **Build Android package**, copy the zip to the phone and import
+  it in the app.
+
 Building it yourself instead: see [BUILDING.md](BUILDING.md).
 
 ## Credits
 
-- **The original PC port,** [hk21x/nightfire-recomp](https://github.com/hk21x/nightfire-recomp) by Harry, which this
-  project started from.
+- **The original PC ports,** [hk21x/nightfire-recomp](https://github.com/hk21x/nightfire-recomp) and
+  [hk21x/007-agentunderfire-recomp](https://github.com/hk21x/007-agentunderfire-recomp) by Harry, which this project
+  started from.
 - **The recompiler,** [TGP482/XboxXBE-Recomp](https://github.com/TGP482/XboxXBE-Recomp) by TGP482.
 
 ## License
 
-MIT: see [LICENSE](LICENSE). 007: NightFire is the property of its owners; this project contains none of the game's
-code or files.
+MIT: see [LICENSE](LICENSE). 007: NightFire and 007: Agent Under Fire are the property of their owners; this project
+contains none of the games' code or files.

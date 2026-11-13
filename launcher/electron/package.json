@@ -1,7 +1,7 @@
 {
   "name": "nightfire-launcher",
   "productName": "007 Remastered",
-  "version": "1.5.14",
+  "version": "1.6.0",
   "description": "007 Remastered: the NightFire and Agent Under Fire PC ports' launcher: builds each game from your own disc image, its settings, its HD textures",
   "main": "main.js",
   "private": true,
