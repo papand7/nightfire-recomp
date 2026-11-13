@@ -121,6 +121,18 @@ Everything is set from the games' own menus.
 The original Xbox 007: Agent Under Fire, running natively on PC, in the same launcher as NightFire. **Windows** for
 now.
 
+![Agent Under Fire: Original and Ultra graphics, the first mission](docs/images/auf/auf-compare-mission1.webp)
+
+*Original graphics (left) and Ultra (right): ray traced lighting, Enhanced colour, HD textures and 2x resolution.*
+
+![Agent Under Fire: Original and Ultra graphics, the docks driving mission](docs/images/auf/auf-compare-driving.webp)
+
+*The same comparison on the docks driving mission.*
+
+![Agent Under Fire: the shader styles cycling](docs/images/auf/auf-styles.gif)
+
+*Ultra with each shader style in turn: Enhanced, Toon, Retro and Noir.*
+
 <table>
 <tr><td><img src="docs/images/auf/auf-gadget.webp" alt="The Q-Decryptor in the first mission"></td>
 <td><img src="docs/images/auf/auf-pistol.webp" alt="Aiming the pistol in the first mission"></td></tr>
