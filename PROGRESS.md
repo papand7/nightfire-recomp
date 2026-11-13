@@ -35,6 +35,25 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-13 - Co-op over LAN: no red half on the host; the second player's state; a stale launch file
+- Story co-op over LAN (AUF_COOP=1 on both copies, Trouble in Paradise): the host saw its view with the bottom half red.
+  Not the other view's drawing: 0x518F0 (from the HUD draw 0x554A0, under 0x33EE0 in the view's 0x263D0) draws the
+  split screen's frame in the player's colour, a 640x240 red box for player 1 that the bottom view covers in local split
+  screen. The client never showed it (its own view is drawn last, over everything). In LAN play this copy's own view
+  skips 0x518F0 (netplay_hash.cpp), and another player's view draws nothing from the start of its 0x263D0 to its end
+  (SDK d3d::SetDrawsOff: the title's draws and clears dropped), its logic still run. Seen: both copies full screen with
+  the whole HUD (radar, timer, weapons), in step (same positions at frame 1800), no errors; local split screen unchanged.
+  (Moving the view rect's globals [0x358734..0x358740] off the screen, or one local player for the whole 0x263D0, did
+  not do it: the second lost the radar and timer.)
+- The second story player had no state map/first state (0xBB670/0xBD4E0, coop.cpp): player 1's used. Both copies load
+  orc_1 and play; local split screen loads too.
+- A launch.bin left by a copy closed between a relaunch's handover put every later ordinary start straight into a
+  mission's briefing (Precious Cargo): launch data older than 2 minutes is now dropped at boot (SDK boot.cpp).
+- skip_cutscenes is no longer a setting (not in releases; NightFire has none): AUF_SKIP_CUTSCENES=1 only. Its change to
+  press a chain's later cutscenes too is kept but did not work (the first mission's intro still played on).
+- Tests: scratch/np_run.ps1 with A every 6 s on both copies and AUF_COOP=1;AUF_MISSION=0 reaches orc_1 in about 75 s;
+  hooks that return early must pop the return address (ctx.esp += 4), or the title crashes.
+
 ### 2026-11-13 - Menu input: the mouse over Remote Desktop, Escape closes the pause, Enter starts the title; the cursor never trapped
 - Remote Desktop sends raw mouse input as absolute positions (MOUSE_MOVE_ABSOLUTE), which the runtime dropped: the mouse
   never counted as in use, so with a controller plugged in the menus' arrow stayed hidden and the pointer off, and mouse

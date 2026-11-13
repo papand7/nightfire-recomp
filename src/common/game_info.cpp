@@ -92,6 +92,7 @@ void Init() {
     if (const char* e = std::getenv("AUF_AUTO_AIM"); e && *e) auf::auto_aim = *e == '1';
     if (const char* e = std::getenv("AUF_HIT_FLASH"); e && *e) auf::hit_flash = *e == '1';
     if (const char* e = std::getenv("AUF_ADS"); e && *e) auf::aim_down_sights = *e == '1';
+    // skip_cutscenes is not a setting (not in the releases, as NightFire has none): AUF_SKIP_CUTSCENES=1 only, for tests
     if (const char* e = std::getenv("AUF_SKIP_CUTSCENES"); e && *e) auf::skip_cutscenes = *e == '1';
     if (const char* e = std::getenv("AUF_FOV"); e && *e) auf::fov_percent = uint32_t(std::atoi(e));
     if (auf::skip_intro) LOGR("auf: the logo movies are skipped (skip_intro)");
@@ -228,7 +229,6 @@ const app::GameInfo app::kGame = {
                 {"weapon_keys", &auf::weapon_keys, nullptr, "Number keys pick weapons", "1 to 9 select the weapon in that place of the inventory (the order the weapon button cycles in); the key of the weapon in hand does nothing"},
                 {"previous_weapon_key", nullptr, &auf::previous_weapon_key, "Previous weapon key", "Back to the weapon held before this one", auf::kLetterKeyNames},
                 {"controller_scheme", nullptr, &auf::controller_scheme, "Keyboard controller setup", "Which of the game's four controller setups the keyboard and mouse play (the keys are laid out for Setup 1); pads keep the setup chosen in the game's menu", auf::kSchemeNames},
-                {"skip_cutscenes", &auf::skip_cutscenes, nullptr, "Skip cutscenes", "A mission's cutscenes are skipped as they start. Off by default"},
                 {"tight_movement", &auf::tight_movement, nullptr, "Tight movement", "With the keyboard Bond starts and stops at once instead of easing as with a stick"},
                 {"photo_mode", &auf::photo_mode, nullptr, "Photo mode (F10)", "F10 stops the game and frees the camera: mouse to look, W A S D to move, Space and C up and down, Shift faster, Ctrl slower; [ and ] the field of view, , and . the focus distance, N and M the blur, B depth of field on or off, R as the game had them; F12 takes the picture, F10 again goes back"},
                 {"ragdolls", &auf::ragdolls, nullptr, "Ragdolls", "Enemies go limp and fall when they die, in place of the death animations. Only their look; off by default"},

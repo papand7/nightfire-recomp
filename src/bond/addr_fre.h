@@ -13,6 +13,7 @@
         case 0x1E5FC8: return 0x1E67F0; \
         case 0x205288: return 0x205AE8; \
         case 0x205408: return 0x205C68; \
+        case 0x20540C: return 0x205C6C; \
         case 0x207320: return 0x207B80; \
         case 0x207630: return 0x207E90; \
         case 0x24E5DC: return 0x24EE1C; \
@@ -30,8 +31,10 @@
         case 0x2A977C: return 0x2A9FBC; \
         case 0x2A9C24: return 0x2AA464; \
         case 0x2A9CA8: return 0x2AA4E8; \
+        case 0x2A9CAC: return 0x2AA4EC; \
         case 0x2A9F98: return 0x2AA7D8; \
         case 0x2F6AC0: return 0x2F7300; \
+        case 0x328664: return 0x328EA4; \
         case 0x32917C: return 0x3299BC; \
         case 0x329390: return 0x329BD0; \
         case 0x329480: return 0x329CC0; \
@@ -52,6 +55,7 @@
         case 0x3AFBB0: return 0x3B03F0; \
         case 0x3B2200: return 0x3B2A40; \
         case 0x3B220C: return 0x3B2A4C; \
+        case 0x3B2210: return 0x3B2A50; \
         case 0x3B22A0: return 0x3B2AE0; \
         case 0x3B22D5: return 0x3B2B15; \
         case 0x3B23E8: return 0x3B2C28; \

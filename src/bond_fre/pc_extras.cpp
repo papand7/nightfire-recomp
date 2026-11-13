@@ -222,12 +222,19 @@ X86_FUNC(sub_000BD910) {
     last_time = now;
     const bool cinematic = kernel::R32(kLevel + 0x180) != 0;
     const uint32_t world = kernel::R32(A(0x33BCC4));
-    const bool skippable = world && kernel::R32(world + 0x20C) != 0;
-    if (!cinematic) pressed = false;
-    else if (auf::skip_cutscenes && skippable && !pressed && ctx.ecx) {
-        pressed = true;
+    const uint32_t thread = world ? kernel::R32(world + 0x20C) : 0;
+    const bool skippable = thread != 0;
+    // cinematics run back to back (the first mission's intro: level +0x180 stays set) each name their own skip thread:
+    // a new one is pressed too (before, only the first was skipped and the rest played out)
+    static uint32_t pressed_thread = 0;
+    static uint32_t seen_thread = 0, said = 0;
+    if (thread != seen_thread && said < 40) said++, LOGR("auf: cinematic %d, skip thread %08X", int(cinematic), thread);
+    seen_thread = thread;
+    if (!cinematic) pressed = false, pressed_thread = 0;
+    else if (auf::skip_cutscenes && skippable && (!pressed || thread != pressed_thread) && ctx.ecx) {
+        pressed = true, pressed_thread = thread;
         kernel::G<uint32_t>(ctx.ecx + 0x4D0) |= 0x1;
-        LOGR("auf: a cutscene skipped (skip_cutscenes)");
+        LOGR("auf: a cutscene skipped (skip_cutscenes, thread %08X)", thread);
     }
     const uint32_t me = ctx.ecx;
     if (me && !cinematic && kernel::R32(A(0x329390)) && me == kernel::R32(kernel::R32(A(0x329390)) + 0x278)) WeaponKeys(ctx, me);

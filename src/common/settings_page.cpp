@@ -722,7 +722,6 @@ Items MakeItems(int page) {
             Toggle(out, "Hit Flash", "The white flash on screen when Bond is hit; off for those it troubles.", &auf::hit_flash);
             Toggle(out, "3D Sound", "A sound with a wall or a closed door between it and Bond is quieter and muffled, traced through the level as it plays.",
                    &auf::audio_occlusion);
-            Toggle(out, "Skip Cutscenes", "A mission's cutscenes are skipped as they start.", &auf::skip_cutscenes);
             Toggle(out, "Photo Mode",
                    "Its key (Key Bindings) stops the game and frees the camera: mouse to look, W A S D to move, Space and C up and down; F12 takes the picture.",
                    &auf::photo_mode);

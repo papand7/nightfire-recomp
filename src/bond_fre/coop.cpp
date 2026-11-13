@@ -31,6 +31,9 @@ namespace {
 constexpr uint32_t kLocalPlayers = A(0x205408), kNextPlayers = A(0x20540C), kJoined = A(0x2A9CAC);
 constexpr uint32_t kGentities = A(0x329390), kGentitySize = 0x2E0, kEntity = 0x278, kOrigin = 0xA8;
 constexpr uint32_t kGuestTop = 0x08000000;
+constexpr uint32_t kHealth = 0x2C4;
+uint32_t DeathmatchOff();
+uint32_t g_spawns = 0;  // spawn point selections since the co-op level began
 
 bool On() {
     static const int env = [] {
@@ -62,9 +65,11 @@ X86_FUNC(sub_00033330) {
                           kernel::R32(kNextPlayers), kernel::R32(kJoined));
     if (On() && kernel::R32(kNextPlayers) == 1 && kernel::R32(kJoined) < 2 && StoryLevel(name)) {
         kernel::W32(kNextPlayers, 2);
+        g_spawns = 0;
         g_level_frames = 1;
         LOGR("auf: co-op: %s made for two players", name);
     }
+    if (!On() && StoryLevel(name)) g_level_frames = 1;  // the trace only
     __imp__sub_00033330(ctx, base);
 }
 
@@ -73,7 +78,8 @@ namespace auf {
 void CoopFrame() {
     if (!g_level_frames) return;
     const uint32_t f = g_level_frames++;
-    if (f % 120 != 0 || f > 1800) return;
+    if (On()) DeathmatchOff();
+    if (f % 30 != 0 || f > 1800) return;
     const uint32_t edicts = kernel::R32(kGentities);
     if (!edicts || edicts >= kGuestTop) return;
     float o[2][3] = {};
@@ -81,7 +87,122 @@ void CoopFrame() {
     for (uint32_t k = 0; k < 2; k++)
         if ((ent[k] = kernel::R32(edicts + k * kGentitySize + kEntity)) && ent[k] < kGuestTop)
             std::memcpy(o[k], &kernel::G<uint8_t>(ent[k] + kOrigin), 12);
+    { float h0, h1; std::memcpy(&h0, &kernel::G<uint8_t>(edicts + kHealth), 4); std::memcpy(&h1, &kernel::G<uint8_t>(edicts + kGentitySize + kHealth), 4); LOGR("auf: co-op: frame %u health %.0f %.0f, records %u/%u (0x3B2200)", f, h0, h1, kernel::R32(A(0x3B2200)), kernel::R32(A(0x3B2210))); }
     LOGR("auf: co-op: frame %u, local players %u, player 1 %08X at (%.0f %.0f %.0f), player 2 %08X at (%.0f %.0f %.0f)", f,
          kernel::R32(kLocalPlayers), ent[0], o[0][0], o[0][1], o[0][2], ent[1], o[1][0], o[1][1], o[1][2]);
 }
 }  // namespace auf
+
+// The player's state machine (thiscall Player, vtable +0x1B4 = 0xBB670, from the player's init 0xBD820): [player+0x424]
+// the state map (the file g_statefile, "global/bond", made once per player when it has none) and [player+0x428] its first
+// state (0xF07F0 by name). 0xBD4E0 (from the init, after) reads the state at once: the second story player's was null.
+X86_EXTERN_FUNC(__imp__sub_000BB580);
+X86_FUNC(sub_000BB580) {
+    const uint32_t player = ctx.ecx;
+    { static int n = 0; if (n++ < 12) LOGR("auf: co-op trace: 0xBB670 player %08X", player); }
+    const uint32_t before = kernel::R32(player + 0x424);
+    __imp__sub_000BB580(ctx, base);
+    static int said = 0;
+    if (On() && said++ < 8)
+        LOGR("auf: co-op: player %08X state map %08X -> %08X, first state %08X", player, before, kernel::R32(player + 0x424),
+             kernel::R32(player + 0x428));
+}
+X86_EXTERN_FUNC(__imp__sub_000BD3F0);
+X86_FUNC(sub_000BD3F0) {
+    const uint32_t player = ctx.ecx;
+    { static int n = 0; if (n++ < 12) LOGR("auf: co-op trace: 0xBD4E0 player %08X map %08X state %08X (on %d, local %u)", player, kernel::R32(player + 0x424), kernel::R32(player + 0x428), On(), kernel::R32(kLocalPlayers)); }
+    if (On() && !kernel::R32(player + 0x428)) {
+        // player 1's state map and state (definitions, shared by every player of the class)
+        const uint32_t edicts = kernel::R32(kGentities), first = edicts ? kernel::R32(edicts + kEntity) : 0;
+        LOGR("auf: co-op: player %08X has no first state (map %08X); player 1 %08X: map %08X state %08X", player,
+             kernel::R32(player + 0x424), first, first ? kernel::R32(first + 0x424) : 0, first ? kernel::R32(first + 0x428) : 0);
+        if (first && first != player && kernel::R32(first + 0x428)) {
+            if (!kernel::R32(player + 0x424)) kernel::W32(player + 0x424, kernel::R32(first + 0x424));
+            kernel::W32(player + 0x428, kernel::R32(first + 0x428));
+        }
+    }
+    __imp__sub_000BD3F0(ctx, base);
+}
+X86_EXTERN_FUNC(__imp__sub_000BD730);
+X86_FUNC(sub_000BD730) {
+    const uint32_t player = ctx.ecx;
+    const uint32_t vt = kernel::R32(player);
+    { static int n = 0; if (n++ < 12) LOGR("auf: co-op trace: 0xBD820 player %08X vtable %08X +0x1B4 -> %08X (map %08X state %08X)", player, vt, kernel::R32(vt + 0x1B4), kernel::R32(player + 0x424), kernel::R32(player + 0x428)); }
+    __imp__sub_000BD730(ctx, base);
+}
+
+// A client's entity is made by 0x6BCF0 (cdecl: the edict, a team flag): the deathmatch cvar [0x328664] (+0x20 its value, set
+// by the level's start for more than one local player) picks the multiplayer player class (0x1E55D0, its own state
+// handling at 0xDEA10, no story state machine) where the story's is wanted. The cvar is held off for that call in co-op.
+X86_EXTERN_FUNC(__imp__sub_0006BC00);
+X86_FUNC(sub_0006BC00) {
+    const uint32_t cvar = kernel::R32(A(0x328664));
+    const uint32_t saved = cvar ? kernel::R32(cvar + 0x20) : 0;
+    const bool hold = On() && cvar && saved;
+    static int said = 0;
+    if (hold && said++ < 4) LOGR("auf: co-op: client entity made with deathmatch %u held off (the story player class)", saved);
+    if (hold) kernel::W32(cvar + 0x20, 0);
+    __imp__sub_0006BC00(ctx, base);
+    if (hold) kernel::W32(cvar + 0x20, saved);
+}
+X86_EXTERN_FUNC(__imp__sub_00033E90);
+X86_FUNC(sub_00033E90) {
+    static int n = 0;
+    if (On() && n++ < 12) LOGR("auf: co-op trace: 0x33E90 index %u state [0x2A9734] %08X", kernel::R32(ctx.esp + 4), kernel::R32(A(0x2A9734)));
+    __imp__sub_00033E90(ctx, base);
+}
+X86_EXTERN_FUNC(__imp__sub_00025FD0);
+X86_FUNC(sub_00025FD0) {
+    LOGR("auf: co-op trace: level enter 0x25FD0, state [0x2A9734] %08X, local players %u", kernel::R32(A(0x2A9734)), kernel::R32(kLocalPlayers));
+    __imp__sub_00025FD0(ctx, base);
+    LOGR("auf: co-op trace: level enter 0x25FD0 done, state [0x2A9734] %08X", kernel::R32(A(0x2A9734)));
+}
+X86_EXTERN_FUNC(__imp__sub_00029160);
+X86_FUNC(sub_00029160) {
+    LOGR("auf: co-op trace: 0x29160 level start, state %08X, local %u next %u", kernel::R32(A(0x2A9734)), kernel::R32(kLocalPlayers), kernel::R32(kNextPlayers));
+    __imp__sub_00029160(ctx, base);
+    if (On() && g_level_frames) DeathmatchOff();
+    LOGR("auf: co-op trace: 0x29160 done, state %08X, local %u", kernel::R32(A(0x2A9734)), kernel::R32(kLocalPlayers));
+}
+
+// 0x34200 (cdecl: an index) makes a state current by its index (sets [0x2A9734]); the level's enter (0x25FD0) asks for 0x0B with
+// more than one local player (the split screen's HUD state, not in a story archive: it leaves none current and the first view's
+// set-up crashes), else 2 (the story's). A co-op story level takes 2.
+X86_EXTERN_FUNC(__imp__sub_00034200);
+X86_FUNC(sub_00034200) {
+    if (On() && g_level_frames && kernel::R32(ctx.esp + 4) == 0x0B) {
+        static int said = 0;
+        if (said++ < 2) LOGR("auf: co-op: state 11 (split screen HUD) asked for in a story level: 2 used");
+        kernel::W32(ctx.esp + 4, 2);
+    }
+    __imp__sub_00034200(ctx, base);
+}
+
+namespace {
+// the deathmatch cvar's value off (a story level made for two players has it set: its spawns telefrag the first player,
+// its player class is the multiplayer one); returns the value it had
+uint32_t DeathmatchOff() {
+    const uint32_t cvar = kernel::R32(A(0x328664));
+    if (!cvar) return 0;
+    const uint32_t v = kernel::R32(cvar + 0x20);
+    if (v) kernel::W32(cvar + 0x20, 0);
+    return v;
+}
+}  // namespace
+X86_EXTERN_FUNC(__imp__sub_000BFCA0);
+X86_FUNC(sub_000BFCA0) {
+    const bool hold = On() && g_level_frames;
+    const uint32_t was = hold ? DeathmatchOff() : 0;
+    const uint32_t origin = kernel::R32(ctx.esp + 4);
+    __imp__sub_000BFCA0(ctx, base);
+    if (was) kernel::W32(kernel::R32(A(0x328664)) + 0x20, was);
+    // the level's one spawn point serves both players: the second selection of a level is put 48 units from the first's
+    // (else its spawn telefrags the first player)
+    if (hold && origin && origin < kGuestTop && (g_spawns++ & 1)) {
+        float x;
+        std::memcpy(&x, &kernel::G<uint8_t>(origin), 4);
+        x += 48.0f;
+        std::memcpy(&kernel::G<uint8_t>(origin), &x, 4);
+        LOGR("auf: co-op: the second player's spawn put 48 units from the first's");
+    }
+}

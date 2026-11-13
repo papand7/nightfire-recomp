@@ -4,9 +4,11 @@
 // The players are the first edicts (player 1 at 0, src/bond/hit_feedback.cpp), the bots and everything else after.
 #include "bond/addr.h"
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 
 #include "common/auf.h"
+#include "xdk/d3d8.h"
 #include "core/log.h"
 #include "core/netplay.h"
 #include "kernel/kernel.h"
@@ -83,16 +85,34 @@ X86_FUNC(sub_00025CA0) {
 // the player) makes the camera and the viewport from that rect.
 X86_EXTERN_FUNC(__imp__sub_0015E140);
 static bool g_pixel_view = false;  // the view being made is another player's split screen view
+static bool g_other_view = false;  // 0x263D0 runs for another player's view (from its start or its 0x15E140 to its end)
+static bool g_own_view = false;    // 0x263D0 runs for this copy's own player's view
+// AUF_NET_VIEW (diagnostic) bits: 1 the other views' HUD menu (0x33EE0) not drawn, 2 their camera (0x15E050) not made
+static int NetView() {
+    static const int v = [] {
+        const char* e = std::getenv("AUF_NET_VIEW");
+        return e && *e ? std::atoi(e) : 0;
+    }();
+    return v;
+}
 X86_FUNC(sub_0015E140) {
     const bool split = netplay::Active() && netplay::Players() > 1 && kernel::R32(ctx.esp + 8) > 1;
     const bool mine = kernel::R32(ctx.esp + 12) == uint32_t(netplay::Me());
     if (split && mine) kernel::W32(ctx.esp + 8, 1);
     g_pixel_view = split && !mine;
+    g_other_view = g_pixel_view;
+    // its draws dropped until its 0x263D0 returns: the view's own 2D fills (a red one over the bottom half) are drawn
+    // at the split screen's place whatever the viewport
+    d3d::SetDrawsOff(g_other_view);
     __imp__sub_0015E140(ctx, base);
     g_pixel_view = false;
 }
 X86_EXTERN_FUNC(__imp__sub_0015E050);
 X86_FUNC(sub_0015E050) {
+    if (g_pixel_view && (NetView() & 2)) {
+        ctx.esp += 4;
+        return;
+    }
     if (g_pixel_view) {  // off the screen: the view's full rectangle fill (a red one seen) starts at its x, y too
         kernel::G<float>(ctx.esi + 0) = 4000.0f;
         kernel::G<float>(ctx.esi + 4) = 4000.0f;
@@ -101,12 +121,46 @@ X86_FUNC(sub_0015E050) {
     }
     __imp__sub_0015E050(ctx, base);
 }
+X86_EXTERN_FUNC(__imp__sub_000263D0);
+X86_FUNC(sub_000263D0) {
+    // another player's view (edi its index) drawn nowhere from its start (0x33F40 places its HUD before 0x15E140)
+    const bool lan = netplay::Active() && netplay::Players() > 1;
+    if (lan && ctx.edi != uint32_t(netplay::Me())) {
+        g_other_view = true;
+        d3d::SetDrawsOff(true);
+    }
+    g_own_view = lan && ctx.edi == uint32_t(netplay::Me());
+    __imp__sub_000263D0(ctx, base);
+    g_own_view = false;
+    if (g_other_view) d3d::SetDrawsOff(false);
+    g_other_view = false;
+}
+// 0x518F0 (eax the HUD) draws the split screen's frame in the player's colour around the view (a red 640x240 one for
+// player 1, the other views drawn over its inside): with this copy's view the whole screen, none
+X86_EXTERN_FUNC(__imp__sub_000518F0);
+X86_FUNC(sub_000518F0) {
+    if (g_own_view) {
+        ctx.esp += 4;  // cdecl: the return address only
+        return;
+    }
+    __imp__sub_000518F0(ctx, base);
+}
+X86_EXTERN_FUNC(__imp__sub_00033EE0);
+X86_FUNC(sub_00033EE0) {
+    if (g_other_view && (NetView() & 1)) {
+        ctx.esp += 4;
+        return;
+    }
+    __imp__sub_00033EE0(ctx, base);
+}
 // (Drawing this copy's view last instead, 0x263D0 put off until after the last player's, made the copies part: that
 // function also runs each player's HUD and pause menu logic, whose order matters. 2026-11-13.)
 
 namespace auf {
 // bond_eng.xbe each frame (hooks.cpp): the hash handed over once
 void NetplayBond() {
+    if (g_other_view) d3d::SetDrawsOff(false);
+    g_other_view = false;
     CoopFrame();
     static bool set = false;
     if (set || !netplay::Active()) return;
