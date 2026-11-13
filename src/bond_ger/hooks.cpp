@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "common/auf.h"
+#include "core/netplay.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
 #include "xdk/hle.h"
@@ -75,11 +76,70 @@ void NoHitFlash(X86Context& ctx, uint8_t*) {
 // 0x207630 + 4m is 1 (0x20762C, mission 0, always is; a profile's load rebuilds them, so they are written each frame);
 // Start Mission (0x4AA40, events 2 and 0x16) loads the map of the mission 0x2A9F98 holds at the press.
 // AUF_UNLOCK=1: every mission open. AUF_MISSION=n (0 to 11): Start Mission starts mission n.
+// every mission open also while tuning sights (the guns come with each mission's models) and in LAN play: written each
+// frame and before the select page's own code reads the flags (0x4718D its presses, 0x3C51D and 0x42480 its picture)
+// In LAN play (not co-op) also every reward of the 12 missions (the flags 0x2A9B8C + 4m: what mission m's clearing opens in the
+// multiplayer, text ids 930 to 941: the Rocket Manor map, the Golden Gun mode, the Stealth Bond, Guard, Alpine Guard,
+// Cyclops Oil Guard, Poseidon Guard and Carrier Guard models, the Viper and Calypso, Full Arsenal, Gravity Boots; and
+// 0x2A9BBC + 4m: the gold medal bonuses, ids 1037 to 1048), so each copy of a game has all of them to choose from.
+static void UnlockMissions() {
+    static const bool unlock = std::getenv("AUF_UNLOCK") != nullptr;
+    // LAN play but not story co-op (co-op keeps the profile as it is, and saves): everything open, nothing saved
+    const bool lan = netplay::Active() && !auf::CoopOn();
+    kernel::BlockSaveWrites(lan);
+    if (unlock || auf::sight_tuner || lan)
+        for (uint32_t m = 0; m < 11; m++) kernel::G<uint32_t>(A(0x207630) + 4 * m) = 1;
+    if (unlock || lan)
+        for (uint32_t m = 0; m < 12; m++) {
+            kernel::G<uint32_t>(A(0x2A9B8C) + 4 * m) = 1;
+            kernel::G<uint32_t>(A(0x2A9BBC) + 4 * m) = 1;
+        }
+}
+X86_EXTERN_FUNC(__imp__sub_0004718D);
+X86_FUNC(sub_0004718D) {
+    UnlockMissions();
+    __imp__sub_0004718D(ctx, base);
+}
+X86_EXTERN_FUNC(__imp__sub_0003C51D);
+X86_FUNC(sub_0003C51D) {
+    UnlockMissions();
+    __imp__sub_0003C51D(ctx, base);
+}
+X86_EXTERN_FUNC(__imp__sub_00042480);
+X86_FUNC(sub_00042480) {
+    UnlockMissions();
+    __imp__sub_00042480(ctx, base);
+}
+// the multiplayer menus' own readers of the reward flags (0x44E40 and 0x44F30 the model and weapon lists, 0x37CA0 the game
+// modes, 0x3A3D0 Calypso, 0x464A0 Gravity Boots)
+X86_EXTERN_FUNC(__imp__sub_00044E40);
+X86_FUNC(sub_00044E40) {
+    UnlockMissions();
+    __imp__sub_00044E40(ctx, base);
+}
+X86_EXTERN_FUNC(__imp__sub_00037CA0);
+X86_FUNC(sub_00037CA0) {
+    UnlockMissions();
+    __imp__sub_00037CA0(ctx, base);
+}
+X86_EXTERN_FUNC(__imp__sub_0003A3D0);
+X86_FUNC(sub_0003A3D0) {
+    UnlockMissions();
+    __imp__sub_0003A3D0(ctx, base);
+}
+X86_EXTERN_FUNC(__imp__sub_00044F30);
+X86_FUNC(sub_00044F30) {
+    UnlockMissions();
+    __imp__sub_00044F30(ctx, base);
+}
+X86_EXTERN_FUNC(__imp__sub_000464A0);
+X86_FUNC(sub_000464A0) {
+    UnlockMissions();
+    __imp__sub_000464A0(ctx, base);
+}
 X86_EXTERN_FUNC(__imp__sub_0015DD30);
 X86_FUNC(sub_0015DD30) {
-    static const bool unlock = std::getenv("AUF_UNLOCK") != nullptr;
-    if (unlock)
-        for (uint32_t m = 0; m < 11; m++) kernel::G<uint32_t>(A(0x207630) + 4 * m) = 1;
+    UnlockMissions();
     auf::BondFrame(ctx, base);
     auf::NetplayBond();
     __imp__sub_0015DD30(ctx, base);

@@ -206,3 +206,7 @@ X86_FUNC(sub_000BFCA0) {
         LOGR("auf: co-op: the second player's spawn put 48 units from the first's");
     }
 }
+
+namespace auf {
+bool CoopOn() { return On(); }
+}  // namespace auf

@@ -139,6 +139,7 @@ void NetplayInit();
 void NetplayBond();
 // story co-op (src/bond/coop.cpp): a second player in a story mission; its trace each frame (from NetplayBond)
 extern bool coop;
+bool CoopOn();  // story co-op is on (the setting, or AUF_COOP=1)
 void CoopFrame();
 
 }  // namespace auf

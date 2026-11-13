@@ -35,6 +35,22 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-13 - Sight tuner finished (built-in sights), no sights on three guns, unlocks, LAN play not saved
+- The hands' idle sway: the arms are sampled at the animation clock [0x3B2288]; while tuning it stands still. The gun's
+  lag behind the view (0x27D90, [view+0x340]) is off while tuning.
+- J L / I K / U O: the gun's angles (90 90 0) sit at a pole of 0x15C950's Euler order, so turn and roll were one axis.
+  The tuner's turn, tilt and roll now turn the finished matrix about the view's axes (+y down, -z forward; turn and
+  tilt negated, seen at 8 degrees). AUF_TUNE_NEXT=n presses "." in tests; AUF_NO_FREEZE keeps the clock running.
+- The player's tuning built in (kBuiltIn): P2K, P2KNS, SPGoldenGun, KA57, Defender, FSU4, Frinesi, Ingalls, KS7,
+  Viper, Dartgun. The P2K takes the P2KNS's until it has its own. The Calypso, PS100 and rocket launcher have no aim
+  down sights (the game's red dot).
+- Missions open while tuning and in LAN play: 0x207630 + 4m written also from the select page's own code (0x4718D,
+  0x3C51D, 0x42480). LAN multiplayer (not co-op): every mission reward on too (0x2A9B8C + 4m: Rocket Manor, Golden Gun
+  mode, the MP models, Viper, Calypso, Full Arsenal, Gravity Boots; 0x2A9BBC + 4m: the gold bonuses), from the MP
+  menus' readers (0x44E40, 0x44F30, 0x37CA0, 0x3A3D0, 0x464A0), and the saved games not written (SDK
+  kernel::BlockSaveWrites). Story co-op saves as before. Built, not yet played over LAN.
+- The cursor is let go while the window is dragged or Alt/Win is held (SDK main.cpp).
+
 ### 2026-11-13 - Co-op over LAN: no red half on the host; the second player's state; a stale launch file
 - Story co-op over LAN (AUF_COOP=1 on both copies, Trouble in Paradise): the host saw its view with the bottom half red.
   Not the other view's drawing: 0x518F0 (from the HUD draw 0x554A0, under 0x33EE0 in the view's 0x263D0) draws the

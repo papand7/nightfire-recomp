@@ -29,6 +29,8 @@
         case 0x2A9724: return 0x2A9A44; \
         case 0x2A9734: return 0x2A9A54; \
         case 0x2A977C: return 0x2A9A9C; \
+        case 0x2A9B8C: return 0x2A9EAC; \
+        case 0x2A9BBC: return 0x2A9EDC; \
         case 0x2A9C24: return 0x2A9F44; \
         case 0x2A9CA8: return 0x2A9FC8; \
         case 0x2A9CAC: return 0x2A9FCC; \
@@ -56,6 +58,7 @@
         case 0x3B2200: return 0x3B2520; \
         case 0x3B220C: return 0x3B252C; \
         case 0x3B2210: return 0x3B2530; \
+        case 0x3B2288: return 0x3B25A8; \
         case 0x3B22A0: return 0x3B25C0; \
         case 0x3B22D5: return 0x3B25F5; \
         case 0x3B23E8: return 0x3B2708; \
