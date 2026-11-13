@@ -122,8 +122,6 @@ Everything is set from the games' own menus.
 The original Xbox 007: Agent Under Fire, its own code recompiled to run natively on PC (not an emulator), in the same
 launcher as NightFire. **Windows** for now.
 
-![007: Agent Under Fire on PC](docs/images/auf/agentunderfire-pc-port.webp)
-
 <table>
 <tr><td><img src="docs/images/auf/agentunderfire-on-foot.webp" alt="On foot at night, an armed guard running along a cobbled street"></td>
 <td><img src="docs/images/auf/agentunderfire-driving.webp" alt="The Aston Martin on a night street, with the radar and the weapon panel"></td></tr>
