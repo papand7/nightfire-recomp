@@ -5,9 +5,8 @@ Two Xbox Bond games, running natively on PC from one launcher:
 - **007: NightFire**, remastered: ray traced lighting, sharper and richer graphics, HD textures, story co-op, LAN
   multiplayer, a modern menu and full mouse, keyboard, controller and steering wheel support. For **Windows**, with
   **Linux**, **macOS** and **Android** in beta.
-- **007: Agent Under Fire** (new): on foot, driving and on the guns, with aim down sights, story co-op, LAN
-  multiplayer and the PC settings in the game's own menus. For **Windows**; Linux, macOS and Android are being worked
-  on. See [Agent Under Fire](#007-agent-under-fire) below.
+- **007: Agent Under Fire** (new): aim down sights, story co-op and LAN multiplayer. For **Windows**, with Linux,
+  macOS and Android coming. See [Agent Under Fire](#007-agent-under-fire).
 
 Everything is set from the games' own menus.
 
@@ -119,44 +118,31 @@ Everything is set from the games' own menus.
 
 ## 007: Agent Under Fire
 
-The original Xbox 007: Agent Under Fire, its own code recompiled to run natively on PC (not an emulator), in the same
-launcher as NightFire. **Windows** for now.
+The original Xbox 007: Agent Under Fire, running natively on PC, in the same launcher as NightFire. **Windows** for
+now.
 
 <table>
-<tr><td><img src="docs/images/auf/agentunderfire-on-foot.webp" alt="On foot at night, an armed guard running along a cobbled street"></td>
-<td><img src="docs/images/auf/agentunderfire-driving.webp" alt="The Aston Martin on a night street, with the radar and the weapon panel"></td></tr>
-<tr><td><img src="docs/images/auf/agentunderfire-gadget.webp" alt="The Q-Decryptor in hand outside the helipad door at sunset"></td>
-<td><img src="docs/images/auf/agentunderfire-mounted-gun.webp" alt="A rifle mounted on a moving truck on a highway"></td></tr>
+<tr><td><img src="docs/images/auf/auf-gadget.webp" alt="The Q-Decryptor in the first mission"></td>
+<td><img src="docs/images/auf/auf-pistol.webp" alt="Aiming the pistol in the first mission"></td></tr>
+<tr><td><img src="docs/images/auf/auf-truck-gun.webp" alt="On the truck's gun in the city"></td>
+<td><img src="docs/images/auf/auf-driving.webp" alt="Driving through the docks"></td></tr>
 </table>
 
-*On foot, driving, the first mission and a mounted gun.*
-
-![Split-screen story co-op in Trouble in Paradise](docs/images/auf/agentunderfire-coop-split.webp)
+![Split-screen story co-op](docs/images/auf/agentunderfire-coop-split.webp)
 
 *Story co-op in split screen.*
 
 **Features**
-- **Vulkan renderer** with ray traced effects (RTX-class graphics cards), widescreen and ultrawide with the HUD kept
-  in a 4:3 centre, any resolution, field of view, and high frame rates on foot (60 by default, up to 240 or
-  unlimited).
-- **Aim down sights:** every gun's sights lined up on the centre, with no sway while you aim (the Calypso, PS100 and
-  rocket launcher keep the game's red dot), weapon sway, hit effects and number keys for weapons.
-- **Mouse and keyboard** on foot, driving and on the mounted guns, every key rebindable; controllers with rumble.
-- **Story co-op:** a friend joins the missions in split screen or over the network, and co-op saves your progress.
-- **LAN multiplayer:** host or join matches on your network, with every map, character, weapon and mode unlocked for
-  the match (multiplayer does not change your saved game).
-- **Modern menus** made for the mouse, and the PC settings in the game's own menus: a row on the main menu and a
-  RECOMP tab on the pause screen.
-- **Ragdolls, pickups you can knock about, 3D sound** through walls, **photo mode**, achievements, screenshots (F12).
-- English, French and German; both the European and US discs.
-
-![The RECOMP tab of the pause screen](docs/images/auf/agentunderfire-pc-settings-pause.webp)
-
-*The pause screen's RECOMP tab, on foot and driving.*
+- Vulkan renderer with ray tracing, widescreen, any resolution and high frame rates.
+- Aim down sights, mouse and keyboard on foot, driving and on the guns, and controllers.
+- Story co-op in split screen or over the network.
+- LAN multiplayer with everything unlocked.
+- Modern menus, PC settings in the game's menus, ragdolls, 3D sound, photo mode and achievements.
+- English, French and German.
 
 ## The launcher
 
-![NightFire PC Launcher](docs/images/launcher.png)
+![The 007 Remastered launcher](docs/images/launcher.png)
 
 The **007 Remastered launcher** sets up both games, each on its own tab (Agent Under Fire on Windows):
 - **Mission:** choose your disc image and press **Install**: the launcher builds the game on your PC from your own
