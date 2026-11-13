@@ -133,13 +133,6 @@ now.
 
 *Ultra with each shader style in turn: Enhanced, Toon, Retro and Noir.*
 
-<table>
-<tr><td><img src="docs/images/auf/auf-gadget.webp" alt="The Q-Decryptor in the first mission"></td>
-<td><img src="docs/images/auf/auf-pistol.webp" alt="Aiming the pistol in the first mission"></td></tr>
-<tr><td><img src="docs/images/auf/auf-truck-gun.webp" alt="On the truck's gun in the city"></td>
-<td><img src="docs/images/auf/auf-driving.webp" alt="Driving through the docks"></td></tr>
-</table>
-
 ![Split-screen story co-op](docs/images/auf/agentunderfire-coop-split.webp)
 
 *Story co-op in split screen.*
