@@ -132,5 +132,8 @@ void ModernMenuFrame(X86Context& ctx, uint8_t* base, uint32_t file);  // bond_en
 // bond_eng.xbe's state hash the copies compare (src/bond/netplay_hash.cpp, each frame)
 void NetplayInit();
 void NetplayBond();
+// story co-op (src/bond/coop.cpp): a second player in a story mission; its trace each frame (from NetplayBond)
+extern bool coop;
+void CoopFrame();
 
 }  // namespace auf

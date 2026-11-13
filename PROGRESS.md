@@ -35,6 +35,25 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-13 - LAN play's own view checked; story co-op stage A begun (a second client crashes the level's start)
+- Own view (scratch np8, two copies): the hash agrees at frame 1140 and no desync through the match; player 2's window
+  its own view full screen. Player 1's window: its view full screen but its lower half covered by a solid red fill;
+  not the second view's rect (moved off the screen, w = h = 1: the red stays) and not its draw order (0x263D0 for this
+  copy's player put off until after the last: still red, and the copies then parted, np7: that function also runs each
+  player's HUD and pause-menu logic; reverted). Still open.
+- Story co-op (src/bond/coop.cpp, auf::coop off; AUF_COOP=1 a test): the state change by name 0x33330 for a mission's
+  first level (orc_, m6_, emstel_, alp1_, alp2_, rig_, uwb_, carrier) raises the players its level is made for
+  [0x20540C] from 1 to 2 (0x29160 copies it into [0x205408], which every per-player table follows). Evidence (scratch
+  coop1, mission 0): orc_1 made for two players, then an access violation reading [0x4C] in 0x10BD60 (ecx = the second
+  player's +0x428, null) from 0xBD518 under the client's begin (0x6BDCD) during the map's load (0x287B3, 0x292A7).
+  Player +0x428 is a state machine made from +0x424 by 0xF07F0 ("@SKI_FWD" etc.; set at 0x274E9 and 0xB1825): the
+  story level makes it for one client only. Next: where +0x424 is given to a story client (0x27598, 0xBB726), so the
+  second gets the first's.
+- Static facts for co-op: the coop cvar [0x328FB0] (registered at 0x6C288 "coop", 0x24 flags) is read at 0x6BDFA and
+  0x6D31B (with deathmatch [0x328664]: a client's respawn-style handling), 0x7D96F (spawnflag 0x10000, NOT_COOP
+  entities left out), 0xBFE17 (info_player_coop spawn); the story archive has 22 info_player_start, no
+  info_player_coop, and 1596 "$player" in its scripts (player 1 only: triggers, objectives, cutscenes).
+
 ### 2026-11-13 - Quality pass on the PC features (part 1: runs held for play-testing)
 Runs: scratch\auf_qa\<name> (screenshots, auf.log) in the NightFire folder. Test switches added: AUF_TOSS_TRACE=1 (the game's
 own toss flights: start, 0.25 s marks, bounces, stop), AUF_GRENADE_TEST=1 (player 1 takes the level's grenade pickups and

@@ -79,7 +79,7 @@ X86_FUNC(sub_00025CA0) {
 // Each player sees only their own view in LAN play. The split screen's views (0x26DA1 calls 0x263D0 for each local
 // player, edi the player) are set up by 0x15E140 (cdecl: view, views, player): 2 views halve the height, 3 or 4 the width
 // too. This copy's player gets the whole screen (views 1); the others' views are still made (their HUD and the pause
-// menu's tick run there, the game's logic) but drawn into a single pixel: 0x15E050 (esi the rect x, y, w, h floats, edi
+// menu's tick run there, the game's logic) but drawn into a pixel off the screen: 0x15E050 (esi the rect x, y, w, h floats, edi
 // the player) makes the camera and the viewport from that rect.
 X86_EXTERN_FUNC(__imp__sub_0015E140);
 static bool g_pixel_view = false;  // the view being made is another player's split screen view
@@ -93,37 +93,21 @@ X86_FUNC(sub_0015E140) {
 }
 X86_EXTERN_FUNC(__imp__sub_0015E050);
 X86_FUNC(sub_0015E050) {
-    if (g_pixel_view) {
+    if (g_pixel_view) {  // off the screen: the view's full rectangle fill (a red one seen) starts at its x, y too
+        kernel::G<float>(ctx.esi + 0) = 4000.0f;
+        kernel::G<float>(ctx.esi + 4) = 4000.0f;
         kernel::G<float>(ctx.esi + 8) = 1.0f;
         kernel::G<float>(ctx.esi + 12) = 1.0f;
     }
     __imp__sub_0015E050(ctx, base);
 }
-// This copy's view last, over what the others' views drew (the host's, player 1, was the first, and the second view's
-// drawing covered the lower half of it): 0x263D0 for this copy's player is put off until after the last player's.
-X86_EXTERN_FUNC(__imp__sub_000263D0);
-X86_FUNC(sub_000263D0) {
-    const uint32_t views = kernel::R32(A(0x205408)), me = uint32_t(netplay::Me());
-    if (!netplay::Active() || netplay::Players() < 2 || views < 2 || me + 1 >= views) return __imp__sub_000263D0(ctx, base);
-    static uint32_t my_view = 0;  // the argument this copy's player's call had
-    if (ctx.edi == me) {
-        my_view = kernel::R32(ctx.esp + 4);
-        return;
-    }
-    __imp__sub_000263D0(ctx, base);
-    if (ctx.edi + 1 != views) return;
-    const uint32_t edi = ctx.edi, esi = ctx.esi;
-    ctx.edi = me;
-    X86_PUSH32(my_view);
-    X86_PUSH32(0x26DEDu);  // the loop's own return address (the callee's ret takes it)
-    __imp__sub_000263D0(ctx, base);
-    ctx.esp += 4;
-    ctx.edi = edi, ctx.esi = esi;
-}
+// (Drawing this copy's view last instead, 0x263D0 put off until after the last player's, made the copies part: that
+// function also runs each player's HUD and pause menu logic, whose order matters. 2026-11-13.)
 
 namespace auf {
 // bond_eng.xbe each frame (hooks.cpp): the hash handed over once
 void NetplayBond() {
+    CoopFrame();
     static bool set = false;
     if (set || !netplay::Active()) return;
     set = true;
