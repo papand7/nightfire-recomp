@@ -235,6 +235,8 @@ const app::GameInfo app::kGame = {
                 {"pickup_physics", &auf::pickup_physics, nullptr, "Pickup physics", "Dropped weapons, ammo and pickups fly out with a toss and a spin, bounce, slide and come to rest; walking into one you cannot take nudges it, and explosions throw them. Off in network play"},
                 {"audio_occlusion", &auf::audio_occlusion, nullptr, "Sound through walls", "A sound with a wall or a closed door between it and Bond is quieter and muffled, traced through the level as it plays"},
                 {"weapon_sway", &auf::weapon_sway, nullptr, "Weapon sway", "The gun trails your turns a little and settles back"},
+                {"sight_tuner", &auf::sight_tuner, nullptr, "Sight tuner (debug)",
+                 "Bond aims all the time and is given every gun once a level: the arrow keys move the held gun, Home/End nearer/farther (Shift finer), Enter saves every gun's place to sight_offsets.txt, Delete resets the held one"},
                 {"modern_menus", &auf::modern_menus, nullptr, "Modern menus", "The menus and the pause drawn anew for the mouse, in the game's blues; off for the game's own"},
                 {"hit_flash", &auf::hit_flash, nullptr, "Hit flash", "The white flash on screen when Bond is hit. On by default; off for those it troubles"},
                 {"uncapped", &auf::uncapped, nullptr, "High frame rate",
@@ -247,8 +249,8 @@ const app::GameInfo app::kGame = {
     .loaded = nullptr,
     .window = auf::ModernMenuFonts,   // the modern menus' fonts
     .message = nullptr,
-    .ui = auf::ModernMenuUi,          // the modern menus (src/common/modern_menu.cpp)
-    .pad = auf::MenuMouse,                // changes a polled pad: the mouse in the menus
+    .ui = [](double fps) { auf::ModernMenuUi(fps), auf::SightTunerUi(fps); },  // the modern menus (src/common/modern_menu.cpp), the sight tuner's panel
+    .pad = [](int port, input::Pad& p) { auf::MenuMouse(port, p), auf::SightTunerPad(port, p); },  // changes a polled pad: the mouse in the menus
     .rumble = nullptr,
     .hud_aspect = 4.0f / 3.0f,            // the game lays out its 2D for 4:3: kept in the middle of a wider frame
     .squeeze_screen_programs = true,      // DRIVING.XBE draws its HUD and menus through vertex programs

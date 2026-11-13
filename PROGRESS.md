@@ -35,6 +35,25 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-13 - Sight tuner (debug), from NightFire's
+- settings.toml `sight_tuner = true` (off by default; not on the menus' pages): player 1 aims down the sights all the time
+  and is given every single-player gun whose model the level has loaded, with ammo; switched with the game's own keys
+  (Q, 1-9). Arrows move the held gun, Home/End nearer/farther, Shift finer; Enter saves every gun's correction to
+  sight_offsets.txt beside the exe ("Class x y z": +x left, +y up, +z farther, the 0x27C40 offset's units, added to
+  kSight while aiming), Delete resets the held gun. A panel and a red dot at the true centre (src/common/sight_tuner.cpp,
+  GameInfo::ui); the arrows are cleared from the d-pad while tuning (GameInfo::pad). The file is read at the first aim
+  and applied always. src/bond/aim.cpp.
+- Learned: a gun's identity is its ClassDef name (vtable+0: mov eax, def; def+0 the name). The console's "give"
+  (0xBBDD0) calls the player's vfunc +0xB4 (0x76800: model, 0, 0, primary ammo, secondary ammo, flag) with a MODEL name
+  ("models/ka57_pickup.men"); a class name, or a model the level has not loaded, gives a bare "Weapon". The switch walks
+  the inventory (+0x314 edict numbers, +0x318 count): 0x749E0 starts at the highest +0x398, 0x76680 goes by +0x39C; a
+  gun is offered only with ammo (0xAF770), given by the player's vfunc +0x100 ("ammo", type, amount, 0). The mission's
+  start replaces the inventory given before it, so the guns are given again when they leave the switch.
+- Verified in Cold Reception (AUF_MISSION=4, scripted pad): panel and dot drawn; 8 guns given (P2K, golden gun,
+  Defender, Frinesi, KS7, rocket launcher, two grenade launchers; the others are not loaded there) and cycled with the
+  game's weapon button; a file "P2K 2 0 0" moved the pistol left, "P2K 0 0 6" made it farther. The keys read the
+  physical keyboard and were checked by reading the code only.
+
 ### 2026-11-12 - Settings pages as NightFire's; the F1 window off
 - src/common/settings_page.cpp now follows NightFire's page tree and wording, in AUF's look (the game's Univers font,
   blues and gold, the "007 AGENT UNDER FIRE" header, the pause's SETTINGS tab): Settings (Field of View, Mouse

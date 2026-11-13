@@ -17,13 +17,36 @@
 // Weapon sway (auf::weapon_sway), in the same offset: the gun trails the view's turn (the angles 0x2A8124 pitch and
 // 0x2A8128 yaw, 0x30 a player, degrees) a little and settles back, less while aiming.
 // AUF_ADS_TRACE=1 logs aiming's start and end.
+//
+// The sight tuner (auf::sight_tuner, debug, off by default), from NightFire's: each gun's own correction of kSight, kept
+// by its class name (the ClassDef's +0 through the vtable's first function, "mov eax, def; ret": "P2K", "KA57", ...) in
+// sight_offsets.txt beside the exe, a line a gun: "name x y z" in the offset's units (+x left, +y up, +z ahead), added
+// to the gun's offset while aiming. The file is read at the first aim and applied always. While tuning, player 1 aims
+// all the time and is given every single-player gun whose model the level has loaded (GiveGuns: given again when the
+// mission's start replaces the inventory), with ammo, switched with the game's own keys (Q, 1-9); the arrows move the
+// held gun, Home/End nearer/farther, Shift finer; Enter saves every gun's correction, Delete resets the held one.
+// src/common/sight_tuner.cpp draws the panel and the true centre and keeps the arrows from the d-pad.
 #include "bond/addr.h"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
+#include <string>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
+#include "app/app.h"
 #include "bond/ragdoll.h"
 #include "common/auf.h"
 #include "core/log.h"
@@ -61,6 +84,196 @@ bool Scoped(uint32_t player) {
 }
 
 float Smooth(float t) { return t * t * (3 - 2 * t); }
+
+// ---- the sight tuner
+struct Tune {
+    float v[3] = {};
+};
+std::map<std::string, Tune> g_tune;  // by class name
+std::string g_weapon[4];             // each player's gun in hand, by class name
+std::string TunePath() { return (app::ExeDir() / "sight_offsets.txt").string(); }
+void LoadTune() {
+    static bool loaded = false;
+    if (loaded) return;
+    loaded = true;
+    FILE* f = std::fopen(TunePath().c_str(), "r");
+    if (!f) return;
+    char line[160], name[64];
+    int n = 0;
+    while (std::fgets(line, sizeof line, f)) {
+        Tune t;
+        if (line[0] != '#' && std::sscanf(line, "%63s %f %f %f", name, &t.v[0], &t.v[1], &t.v[2]) >= 3) g_tune[name] = t, n++;
+    }
+    std::fclose(f);
+    LOGR("ads: %d sight offsets read from %s", n, TunePath().c_str());
+}
+bool SaveTune() {
+    FILE* f = std::fopen(TunePath().c_str(), "w");
+    if (!f) return false;
+    std::fprintf(f, "# the sight tuner's corrections: class x y z (x across, y up, z ahead; added while aiming)\n");
+    for (const auto& [name, t] : g_tune)
+        if (t.v[0] != 0 || t.v[1] != 0 || t.v[2] != 0) std::fprintf(f, "%s %.3f %.3f %.3f\n", name.c_str(), t.v[0], t.v[1], t.v[2]);
+    std::fclose(f);
+    return true;
+}
+// a weapon's class name ("P2K"): its ClassDef (the vtable's first function, mov eax, imm32; ret), its +0
+std::string WeaponName(uint32_t weapon) {
+    const uint32_t vt = weapon ? kernel::R32(weapon) : 0, f = vt ? kernel::R32(vt) : 0;
+    if (!f || kernel::G<uint8_t>(f) != 0xB8 || kernel::G<uint8_t>(f + 5) != 0xC3) return {};
+    const uint32_t name = kernel::R32(kernel::R32(f + 1));
+    if (name < 0x10000 || name > 0x4000000) return {};
+    std::string s;
+    for (int i = 0; i < 31; i++) {
+        const char ch = char(kernel::G<uint8_t>(name + i));
+        if (!ch) break;
+        if (ch < 32 || ch > 126) return {};
+        s += ch;
+    }
+    return s;
+}
+// the single-player guns, by their models (the "give" console command takes a model: the class is the model's; a
+// class name, or a model the level has not loaded, gives a bare Weapon). The models of 1p_uk.viv named *_pickup.men but the fists and the Q-Claw; the
+// scoped ones among them are given too but have nothing to tune
+const char* const kGuns[] = {"models/p2k_pickup.men", "models/p2kns_pickup.men", "models/goldengun_pickup.men", "models/defender_pickup.men",
+                             "models/viper_pickup.men", "models/frinesi_pickup.men", "models/ka57_pickup.men", "models/fsu4_pickup.men",
+                             "models/ps100_pickup.men", "models/ks7_pickup.men", "models/ingalls_pickup.men", "models/calypso_pickup.men",
+                             "models/d17_pickup.men", "models/ugw_pickup.men", "models/ssr4000_pickup.men", "models/mrl22_pickup.men",
+                             "models/fraggrenade_pickup.men", "models/clustergrenade_pickup.men", "models/goldengrenade_pickup.men",
+                             "models/dartgun_pickup.men"};
+constexpr uint32_t kGunCount = sizeof kGuns / sizeof *kGuns;
+uint32_t g_given[kGunCount];  // the item each gave
+// the player's inventory: +0x314 an array of +0x318 edict numbers (the edicts at [0x329390], 0x2E0 each, the entity
+// their +0x278), as the switch's walk reads it: 0x749E0 starts at the Weapon of the highest +0x398 above -999999 whose
+// vfunc +0x1F8 says yes; 0x76680 goes on to the Gadget of the next +0x39C up (two of one +0x39C: one is never reached)
+uint32_t Inventory(uint32_t player, uint32_t gun) {  // the item gun gave while it is still held, else 0
+    const uint32_t list = kernel::R32(player + 0x314), count = std::min<uint32_t>(kernel::R32(player + 0x318), 256);
+    const uint32_t edicts = kernel::R32(A(0x329390));
+    for (uint32_t k = 0; g_given[gun] && list && k < count; k++)
+        if (kernel::R32(edicts + kernel::R32(list + 4 * k) * 0x2E0 + 0x278) == g_given[gun]) return g_given[gun];
+    return 0;
+}
+// a held gun the switch offers
+bool Offered(X86Context& ctx, uint32_t player, uint32_t w) {
+    const uint32_t ecx = ctx.ecx;
+    ctx.ecx = w;
+    bool yes = kernel::CallGuest(ctx, kernel::R32(kernel::R32(w) + 0x1F8), {}) != 0;
+    ctx.ecx = player;
+    yes = yes && int32_t(kernel::R32(w + 0x398)) > -999999 && (kernel::CallGuest(ctx, A(0xAF770), {w}) & 0xFF);
+    ctx.ecx = ecx;
+    return yes;
+}
+int GunsOffered(X86Context& ctx, uint32_t player) {
+    int n = 0;
+    for (uint32_t g = 0; g < kGunCount; g++) {
+        const uint32_t w = Inventory(player, g);
+        n += w && Offered(ctx, player, w);
+    }
+    return n;
+}
+// each gun not yet held is given (the player's vfunc +0xB4, as "give"), each with ammo: the switch offers a gun only
+// with the player's Ammo item of its ammo name (the gun's vfunc +0x1DC / +0x1E8; 0xAF770) holding some. The player's
+// vfunc +0x100 ("ammo", name, amount, 0) (0x77670) adds to that Ammo item or makes it. A gun the mission did not
+// place in the switch's order (+0x398 at -999999) is put at its end
+void GiveGuns(X86Context& ctx, uint32_t player) {
+    const uint32_t vt = kernel::R32(player), esp = ctx.esp, ecx = ctx.ecx;
+    auto call = [&](uint32_t self, uint32_t fn, std::initializer_list<uint32_t> args) {
+        ctx.ecx = self;
+        return kernel::CallGuest(ctx, fn, args);
+    };
+    ctx.esp = esp - 128;  // our strings on the guest stack, below what the game has there
+    const uint32_t gun = ctx.esp, ammo = ctx.esp + 64;
+    std::memcpy(&kernel::G<uint8_t>(ammo), "ammo", 5);
+    int given = 0, offered = 0;
+    for (uint32_t g = 0; g < kGunCount; g++) {
+        uint32_t w = Inventory(player, g);
+        if (!w) {
+            std::memcpy(&kernel::G<uint8_t>(gun), kGuns[g], std::strlen(kGuns[g]) + 1);
+            w = call(player, kernel::R32(vt + 0xB4), {gun, 0, 0, 0xFFFFFFFFu, 0xFFFFFFFFu, 0});
+            g_given[g] = w;
+            if (!w) continue;
+            if (WeaponName(w) == "Weapon") {  // a model this level has not loaded: a bare Weapon, kept out of the switch
+                kernel::G<uint32_t>(w + 0x398) = uint32_t(-999999);
+                LOGR("ads: sight tuner: %s is not in this level", kGuns[g]);
+                g_given[g] = 0;
+                continue;
+            }
+            given++;
+        }
+        for (uint32_t slot : {0x1DCu, 0x1E8u}) {
+            const uint32_t type = call(w, kernel::R32(kernel::R32(w) + slot), {});
+            if (type && kernel::G<uint8_t>(type)) call(player, kernel::R32(vt + 0x100), {ammo, type, 500, 0});
+        }
+        if (int32_t(kernel::R32(w + 0x398)) <= -999999) kernel::G<uint32_t>(w + 0x398) = 100 + g;
+        const bool offer = Offered(ctx, player, w);
+        offered += offer;
+        LOGR("ads: sight tuner: %s: %s, order %d %d%s", kGuns[g], WeaponName(w).c_str(), int32_t(kernel::R32(w + 0x398)),
+             int32_t(kernel::R32(w + 0x39C)), offer ? "" : ", not offered by the switch");
+    }
+    ctx.esp = esp, ctx.ecx = ecx;
+    LOGR("ads: sight tuner: %d guns given, %d of %d in the switch", given, offered, int(kGunCount));
+}
+int64_t NowMs() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+}
+bool Key(int vk) {
+#ifdef _WIN32
+    return (GetAsyncKeyState(vk) & 0x8000) != 0;
+#else
+    (void)vk;
+    return false;
+#endif
+}
+bool Focused() {
+#ifdef _WIN32
+    return GetForegroundWindow() == static_cast<HWND>(app::Window()) && !app::OverlayOpen();
+#else
+    return false;
+#endif
+}
+// player 1's frame while tuning: true when it aims all the time
+bool SightTunerFrame(X86Context& ctx, uint32_t p, float dt) {
+    auf::SightTunerView& v = auf::sight_view;
+    if (!auf::sight_tuner || !auf::PlayerFree()) return v.on = false;
+    // the mission's start puts its own inventory in place (and a level change): every 2 s, when guns left the switch
+    // (gone from the inventory, out of ammo, or out of the switch's order), they are given and fixed anew
+    static int64_t looked = 0;
+    if (NowMs() - looked > 2000) {
+        looked = NowMs();
+        static int had = -1;  // after the last giving (a gun the game refuses is not asked for again and again)
+        const int have = GunsOffered(ctx, p);
+        if (have < had || had < 0) {
+            LOGR("ads: sight tuner: %d of the guns in the switch", have);
+            GiveGuns(ctx, p);
+            had = GunsOffered(ctx, p);
+        }
+    }
+    const std::string& name = g_weapon[0];
+    static std::string was_held;
+    if (name != was_held) was_held = name, LOGR("ads: sight tuner: %s in hand", name.c_str());
+    v.on = !name.empty();
+    v.scoped = Scoped(p);
+    std::snprintf(v.weapon, sizeof v.weapon, "%s", name.c_str());
+    static bool was_enter = false, was_delete = false;
+    const bool focused = Focused(), enter = focused && Key(0x0D), del = focused && Key(0x2E);
+    if (v.on && !v.scoped) {
+        Tune& t = g_tune[name];
+        if (focused) {
+            const float step = (Key(0x10) ? 0.1f : 0.5f) * dt;  // units a second (2 across is a hand's width); Shift finer
+            if (Key(0x25)) t.v[0] += step;  // left (seen: + is left)
+            if (Key(0x27)) t.v[0] -= step;  // right
+            if (Key(0x26)) t.v[1] += step;  // up
+            if (Key(0x28)) t.v[1] -= step;  // down
+            if (Key(0x24)) t.v[2] -= step;  // Home: nearer
+            if (Key(0x23)) t.v[2] += step;  // End: farther
+            if (del && !was_delete) t = Tune{};
+        }
+        v.x = t.v[0], v.y = t.v[1], v.z = t.v[2];
+    }
+    if (enter && !was_enter && SaveTune()) v.saved_ms = NowMs(), LOGR("ads: sight tuner: saved to %s", TunePath().c_str());
+    was_enter = enter, was_delete = del;
+    return v.on && !v.scoped;
+}
 }  // namespace
 
 X86_EXTERN_FUNC(__imp__sub_000BB990);
@@ -70,8 +283,12 @@ X86_FUNC(sub_000BB990) {
     static bool trace = std::getenv("AUF_ADS_TRACE") != nullptr, was[4];
     const bool pressed = (kernel::R32(p + 0x64C) & kTrigger) != 0;
     bool held = false;
-    if (auf::aim_down_sights && auf::PlayerFree() && !Scoped(p)) {
-        held = pressed;
+    const float dt = std::clamp(GetF(kFrameSeconds), 0.0f, 0.1f);
+    LoadTune();
+    g_weapon[i] = WeaponName(kernel::R32(p + 0x2EC));
+    const bool tuning = i == 0 && SightTunerFrame(ctx, p, dt);  // aims all the time
+    if ((auf::aim_down_sights || tuning) && auf::PlayerFree() && !Scoped(p)) {
+        held = pressed || tuning;
         for (uint32_t at : {0x64Cu, 0x4D8u, 0x660u}) kernel::G<uint32_t>(p + at) &= ~kTrigger;
     }
     if (trace && pressed && !was[i]) {
@@ -80,7 +297,6 @@ X86_FUNC(sub_000BB990) {
     }
     was[i] = pressed;
     g_held[i] = held;
-    const float dt = std::clamp(GetF(kFrameSeconds), 0.0f, 0.1f);
     g_aim[i] = std::clamp(g_aim[i] + (held ? dt : -dt) / kEase, 0.0f, 1.0f);
     if (i == 0) HitTestTick(ctx, p, dt);
     PickupTick(ctx, p, i);
@@ -124,6 +340,10 @@ X86_FUNC(sub_00027C40) {
     }();
     SetF(out, GetF(out) * (1 - t) + sight[0] * t);
     SetF(out + 4, GetF(out + 4) + sight[1] * t);
+    // the held gun's own correction (the sight tuner's)
+    const auto it = g_tune.find(g_weapon[i]);
+    if (it != g_tune.end())
+        for (int k = 0; k < 3; k++) SetF(out + 4 * k, GetF(out + 4 * k) + it->second.v[k] * t);
 }
 
 // the crosshair
