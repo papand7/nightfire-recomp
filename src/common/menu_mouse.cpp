@@ -112,6 +112,33 @@ void ScriptedPoll(input::Pad& p) {
     }
 }
 
+// AUF_PAD2=secs:what,... a second controller for a split screen test: plugged in, its presses (control names, held
+// 150 ms or the seconds after a '*') timed as AUF_PAD's, from the main menu
+void ScriptedPoll2(input::Pad& p) {
+    static const char* e = std::getenv("AUF_PAD2");
+    if (!e || !*e || kImage != kBond) return;
+    p.connected = true;
+    using namespace std::chrono;
+    static steady_clock::time_point t0{};
+    if (!ModernMenuWasSeen()) return;
+    if (t0 == steady_clock::time_point{}) t0 = steady_clock::now();
+    const double t = duration<double>(steady_clock::now() - t0).count();
+    const char* s = e;
+    double at;
+    char what[32];
+    int used;
+    while (std::sscanf(s, "%lf:%31[^,]%n", &at, what, &used) == 2) {
+        s += used;
+        if (*s == ',') s++;
+        if (t < at) break;
+        double hold = 0.15;
+        if (char* star = std::strchr(what, '*')) hold = std::atof(star + 1), *star = 0;
+        if (t >= at + hold) continue;
+        const int c = input::ControlByName(what);
+        if (c >= 0) Press(p, c);
+    }
+}
+
 #ifdef _WIN32
 // the arrow while the pointer is up: the runtime hides the cursor while the mouse looks
 WNDPROC g_proc = nullptr;
@@ -174,6 +201,7 @@ uint32_t PointerButtons() { return g_forced.on ? g_forced.buttons : input::Mouse
 void MenuMouse(int port, input::Pad& p) {
     constexpr int64_t kPress = 70, kGap = 70;  // ms
     constexpr uint16_t kMouseBits[3] = {0x01, 0x02, 0x04};  // VK_LBUTTON VK_RBUTTON VK_MBUTTON
+    if (port == 1) ScriptedPoll2(p);
     if (port != 0) return;
     RefreshButtons();  // the button pictures for the keyboard or the controller, as it changes
     static int pending = 0;  // notches to play, up positive
