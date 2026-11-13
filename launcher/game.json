@@ -21,9 +21,9 @@
         "3dbed4eb51701a53676e0ace4cdea1752dc04697": "PAL (Europe)",
         "dff80de4f889ef5ee70ac748a0391f2ed220d0e9": "USA"
     },
-    "repo": "https://github.com/hk21x/007-agentunderfire-recomp.git",
-    "branch": "main",
-    "toolchain": "https://raw.githubusercontent.com/hk21x/007-agentunderfire-recomp/main/launcher/toolchain.json",
+    "repo": "https://github.com/papand7/nightfire-recomp.git",
+    "branch": "agentunderfire",
+    "toolchain": "https://raw.githubusercontent.com/papand7/nightfire-recomp/agentunderfire/launcher/toolchain.json",
     "release_xbes": {
         "dff80de4f889ef5ee70ac748a0391f2ed220d0e9": [
             "default.xbe",
