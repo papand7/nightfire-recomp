@@ -215,8 +215,13 @@ X86_FUNC(sub_0001DB10) {
     const uint32_t inst = kernel::R32(ctx.esp + 4), volume = kernel::R32(ctx.esp + 0xC);
     __imp__sub_0001DB10(ctx, base);
     const int i = SlotOf(inst);
-    if (!(ctx.eax & 0xFF) || i < 0 || !Enabled() || !Plausible(volume)) return;
+    if (!(ctx.eax & 0xFF) || i < 0 || !Plausible(volume)) return;
     Slot& s = g_slots[size_t(i)];
+    if (!Enabled()) {  // turned off while it plays: its buffers' low-pass cleared once (a loop stayed dulled)
+        if (s.on && s.heard > 0.001f) TellBuffers(inst, 0, true);
+        s.on = false, s.heard = s.target = 0;
+        return;
+    }
     const uint32_t def = kernel::R32(inst + 4), ent = kernel::R16(inst + 0xC);
     const bool fresh = !s.on || s.def != def || s.ent != ent;
     V at;

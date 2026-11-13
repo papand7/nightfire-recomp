@@ -39,6 +39,7 @@
 
 #include "app/app.h"
 #include "common/auf.h"
+#include "common/settings_page.h"
 #include "core/input.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
@@ -204,6 +205,7 @@ namespace auf {
 void BondFrame(X86Context& ctx, uint8_t* base) {
     Presence();
     RestartKey(ctx, base);
+    settings_page::Watch();  // a binding left waiting when its page went away
 }
 }  // namespace auf
 

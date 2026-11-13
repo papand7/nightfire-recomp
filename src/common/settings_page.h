@@ -14,6 +14,7 @@ constexpr uint32_t kNoRow = ~0u;  // Event: the press came from the game's input
 
 void Reset();                               // the page opens on its list of categories
 void Build(ModernPage& page, bool paused);  // the rows, title, help and focus (the tab strip is the caller's)
+void Watch();                               // each game frame: a binding's wait let go once its page is gone
 uint32_t PageTag();                         // added to the game's page address as the UI's page id: a category scrolls from its top
 // a press: event as the game's menu handler numbers them (0 left, 1 right, 2 up, 3 down, 4 A, 5 B); row from 1 is the row the mouse
 // moved the focus to first, 0 the tab strip's own arrows, kNoRow none

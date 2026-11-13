@@ -117,7 +117,7 @@ std::string Plain(int id, int lang) {
 }  // namespace
 
 const char* PcTabName() {
-    static const char* const kTab[3] = {"SETTINGS", "RÉGLAGES", "EINSTELLUNGEN"};  // on the pause's strip
+    static const char* const kTab[3] = {"SETTINGS", "R\xC9GLAGES", "EINSTELLUNGEN"};  // on the pause's strip (Latin-1, as the game's text)
     return kTab[Language() % 3];
 }
 const char* PcRowName(int lang) { return kRowNames[lang % 3]; }

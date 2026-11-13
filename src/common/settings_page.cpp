@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cctype>
 #include <cstdio>
 #include <functional>
@@ -160,6 +161,7 @@ const Settings::WheelBind* g_wheel = nullptr;  // the wheel binding waiting for 
 bool g_quit_armed = false;  // Quit Game pressed once: the next press quits
 int g_quit_row = -1;
 int g_push = 0;             // the wheel's force test: the side pushed last
+std::chrono::steady_clock::time_point g_built;  // the last Build: the page shown
 
 void EndWaits() {
     if (g_key >= 0) app::EndKeyCapture();
@@ -801,6 +803,14 @@ void OpenPage(int page) {
 }
 }  // namespace
 
+// each game frame (src/bond/pc_extras.cpp): a key or wheel wait whose page has not been shown for half a second (the
+// pause left with Start, the game off the page) is let go; else app::KeyCaptureBusy stays on and the keyboard is dead
+void Watch() {
+    if ((g_key < 0 && !g_wheel) || std::chrono::steady_clock::now() - g_built < std::chrono::milliseconds(500)) return;
+    LOGR("auf: settings: a binding's wait let go with its page closed");
+    EndWaits();
+}
+
 void Reset() {
     EndWaits();
     g_page = kRoot;
@@ -811,6 +821,7 @@ void Reset() {
 uint32_t PageTag() { return uint32_t(g_page + 1); }
 
 void Build(ModernPage& p, bool) {
+    g_built = std::chrono::steady_clock::now();
     // a key or the wheel's control taken since the last frame
     if (uint16_t vk = 0; g_key >= 0 && app::TakeCapturedKey(vk)) {
         Settings& s = app::Get();
