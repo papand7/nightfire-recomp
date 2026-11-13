@@ -46,12 +46,13 @@ struct SightTunerView {
     bool on = false;      // tuning now: player 1 in play with a gun
     bool scoped = false;  // the held gun has the game's scope: nothing to tune
     char weapon[32] = {};  // its class name, the file's key
-    float x = 0, y = 0, z = 0;  // its correction, game units: +x left, +y up, +z farther
+    float x = 0, y = 0, z = 0;  // its correction as the screen shows it, offset units: +x right, +y up, +z farther
+    float turn = 0, tilt = 0, roll = 0;  // degrees
     int64_t saved_ms = 0;  // when Enter last saved (steady clock ms)
 };
 extern SightTunerView sight_view;
 void SightTunerUi(double fps);                // GameInfo::ui after the modern menus: the panel and the centre dot
-void SightTunerPad(int port, input::Pad& p);  // GameInfo::pad after MenuMouse: the arrows held back from the d-pad
+void SightTunerPad(int port, input::Pad& p);  // GameInfo::pad after MenuMouse: the tuner's keys held back from the game
 extern uint32_t fov_percent;  // the 3D views' field of view, percent of the game's
 float FovScale();             // fov_percent as a factor, 0.5 to 1.5
 float FrameWidth();           // the frame's width over the game's 4:3, 1 on a 4:3 screen

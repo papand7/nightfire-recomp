@@ -120,6 +120,21 @@ names (left_stick_up ...) and holds (`name*secs`).
 - Not done: the host view fix run, a session started from the menu rather than XBE_NETPLAY, two PCs, the online
   list against the live master.
 
+### 2026-11-13 - Sight tuner: screen directions, NightFire's keys, no sway or bob
+- The arrows now move the gun the way they point on screen (seen: the 0x27C40 offset's +x is right, +y down; the earlier
+  "+x left" came from a picture taken mid-animation). sight_offsets.txt is "Class right up farther turn tilt roll" (offset
+  units as the screen shows them, degrees); a line of 3 numbers still reads.
+- NightFire's keys: , and . pick the gun (the held guns in order; Q still cycles), J L turn, I K tilt (I up), U O roll,
+  Shift finer, besides arrows, Home/End, Enter, Delete. Every game control bound to one of these keys gets nothing while
+  the key is held and the tuner is on (src/common/sight_tuner.cpp, as input::HoldBackToolKeys).
+- The turns go to the gun's angles, 0x27C40's esi (90 90 0 before its bob): seen [2] turns about the up axis (+ right),
+  [0] tilts (+ up), [1] rolls. While tuning, weapon sway is off and those angles are put back to 90 90 0 (the walk bob);
+  the bob's sideways part is already replaced while aiming.
+- Not possible without much more: every gun in every level. Each level's maps\<name>.xbc holds only its own gun models
+  (Cold Reception: 8); a model from another level gives a bare Weapon (kept out of the switch).
+- Checked in Cold Reception by files: "P2K 2 2 0 0 3 0" moved the pistol right and up; turn 20 swung it right, tilt 20
+  raised it, roll 20 rolled it. The keys were checked by reading the code only.
+
 ### 2026-11-13 - Sight tuner (debug), from NightFire's
 - settings.toml `sight_tuner = true` (off by default; not on the menus' pages): player 1 aims down the sights all the time
   and is given every single-player gun whose model the level has loaded, with ammo; switched with the game's own keys

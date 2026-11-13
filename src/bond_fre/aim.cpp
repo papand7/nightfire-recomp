@@ -22,12 +22,13 @@
 //
 // The sight tuner (auf::sight_tuner, debug, off by default), from NightFire's: each gun's own correction of kSight, kept
 // by its class name (the ClassDef's +0 through the vtable's first function, "mov eax, def; ret": "P2K", "KA57", ...) in
-// sight_offsets.txt beside the exe, a line a gun: "name x y z" in the offset's units (+x left, +y up, +z ahead), added
-// to the gun's offset while aiming. The file is read at the first aim and applied always. While tuning, player 1 aims
-// all the time and is given every single-player gun whose model the level has loaded (GiveGuns: given again when the
-// mission's start replaces the inventory), with ammo, switched with the game's own keys (Q, 1-9); the arrows move the
-// held gun, Home/End nearer/farther, Shift finer; Enter saves every gun's correction, Delete resets the held one.
-// src/common/sight_tuner.cpp draws the panel and the true centre and keeps the arrows from the d-pad.
+// sight_offsets.txt beside the exe, a line a gun: "name right up farther turn tilt roll" (offset units as the screen
+// shows them, degrees), added to the gun's offset and angles while aiming. Read at the first aim, applied always. While
+// tuning, player 1 aims all the time without sway or bob and is given every single-player gun whose model the level has
+// loaded (each level's maps\<name>.xbc holds only its own; GiveGuns), with ammo. NightFire's keys: comma and full stop
+// pick the gun (Q too), the arrows move it, Home/End nearer/farther, J L turn, I K tilt, U O roll, Shift finer; Enter
+// saves every gun's correction, Delete resets the held one. src/common/sight_tuner.cpp draws the panel and the true
+// centre and holds those keys back from the game.
 #include "bond/addr.h"
 #include <algorithm>
 #include <chrono>
@@ -88,9 +89,15 @@ bool Scoped(uint32_t player) {
 float Smooth(float t) { return t * t * (3 - 2 * t); }
 
 // ---- the sight tuner
+// a gun's correction as the screen shows it: v[0] right, v[1] up, v[2] farther (offset units), v[3..5] the turn, the
+// tilt and the roll in degrees. kScreen* turn the first two into the 0x27C40 offset's own signs; kAngle* say which of
+// the gun's angles (0x27C40's esi: three floats, 90 90 0 before its bob) each turn goes to and its sign
 struct Tune {
-    float v[3] = {};
+    float v[6] = {};
 };
+constexpr float kScreenX = 1, kScreenY = -1;  // seen: offset +x right, +y down
+constexpr int kAngleOf[3] = {2, 0, 1};  // seen: [2] turns about the up axis, [0] tilts up, [1] rolls
+constexpr float kAngleSign[3] = {1, 1, 1};  // + turns right, tilts up
 std::map<std::string, Tune> g_tune;  // by class name
 std::string g_weapon[4];             // each player's gun in hand, by class name
 std::string TunePath() { return (app::ExeDir() / "sight_offsets.txt").string(); }
@@ -104,7 +111,9 @@ void LoadTune() {
     int n = 0;
     while (std::fgets(line, sizeof line, f)) {
         Tune t;
-        if (line[0] != '#' && std::sscanf(line, "%63s %f %f %f", name, &t.v[0], &t.v[1], &t.v[2]) >= 3) g_tune[name] = t, n++;
+        if (line[0] != '#' && std::sscanf(line, "%63s %f %f %f %f %f %f", name, &t.v[0], &t.v[1], &t.v[2], &t.v[3], &t.v[4],
+                                          &t.v[5]) >= 3)
+            g_tune[name] = t, n++;
     }
     std::fclose(f);
     LOGR("ads: %d sight offsets read from %s", n, TunePath().c_str());
@@ -112,9 +121,11 @@ void LoadTune() {
 bool SaveTune() {
     FILE* f = std::fopen(TunePath().c_str(), "w");
     if (!f) return false;
-    std::fprintf(f, "# the sight tuner's corrections: class x y z (x across, y up, z ahead; added while aiming)\n");
+    std::fprintf(f, "# the sight tuner's corrections, added while aiming: class right up farther (offset units) turn tilt "
+                    "roll (degrees)\n");
     for (const auto& [name, t] : g_tune)
-        if (t.v[0] != 0 || t.v[1] != 0 || t.v[2] != 0) std::fprintf(f, "%s %.3f %.3f %.3f\n", name.c_str(), t.v[0], t.v[1], t.v[2]);
+        if (std::any_of(std::begin(t.v), std::end(t.v), [](float x) { return x != 0; }))
+            std::fprintf(f, "%s %.3f %.3f %.3f %.2f %.2f %.2f\n", name.c_str(), t.v[0], t.v[1], t.v[2], t.v[3], t.v[4], t.v[5]);
     std::fclose(f);
     return true;
 }
@@ -256,24 +267,51 @@ bool SightTunerFrame(X86Context& ctx, uint32_t p, float dt) {
     v.on = !name.empty();
     v.scoped = Scoped(p);
     std::snprintf(v.weapon, sizeof v.weapon, "%s", name.c_str());
-    static bool was_enter = false, was_delete = false;
-    const bool focused = Focused(), enter = focused && Key(0x0D), del = focused && Key(0x2E);
+    // NightFire's keys: Enter, Delete, comma and full stop by their presses, the rest held
+    static bool was[4];
+    const bool focused = Focused();
+    const bool now[4] = {focused && Key(0x0D), focused && Key(0x2E), focused && Key(0xBC), focused && Key(0xBE)};
+    auto pressed = [&](int k) { return now[k] && !was[k]; };
     if (v.on && !v.scoped) {
         Tune& t = g_tune[name];
         if (focused) {
-            const float step = (Key(0x10) ? 0.1f : 0.5f) * dt;  // units a second (2 across is a hand's width); Shift finer
-            if (Key(0x25)) t.v[0] += step;  // left (seen: + is left)
-            if (Key(0x27)) t.v[0] -= step;  // right
+            const bool fine = Key(0x10);  // Shift: finer
+            const float step = (fine ? 0.1f : 0.5f) * dt, turn = (fine ? 0.5f : 3.0f) * dt;  // units, degrees a second
+            if (Key(0x25)) t.v[0] -= step;  // left
+            if (Key(0x27)) t.v[0] += step;  // right
             if (Key(0x26)) t.v[1] += step;  // up
             if (Key(0x28)) t.v[1] -= step;  // down
             if (Key(0x24)) t.v[2] -= step;  // Home: nearer
             if (Key(0x23)) t.v[2] += step;  // End: farther
-            if (del && !was_delete) t = Tune{};
+            if (Key('J')) t.v[3] -= turn;   // J L the turn, I K the tilt, U O the roll
+            if (Key('L')) t.v[3] += turn;
+            if (Key('I')) t.v[4] += turn;  // I up
+            if (Key('K')) t.v[4] -= turn;
+            if (Key('U')) t.v[5] -= turn;
+            if (Key('O')) t.v[5] += turn;
+            if (pressed(1)) t = Tune{};
         }
-        v.x = t.v[0], v.y = t.v[1], v.z = t.v[2];
+        v.x = t.v[0], v.y = t.v[1], v.z = t.v[2], v.turn = t.v[3], v.tilt = t.v[4], v.roll = t.v[5];
     }
-    if (enter && !was_enter && SaveTune()) v.saved_ms = NowMs(), LOGR("ads: sight tuner: saved to %s", TunePath().c_str());
-    was_enter = enter, was_delete = del;
+    // comma and full stop: the gun before or after in kGuns of those held, chosen as the switch chooses (player +0x444
+    // and +0x440 the item, +0x458 the level's time; src/bond/pc_extras.cpp's weapon keys)
+    if (pressed(2) || pressed(3)) {
+        const uint32_t held = kernel::R32(p + 0x2EC);
+        int at = -1;
+        for (uint32_t g = 0; g < kGunCount; g++)
+            if (held && g_given[g] == held) at = int(g);
+        for (int k = 1; k <= int(kGunCount); k++) {
+            const uint32_t g = uint32_t((at + (pressed(3) ? k : -k) + 2 * int(kGunCount)) % int(kGunCount));
+            const uint32_t w = Inventory(p, g);
+            if (!w || !Offered(ctx, p, w)) continue;
+            kernel::G<uint32_t>(p + 0x444) = w;
+            kernel::G<uint32_t>(p + 0x440) = w;
+            kernel::G<uint32_t>(p + 0x458) = kernel::R32(A(0x329490));
+            break;
+        }
+    }
+    if (pressed(0) && SaveTune()) v.saved_ms = NowMs(), LOGR("ads: sight tuner: saved to %s", TunePath().c_str());
+    std::copy(now, now + 4, was);
     return v.on && !v.scoped;
 }
 }  // namespace
@@ -316,11 +354,14 @@ X86_FUNC(sub_000B54D0) {
 // the gun's offset
 X86_EXTERN_FUNC(__imp__sub_00027C40);
 X86_FUNC(sub_00027C40) {
-    const uint32_t i = ctx.eax & 3, out = ctx.ecx;
+    const uint32_t i = ctx.eax & 3, out = ctx.ecx, angles = ctx.esi;
     __imp__sub_00027C40(ctx, base);
     if (!out) return;
     const float t = Smooth(g_aim[i]);
-    if (auf::weapon_sway) {  // the turn since the last frame pushes the gun the other way; it eases back each frame
+    const bool tuning = i == 0 && auf::sight_tuner && auf::sight_view.on;
+    if (tuning && angles)  // no bob while tuning: the gun's angles as 0x27C40 sets them before it (90 90 0)
+        SetF(angles, 90), SetF(angles + 4, 90), SetF(angles + 8, 0);
+    if (auf::weapon_sway && !tuning) {  // the turn since the last frame pushes the gun the other way; it eases back each frame
         Sway& s = g_sway[i];
         const float yaw = GetF(kYaw + i * 0x30), pitch = GetF(kPitch + i * 0x30);
         float dy = yaw - s.yaw, dp = pitch - s.pitch;
@@ -344,8 +385,13 @@ X86_FUNC(sub_00027C40) {
     SetF(out + 4, GetF(out + 4) + sight[1] * t);
     // the held gun's own correction (the sight tuner's)
     const auto it = g_tune.find(g_weapon[i]);
-    if (it != g_tune.end())
-        for (int k = 0; k < 3; k++) SetF(out + 4 * k, GetF(out + 4 * k) + it->second.v[k] * t);
+    if (it == g_tune.end()) return;
+    const float* v = it->second.v;
+    SetF(out, GetF(out) + kScreenX * v[0] * t);
+    SetF(out + 4, GetF(out + 4) + kScreenY * v[1] * t);
+    SetF(out + 8, GetF(out + 8) + v[2] * t);
+    for (int k = 0; angles && k < 3; k++)
+        SetF(angles + 4 * kAngleOf[k], GetF(angles + 4 * kAngleOf[k]) + kAngleSign[k] * v[3 + k] * t);
 }
 
 // the crosshair

@@ -236,7 +236,7 @@ const app::GameInfo app::kGame = {
                 {"audio_occlusion", &auf::audio_occlusion, nullptr, "Sound through walls", "A sound with a wall or a closed door between it and Bond is quieter and muffled, traced through the level as it plays"},
                 {"weapon_sway", &auf::weapon_sway, nullptr, "Weapon sway", "The gun trails your turns a little and settles back"},
                 {"sight_tuner", &auf::sight_tuner, nullptr, "Sight tuner (debug)",
-                 "Bond aims all the time and is given every gun once a level: the arrow keys move the held gun, Home/End nearer/farther (Shift finer), Enter saves every gun's place to sight_offsets.txt, Delete resets the held one"},
+                 "Bond aims all the time (no sway) and is given every gun the level has: , and . pick the gun, the arrows move it, Home/End nearer/farther, J L turn, I K tilt, U O roll (Shift finer), Enter saves every gun to sight_offsets.txt, Delete resets the held one"},
                 {"modern_menus", &auf::modern_menus, nullptr, "Modern menus", "The menus and the pause drawn anew for the mouse, in the game's blues; off for the game's own"},
                 {"hit_flash", &auf::hit_flash, nullptr, "Hit flash", "The white flash on screen when Bond is hit. On by default; off for those it troubles"},
                 {"uncapped", &auf::uncapped, nullptr, "High frame rate",
