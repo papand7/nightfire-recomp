@@ -16,6 +16,7 @@
         case 0x207320: return 0x207680; \
         case 0x207630: return 0x207990; \
         case 0x24E5DC: return 0x24E8FC; \
+        case 0x2A5D38: return 0x2A6058; \
         case 0x2A8124: return 0x2A8444; \
         case 0x2A8128: return 0x2A8448; \
         case 0x2A8144: return 0x2A8464; \

@@ -20,6 +20,7 @@
 // selectable weapon of that walk.
 #include "bond/addr.h"
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <initializer_list>
@@ -248,5 +249,18 @@ X86_FUNC(sub_000C7260) {
     if (tight) {
         std::memcpy(&kernel::G<uint32_t>(kAccelerate), &accelerate, 4);
         std::memcpy(&kernel::G<uint32_t>(kFriction), &friction, 4);
+    }
+    // AUF_MOVE_TRACE=1: player 1's speed along the ground (its entity's +0x88) while it changes, to compare starts and
+    // stops (driven by AUF_PAD's left_stick_up*secs)
+    static const bool trace = std::getenv("AUF_MOVE_TRACE") != nullptr;
+    const uint32_t g = trace ? kernel::R32(A(0x329390)) : 0, me = g ? kernel::R32(g + 0x278) : 0;
+    if (me) {
+        float v[2], t;
+        std::memcpy(v, &kernel::G<uint32_t>(me + 0x88), 8);
+        std::memcpy(&t, &kernel::G<uint32_t>(A(0x329490)), 4);
+        static float last = 0;
+        const float speed = std::sqrt(v[0] * v[0] + v[1] * v[1]);
+        if (std::abs(speed - last) > 0.5f) LOGR("move: %.3f s speed %.1f%s", t, speed, tight ? " (tight)" : "");
+        last = speed;
     }
 }

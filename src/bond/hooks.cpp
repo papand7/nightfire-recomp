@@ -92,7 +92,12 @@ X86_FUNC(sub_0004AA40) {
     const uint32_t event = kernel::R32(ctx.esp + 4);
     if (mission >= 0 && mission < 12 && event && (kernel::R32(event) == 2 || kernel::R32(event) == 0x16)) {
         kernel::G<uint32_t>(auf::kAddrMission) = uint32_t(mission);
-        LOGR("auf: AUF_MISSION starts mission %d", mission);
+        // the driving missions (1 mis02a, 2 mis02b, 6 mis07a, 8 mis09) relaunch into DRIVING.XBE (0x25DB0) only while
+        // [0x2A5D38] is set (0x26902: the launch data's byte +4 at the start); else 0x4AA40 loads m6_1 on foot instead
+        const uint32_t flag = kernel::R32(A(0x2A5D38));
+        const bool driving = mission == 1 || mission == 2 || mission == 6 || mission == 8;
+        if (driving && !flag) kernel::G<uint32_t>(A(0x2A5D38)) = 1;
+        LOGR("auf: AUF_MISSION starts mission %d (driving launch flag %u%s)", mission, flag, driving && !flag ? ", set" : "");
     }
     __imp__sub_0004AA40(ctx, base);
 }

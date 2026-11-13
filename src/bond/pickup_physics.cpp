@@ -409,6 +409,53 @@ void Step(X86Context& ctx, uint32_t ent, Item& it) {
         g_items.erase(ent);
     }
 }
+// AUF_TOSS_TRACE=1: the game's own toss flights (grenades and other projectiles, movetype 7 toss, 8 bounce, 9 the
+// entity's bounce +0x2F4): the start, where each is 0.25 to 2 s in, each bounce, where it stops on the ground, to
+// compare frame rates. Reads only.
+struct Toss {
+    V from;
+    float age = 0, last_vz = 0, seen = 0;
+    int bounces = 0, mark = 0;
+    bool stopped = false;
+};
+std::unordered_map<uint32_t, Toss> g_toss;
+bool TossTrace() {
+    static const bool on = std::getenv("AUF_TOSS_TRACE") != nullptr;
+    return on;
+}
+float Flat(V a) { return std::sqrt(a.x * a.x + a.y * a.y); }
+void TossNote(uint32_t ent, bool after) {
+    if (!EdictOf(ent) || IsItem(ent)) return;
+    const V o = GetV(ent + 0xA8), v = GetV(ent + 0x88);
+    const float dt = F(kFrameTime);
+    auto f = g_toss.find(ent);
+    if (!after) {
+        if (f == g_toss.end() || F(kLevelTime) - f->second.seen > 0.25f || (f->second.stopped && Len(v) > 50)) {
+            g_toss[ent] = Toss{o, 0, v.z, F(kLevelTime)};
+            LOGR("toss: %08X (%s) movetype %u from %.1f %.1f %.1f velocity %.1f %.1f %.1f, frame %.4f s", ent, ClassName(ent),
+                 kernel::R32(ent + 0xC8), o.x, o.y, o.z, v.x, v.y, v.z, dt);
+        }
+        return;
+    }
+    if (f == g_toss.end()) return;
+    Toss& t = f->second;
+    t.seen = F(kLevelTime);
+    t.age += dt;
+    const V d = o - t.from;
+    if (v.z > t.last_vz + 30 && t.last_vz < 0) {
+        t.bounces++;
+        LOGR("toss: %08X bounce %d at %.2f s: %.1f out, %.1f up, speed after %.1f", ent, t.bounces, t.age, Flat(d), d.z, Len(v));
+    }
+    t.last_vz = v.z;
+    while (t.mark < 8 && t.age >= 0.25f * (t.mark + 1)) {
+        t.mark++;
+        LOGR("toss: %08X at %.2f s (%.4f): %.1f out, %.1f up, speed %.1f", ent, 0.25f * t.mark, t.age, Flat(d), d.z, Len(v));
+    }
+    if (!t.stopped && kernel::R32(ent + 0x110) && Len(v) < 1) {
+        t.stopped = true;
+        LOGR("toss: %08X stopped after %.2f s and %d bounces: %.1f out, %.1f up", ent, t.age, t.bounces, Flat(d), d.z);
+    }
+}
 }  // namespace
 
 // Physics_Toss (cdecl: the entity): the items' flight ours
@@ -418,7 +465,10 @@ X86_FUNC(sub_000D9E80) {
     g_calls[0]++;
     if (!On() || !ent || (kernel::G<uint8_t>(ent + 0x1C4) & 0x80) || !EdictOf(ent) || !IsItem(ent) || kernel::R32(ent + 0x2CC)) {
         if (!g_items.empty() && !On()) g_items.clear();
+        const bool trace = TossTrace() && ent;
+        if (trace) TossNote(ent, false);
         __imp__sub_000D9E80(ctx, base);
+        if (trace) TossNote(ent, true);
         return;
     }
     LevelCheck();
@@ -644,6 +694,67 @@ void PickupTest(X86Context& ctx, uint32_t player) {
     dropped = ok & 0xFF ? weapon : 0;
     LOGR("pickup test: player 1 (yaw %.0f) drops %08X (%s): %u", F(player + 0xBC), weapon, ClassName(weapon), ok & 0xFF);
 }
+
+// AUF_GRENADE_TEST=1 (diagnostic, changes the game): 3 s after player 1 is free and out of cinematics every grenade pickup
+// lying in the level is put 60 units behind it and it is walked back into them (the game's touch takes them); then the grenade
+// weapon it owns is put in hand as the weapon keys
+// do (+0x444, +0x440, +0x458): the fire button (AUF_PAD right_trigger) then throws grenades the same way at any rate
+void GrenadeTest(X86Context& ctx, uint32_t player) {
+    static const bool on = std::getenv("AUF_GRENADE_TEST") != nullptr;
+    if (!on) return;
+    static float clock = 0, last_level = 0, at = 1e9f;
+    static int stage = 0;
+    static uint32_t taken[8], count = 0;
+    const float now = F(kLevelTime);
+    if (now < last_level) clock = 0, at = 1e9f, stage = 0, count = 0;
+    last_level = now;
+    clock += std::clamp(F(kFrameTime), 0.0f, 0.1f);
+    // free and out of the level's cinematics (level +0x180) for 3 s: a cinematic takes the weapon back
+    const bool cinematic = kernel::R32(A(0x329480) + 0x180) != 0;
+    if (stage == 0 && (cinematic || !auf::PlayerFree())) at = 1e9f;
+    if (at > 1e8f && auf::PlayerFree() && !cinematic) at = clock + 3;
+    static V dir;
+    if (stage == 1 && clock < at - 1.0f) {  // walked into them (a touch needs a move)
+        SetV(player + 0x88, V{-dir.x * 220, -dir.y * 220, F(player + 0x90)});  // backwards, away from what it faces
+        return;
+    }
+    if (clock < at || stage >= 2) return;
+    if (stage == 0) {
+        const uint32_t base_g = kernel::R32(kGentities);
+        const V me = GetV(player + 0xA8);
+        const float yaw = F(player + 0xBC) * 0.017453293f;
+        dir = V{std::cos(yaw), std::sin(yaw), 0};
+        for (uint32_t k = 1; k < kMaxEntities && base_g && count < 8; k++) {
+            const uint32_t e = kernel::R32(base_g + k * kGentitySize + 0x278);
+            if (!e || !InWorld(e) || g_items.count(e) || !std::strstr(ClassName(e), "Grenade")) continue;
+            Place(ctx, e, me - dir * 60 + V{0, 0, 8}, GetV(e + 0xB8));
+            taken[count++] = e;
+        }
+        LOGR("grenade test: %u grenade pickups put behind player 1 (%.0f %.0f %.0f, yaw %.1f pitch %.1f)", count, me.x, me.y,
+             me.z, F(player + 0xBC), F(player + 0xB8));
+        stage = 1, at = clock + 1.5f;
+        return;
+    }
+    stage = 2;
+    const V me = GetV(player + 0xA8);
+    LOGR("grenade test: player 1 now at %.1f %.1f %.1f, yaw %.2f pitch %.2f", me.x, me.y, me.z, F(player + 0xBC), F(player + 0xB8));
+    for (uint32_t i = 0; i < count; i++) {
+        const uint32_t g = EdictOf(taken[i]);
+        LOGR("grenade test: %08X owner %08X%s", taken[i], kernel::R32(taken[i] + 0x2CC), !g ? ", gone (taken)" : (kernel::R32(g + 0x204) & 1) ? ", hidden" : "");
+    }
+    // a taken pickup is removed and the inventory gets its own weapon: the grenade weapon player 1 now owns
+    const uint32_t base_g = kernel::R32(kGentities);
+    for (uint32_t k = 1; k < kMaxEntities && base_g; k++) {
+        const uint32_t e = kernel::R32(base_g + k * kGentitySize + 0x278);
+        if (!e || kernel::R32(e + 0x2CC) != player || !std::strstr(ClassName(e), "Grenade")) continue;
+        kernel::G<uint32_t>(player + 0x444) = e;
+        kernel::G<uint32_t>(player + 0x440) = e;
+        kernel::G<uint32_t>(player + 0x458) = kernel::R32(kLevelTime);
+        LOGR("grenade test: %08X (%s) in the inventory, put in hand", e, ClassName(e));
+        return;
+    }
+    LOGR("grenade test: no grenade weapon in the inventory");
+}
 }  // namespace
 
 // once a frame for each player (player 1's input handler's hook, src/bond/aim.cpp): a resting item it walks into is
@@ -658,6 +769,7 @@ void PickupTick(X86Context& ctx, uint32_t player, uint32_t index) {
                  g_calls[1], g_calls[2], g_calls[3]);
         }
     }
+    if (index == 0 && player && EdictOf(player)) GrenadeTest(ctx, player);  // with the physics off too
     if (index >= 4 || !On() || !player || !EdictOf(player)) return;
     LevelCheck();
     if (index == 0) PickupTest(ctx, player);
@@ -668,17 +780,30 @@ void PickupTick(X86Context& ctx, uint32_t player, uint32_t index) {
     if (speed < 40) return;
     const uint32_t base_g = kernel::R32(kGentities);
     if (!base_g) return;
-    const float reach = std::max(F(player + 0x38), 16.0f) + 14;  // its box's half width and a little
-    const float feet = at.z + F(player + 0x30), head = at.z + F(player + 0x40);
+    // only an item the player's box already overlaps, and did a tick ago too: the game's touch (after the move) had its
+    // chance to take it. Pushed on reaching it, a pickup the player could take was shoved ahead and never taken.
+    static std::unordered_map<uint32_t, float> overlapping;  // item: the level time it was last seen overlapping
+    const V pmin = at + GetV(player + 0x28), pmax = at + GetV(player + 0x38);
     for (uint32_t k = 1; k < kMaxEntities; k++) {
         const uint32_t e = kernel::R32(base_g + k * kGentitySize + 0x278);
         if (!e || e == player || g_items.count(e) || !InWorld(e)) continue;
         const V c = GetV(e + 0xA8), d = c - at;
         const V dflat{d.x, d.y, 0};
-        if (Len(dflat) > reach || c.z < feet - 24 || c.z > head || Dot(dflat, flat) <= 0) continue;
+        const V imin = c + GetV(e + 0x28), imax = c + GetV(e + 0x38);
+        constexpr float kSlack = 2;
+        if (imin.x > pmax.x + kSlack || imax.x < pmin.x - kSlack || imin.y > pmax.y + kSlack || imax.y < pmin.y - kSlack ||
+            imin.z > pmax.z + kSlack || imax.z < pmin.z - kSlack || Dot(dflat, flat) <= 0)
+            continue;
+        const auto o = overlapping.find(e);
+        const float now = F(kLevelTime);
+        const bool before = o != overlapping.end() && now > o->second && now - o->second < 0.1f;
+        if (o == overlapping.end() || !before) overlapping[e] = now;
+        if (!before) continue;
+        overlapping.erase(e);
         uint32_t seed = e ^ std::bit_cast<uint32_t>(F(kLevelTime));
         const V push = flat * 1.15f + Norm(dflat) * 30 + V{0, 0, 70};
         Take(e, push, V{(Unit01(seed) - 0.5f) * 300, (Unit01(seed) - 0.5f) * 600, (Unit01(seed) - 0.5f) * 300}, true,
              "pushed by a player");
     }
+    if (overlapping.size() > 64) overlapping.clear();
 }

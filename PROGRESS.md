@@ -35,6 +35,33 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-13 - Quality pass on the PC features (part 1: runs held for play-testing)
+Runs: scratch\auf_qa\<name> (screenshots, auf.log) in the NightFire folder. Test switches added: AUF_TOSS_TRACE=1 (the game's
+own toss flights: start, 0.25 s marks, bounces, stop), AUF_GRENADE_TEST=1 (player 1 takes the level's grenade pickups and
+holds the grenade; AUF_PAD right_trigger throws), AUF_MOVE_TRACE=1 (player 1's ground speed as it changes), AUF_PAD stick
+names (left_stick_up ...) and holds (`name*secs`).
+- [x] 1. Grenade physics 30/60/144 fps: pass, no substep needed. Trouble in Paradise, frag grenades (class Grenade, movetype
+  9) thrown from the same spot and view (g30, g60, g144; 144 reached: 1440 frames in 10 s). Out / up from the hand:
+  at 1.0 s 301/-64 (30), 302-307/-66 (60), 304/-68 (144); first bounce at 0.93-0.94 s in all; at 2.0 s 421/-208,
+  434-436/-192..-199, 441-442/-185..-188. The flight is the same; after the bounce the slide differs by 3% (30 vs 60)
+  and 1.5% (60 vs 144), about 20 units of 440: not noticeable, so Physics_Toss is left alone.
+- [x] Fixed (found by 1): pickup physics pushed a pickup the player walks into before the game's touch could take it
+  (the push began 14 units outside the player's box): the 4 FragGrenadeLaunchers were shoved ahead and never taken with
+  pickup_physics on, all taken with it off. Now only an item the player's box has overlapped on two ticks in a row (one
+  the touch declined, e.g. full ammo) is pushed: all 4 taken with pickup_physics on.
+- [x] Fixed: AUF_PAD with a stick name wrote past Pad::analog[] (sticks are controls 16-23); now it moves the stick.
+- [~] 12. AUF_MISSION and driving: 0x4AA40 sends missions 1, 2, 6, 8 to DRIVING.XBE (0x25DB0: mis02a, mis02b, mis07a,
+  mis09) only while [0x2A5D38] is set (0x26902, the launch data's byte +4 at boot), else it loads m6_1 on foot (the
+  "mission 1 on foot" report). In every run here (boot through default.xbe) the flag was already 1. AUF_MISSION now logs
+  the flag and sets it for those missions. Driving shader styles and photo mode: not run (hold).
+- [ ] 2 sway, 3 ragdoll push, 4 movies 4:3, 5 damage numbers, 6 AO radius, 7 texture pack, 8 tight movement, 9 skip
+  cutscenes, 10 modern menu clicks, 11 French/German: not run; the batch (scratch\auf_qa\batch2.ps1, batch3.ps1) was
+  stopped when runs were held for play-testing. sway_on's shots fell in a cutscene (AUF_SKIP_CUTSCENES does not skip
+  every one), so sway needs a later shot.
+- Seen: during one run something outside the test opened the pause menu and PC Settings, changed the render scale and
+  upscaler and resized the window (other sessions' input on the shared desktop); test settings now set pause_unfocused =
+  false. The first start after a build waits on "Your game is built" for Enter.
+
 ### 2026-11-13 - LAN play: two copies agree through a match; each sees only their own view; Netplay rows, online list
 - SDK bd43709: netplay::Tick (src/bond/netplay_hash.cpp calls it from 0x25CA0, the main loop's frame timing): a
   present between two game frames (the level's loading screen at a state's enter, a PC-dependent count) is no lockstep

@@ -66,7 +66,7 @@ void ForcedPoll() {
 void Press(input::Pad& p, int c);
 
 // AUF_PAD=secs:what,... a test's presses in bond_eng.xbe (Start pressed until the main menu is up), timed from then: what a control's settings name
-// (start, a, dpad_down ...) held 150 ms, or a modern menu row's click: mN (A on row N), mNl / mNr (left / right on it),
+// (start, a, dpad_down, left_stick_up ...) held 150 ms or the seconds after a '*' (left_stick_up*1.5), or a modern menu row's click: mN (A on row N), mNl / mNr (left / right on it),
 // mNf (only focus it), mb (back)
 void ScriptedPoll(input::Pad& p) {
     static const char* e = std::getenv("AUF_PAD");
@@ -104,7 +104,9 @@ void ScriptedPoll(input::Pad& p) {
             continue;
         }
         k++;
-        if (t >= at + 0.15) continue;
+        double hold = 0.15;
+        if (char* star = std::strchr(what, '*')) hold = std::atof(star + 1), *star = 0;
+        if (t >= at + hold) continue;
         const int c = input::ControlByName(what);
         if (c >= 0) Press(p, c);
     }
@@ -135,7 +137,13 @@ void ShowArrow(bool show) {
 // a press of control c (a d-pad bit or an analog button)
 void Press(input::Pad& p, int c) {
     if (c < input::kA) p.buttons |= uint16_t(1u << c);
-    else p.analog[c - input::kA] = 255;
+    else if (c < input::kLSLeft) p.analog[c - input::kA] = 255;
+    else {  // a stick direction all the way (this wrote past analog[] before)
+        static constexpr int16_t kFull[4] = {-32768, 32767, 32767, -32768};  // left, right, up, down
+        const int d = (c - input::kLSLeft) % 4;
+        int16_t& axis = c < input::kRSLeft ? (d < 2 ? p.lx : p.ly) : (d < 2 ? p.rx : p.ry);
+        axis = kFull[d];
+    }
 }
 }  // namespace
 
