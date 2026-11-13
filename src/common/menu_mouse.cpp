@@ -31,7 +31,9 @@
 
 namespace auf {
 namespace {
+int g_test_key = 0;  // a test's key (AUF_PAD's esc, enter), held this poll
 bool KeyHeld(int vk) {
+    if (vk == g_test_key) return true;
 #ifdef _WIN32
     return GetForegroundWindow() == static_cast<HWND>(app::Window()) && (GetAsyncKeyState(vk) & 0x8000);
 #else
@@ -65,9 +67,9 @@ void ForcedPoll() {
 
 void Press(input::Pad& p, int c);
 
-// AUF_PAD=secs:what,... a test's presses in bond_eng.xbe (Start pressed until the main menu is up), timed from then: what a control's settings name
+// AUF_PAD=secs:what,... a test's presses in bond_eng.xbe (Start pressed until the main menu is up, Enter with AUF_TITLE_ENTER), timed from then: what a control's settings name
 // (start, a, dpad_down, left_stick_up ...) held 150 ms or the seconds after a '*' (left_stick_up*1.5), or a modern menu row's click: mN (A on row N), mNl / mNr (left / right on it),
-// mNf (only focus it), mb (back)
+// mNf (only focus it), mb (back), or a key: esc, enter
 void ScriptedPoll(input::Pad& p) {
     static const char* e = std::getenv("AUF_PAD");
     if (!e || !*e || kImage != kBond) return;
@@ -77,7 +79,11 @@ void ScriptedPoll(input::Pad& p) {
     static const auto boot = steady_clock::now();
     if (!ModernMenuWasSeen()) {
         const double b = duration<double>(steady_clock::now() - boot).count();
-        if (b > 4 && std::fmod(b, 2.0) < 0.15) Press(p, input::kStart);
+        static const bool enter = std::getenv("AUF_TITLE_ENTER") != nullptr;  // Enter for it instead, as a player's key
+        if (b > 4 && std::fmod(b, 2.0) < 0.3) {
+            if (enter) g_test_key = 0x0D;
+            else Press(p, input::kStart);
+        }
         return;
     }
     if (t0 == steady_clock::time_point{}) t0 = steady_clock::now();
@@ -107,6 +113,10 @@ void ScriptedPoll(input::Pad& p) {
         double hold = 0.15;
         if (char* star = std::strchr(what, '*')) hold = std::atof(star + 1), *star = 0;
         if (t >= at + hold) continue;
+        if (!std::strcmp(what, "esc") || !std::strcmp(what, "enter")) {
+            g_test_key = what[0] == 'e' && what[1] == 's' ? 0x1B : 0x0D;
+            continue;
+        }
         const int c = input::ControlByName(what);
         if (c >= 0) Press(p, c);
     }
@@ -148,6 +158,8 @@ LRESULT CALLBACK PointerProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         SetCursor(LoadCursorW(nullptr, reinterpret_cast<LPCWSTR>(IDC_ARROW)));
         return TRUE;
     }
+    // nor does the runtime's timer take a resting arrow away (sdk main.cpp, kCursorTimer)
+    if (msg == WM_TIMER && wp == 0x5243 && g_arrow.load() && input::MouseLooking()) return 0;
     return CallWindowProcW(g_proc, hwnd, msg, wp, lp);
 }
 void ShowArrow(bool show) {
@@ -198,6 +210,15 @@ bool PointerAt(float& x, float& y) {
 
 uint32_t PointerButtons() { return g_forced.on ? g_forced.buttons : input::MouseButtons(); }
 
+namespace {
+std::atomic<bool> g_start_only{false}, g_pause_top{false}, g_resume{false};
+}
+void MenuKeysPage(bool start_only, bool pause_top) {
+    g_start_only.store(start_only, std::memory_order_relaxed);
+    g_pause_top.store(pause_top, std::memory_order_relaxed);
+}
+bool TakeResume() { return g_resume.exchange(false); }
+
 void MenuMouse(int port, input::Pad& p) {
     constexpr int64_t kPress = 70, kGap = 70;  // ms
     constexpr uint16_t kMouseBits[3] = {0x01, 0x02, 0x04};  // VK_LBUTTON VK_RBUTTON VK_MBUTTON
@@ -209,11 +230,16 @@ void MenuMouse(int port, input::Pad& p) {
     static bool was_menu = false;
     int notches = input::TakeWheel();  // taken in play too, so none wait for the next menu
     ForcedPoll();
+    g_test_key = 0;
     ScriptedPoll(p);
     uint32_t held = PointerButtons();
     using namespace std::chrono;
     int64_t now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
     bool menu = MenuUp();
+    // the pointer free in the menus (the runtime holds it in the window in play only), and in a test's run (AUF_PAD,
+    // AUF_POINTER), which must not trap the mouse of whoever sits at the desktop
+    static const bool test = std::getenv("AUF_PAD") || std::getenv("AUF_POINTER");
+    input::MouseFree(menu || test || kImage == kDefault);
 #ifdef _WIN32
     if (kImage != kDefault) ShowArrow(PointerWanted() && input::UsingKeyboard());
 #endif
@@ -241,8 +267,35 @@ void MenuMouse(int port, input::Pad& p) {
         if (held & 2) Press(p, input::kLT);
         if (KeyHeld('R')) Press(p, input::kA);  // reload: povcfg0.def's GAMEACTION_POVRELOAD is +button0, A (X does nothing there)
     }
+    // Escape, one of Start's keys: in bond_eng.xbe's menus back (B), and at the pause's top back to the game, not Start,
+    // which the pause reads as A too (0x56A95) and the front end's pages as B or nothing. Only a press made in a menu: the
+    // one that opened the pause is let go first
+    static bool esc_was = false, esc_ours = false;
+    const bool esc = KeyHeld(0x1B);
+    if (esc && !esc_was) esc_ours = menu;
+    if (!esc) esc_ours = false;
+    const bool esc_press = esc && !esc_was;
+    esc_was = esc;
+    if (!menu) g_resume = false;
     if (menu) {
-        if (KeyHeld(0x0D)) p.analog[0] = 255;  // Enter: A
+        // Enter: A; Start on a page with nothing to select (the title's "Press Start")
+        const bool start_only = kImage == kBond && g_start_only.load(std::memory_order_relaxed);
+        if (KeyHeld(0x0D)) {
+            if (start_only) Press(p, input::kStart);
+            else p.analog[0] = 255;
+        }
+        const auto start_keys = input::ControlKeys(input::kStart);
+        if (kImage == kBond && esc && !start_only && input::UsingKeyboard() && (start_keys[0] == 0x1B || start_keys[1] == 0x1B)) {
+            const uint16_t other = start_keys[0] == 0x1B ? start_keys[1] : start_keys[0];
+            if (!other || !KeyHeld(other)) p.buttons = uint16_t(p.buttons & ~(1u << input::kStart));
+            const bool top = g_pause_top.load(std::memory_order_relaxed);
+            if (esc_ours && top && esc_press) {
+                g_resume = true;
+                LOGR("auf: Escape at the pause's top: back to the game");
+            } else if (esc_ours && !top) {
+                Press(p, input::kB);
+            }
+        }
         // the arrow keys are the d-pad in any menu (DRIVING.XBE's keys have them on the left stick, once)
         const int vks[4] = {0x26, 0x28, 0x25, 0x27}, pads[4] = {input::kUp, input::kDown, input::kLeft, input::kRight};
         for (int i = 0; i < 4; i++)

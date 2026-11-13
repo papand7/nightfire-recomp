@@ -54,10 +54,12 @@
         case 0x3B220C: return 0x3B2A4C; \
         case 0x3B22A0: return 0x3B2AE0; \
         case 0x3B22D5: return 0x3B2B15; \
+        case 0x3B23E8: return 0x3B2C28; \
         case 0x3B2414: return 0x3B2C54; \
         case 0x3B2418: return 0x3B2C58; \
         case 0x3B241C: return 0x3B2C5C; \
         case 0x3B2420: return 0x3B2C60; \
+        case 0x3B2424: return 0x3B2C64; \
         case 0x3B2428: return 0x3B2C68; \
         case 0x3B2D08: return 0x3B3548; \
         case 0x435220: return 0x435A60; \

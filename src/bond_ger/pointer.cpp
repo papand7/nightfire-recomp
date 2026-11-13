@@ -5,6 +5,9 @@
 // the page; a page's +0x54 its items' count, +0x5C the items (0xDC each), +0x60 the current one. Pages of one item or
 // none (a briefing, the controller's picture) have nothing to point at: a click anywhere plays A.
 // Rectangles are the pictures' and the text's own: mode 1 is a fraction of 640x480, 0 pixels (0x56570).
+// The menu keys' page (auf::MenuKeysPage) is told here too, and Escape's close of the pause played: the pause menu's
+// action 0x76 (0x4AA40, at 0x4AFBF) as it does it while paused: 0x34040 and 0x60B40 (each cdecl, no arguments), then 0x25B50's
+// unpause: 0x1EAB0, [0x3B2424] 0, [0x3B23E8] 0xCDCDCDCD, [0x3B2428] 0.
 #include "bond/addr.h"
 #include <atomic>
 #include <cstdint>
@@ -18,6 +21,9 @@ X86_EXTERN_FUNC(sub_00037AD0);
 X86_EXTERN_FUNC(sub_00037A30);
 X86_EXTERN_FUNC(sub_00039CC0);
 X86_EXTERN_FUNC(sub_000202E0);
+X86_EXTERN_FUNC(sub_00034040);
+X86_EXTERN_FUNC(sub_00060A80);
+X86_EXTERN_FUNC(sub_0001EAB0);
 
 namespace {
 constexpr uint32_t kPageItems = 0x54, kPageList = 0x5C, kPageCurrent = 0x60, kItemSize = 0xDC;
@@ -28,6 +34,24 @@ constexpr float kTextWidth = 240;      // text keeps no width
 std::atomic<int> g_click{auf::kClickGo};
 
 float F(uint32_t a) { return kernel::G<float>(a); }
+
+// the pause's tab strip, shown on its top pages: two or more of the page's plain texts (+0 count, +8 list, 0x278 each)
+// at y 113, in pixels, shown (src/bond/modern_menu_frame.cpp reads it the same way)
+bool PauseTabs(uint32_t page) {
+    const uint32_t n = kernel::R32(page + 0), plains = kernel::R32(page + 8);
+    if (n > 64 || plains < 0x10000) return false;
+    int tabs = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        const uint32_t t = plains + i * 0x278;
+        if (kernel::G<uint8_t>(t + 0x24) && F(t + 0xB0) > 0 && kernel::R32(t + 0x8C) != 1 && F(t + 0x94) > 111 && F(t + 0x94) < 115) tabs++;
+    }
+    return tabs >= 2;
+}
+
+void Call0(X86Context& ctx, uint8_t* base, void (*f)(X86Context&, uint8_t*)) {
+    X86_PUSH32(0x56930u);
+    f(ctx, base);
+}
 
 struct Box {
     bool any = false;
@@ -141,5 +165,16 @@ X86_FUNC(sub_00056940) {
         else if (y >= 280 && y < 305) click = kClickDown;
     }
     g_click.store(click, std::memory_order_relaxed);
+    const bool paused = kernel::R32(A(0x3B2428)) != 0, pause_top = paused && page && PauseTabs(page);
+    MenuKeysPage(page && !paused && count == 0, pause_top);
     __imp__sub_00056940(ctx, base);
+    if (TakeResume() && pause_top && kernel::R32(A(0x3B2428)) && file && kernel::R32(file + 0x44) == page) {
+        LOGR("auf: the pause closed (Escape)");
+        Call0(ctx, base, sub_00034040);
+        Call0(ctx, base, sub_00060A80);
+        Call0(ctx, base, sub_0001EAB0);
+        kernel::W32(A(0x3B2424), 0);
+        kernel::W32(A(0x3B23E8), 0xCDCDCDCDu);
+        kernel::W32(A(0x3B2428), 0);
+    }
 }

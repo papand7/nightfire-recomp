@@ -71,6 +71,10 @@ enum { kClickNone, kClickWait, kClickGo, kClickLeft, kClickRight, kClickDown }; 
 bool PointerAt(float& x, float& y);
 uint32_t PointerButtons();
 int MenuClick();
+// the menu keys' page (src/bond/pointer.cpp, the game's thread, each menu frame): one with nothing to select (the title's
+// "Press Start"): Enter plays Start there; the pause's top (its tab strip): Escape closes the pause there, else plays B
+void MenuKeysPage(bool start_only, bool pause_top);
+bool TakeResume();  // the game's thread: Escape asked the pause's top to close
 // the PC Settings page's rows, on foot and in the driving pause (src/common/pc_rows.cpp); lang 0 English, 1 French, 2 German
 constexpr int kPcRows = 8;
 int Language();                  // 0 English, 1 French, 2 German: the setting (src/common/pc_rows.cpp)

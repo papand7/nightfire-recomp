@@ -35,6 +35,26 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-13 - Menu input: the mouse over Remote Desktop, Escape closes the pause, Enter starts the title; the cursor never trapped
+- Remote Desktop sends raw mouse input as absolute positions (MOUSE_MOVE_ABSOLUTE), which the runtime dropped: the mouse
+  never counted as in use, so with a controller plugged in the menus' arrow stayed hidden and the pointer off, and mouse
+  look did nothing. Now the moves between positions are played (sdk main.cpp) and WM_MOUSEMOVE counts too
+  (input::PointerTravel). Not tested over a real RDP session (none can be driven here); read through the code.
+- The cursor was clipped to the window whenever mouse look was on, menus included, and kept after focus loss: now only
+  in play (input::MouseFree from menu_mouse.cpp each poll: free in any menu, and in test runs with AUF_PAD/AUF_POINTER),
+  let go at once on a menu, alt-tab or focus loss, with the arrow shown in the menus; the 500 ms cursor timer no longer
+  hides a resting arrow. The window took the focus on every relaunch (kOpenWindow's SetForegroundWindow): now only on a
+  first launch or when the instance handing over was in front.
+- Escape is Start, and in the pause Start is A too (0x56A95 adds 0x10 to the A event's buttons while paused): Escape
+  played the focused row. Now Escape in bond_eng.xbe's menus plays B (Options -> Main Menu, tested), and on the pause's
+  top pages (its tab strip: Mission, Objectives, Briefing, Settings) closes the pause as the pause's action 0x76 does
+  (0x4AA40 at 0x4AFBF: 0x34040, 0x60B40, then 0x25B50's unpause written out; 0x25B50 is no function entry). Tested on
+  all four tabs (AUF_PAD's new esc / enter steps). Only a press made in a menu: the one that paused is let go first.
+- The title's "Press START" page has no items: there Enter plays Start (tested with AUF_TITLE_ENTER, which has the test
+  press Enter instead of Start on the title); elsewhere Enter stays A.
+- Tests: real key presses can't reach the game while the RDP client is minimized (no foreground window); AUF_PAD steps
+  esc/enter play the keys instead. Next: the user to try the mouse over RDP.
+
 ### 2026-11-13 - LAN play's own view checked; story co-op stage A begun (a second client crashes the level's start)
 - Own view (scratch np8, two copies): the hash agrees at frame 1140 and no desync through the match; player 2's window
   its own view full screen. Player 1's window: its view full screen but its lower half covered by a solid red fill;
