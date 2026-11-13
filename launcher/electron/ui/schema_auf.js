@@ -124,7 +124,15 @@ window.SCHEMA_AUF = [
                     { f: 's', key: 'mouse_look', label: 'Mouse look', def: true },
                     { f: 's', key: 'mouse_sensitivity', label: 'Mouse sensitivity', def: 100, type: 'range', min: 10, max: 400, step: 5, unit: '%' },
                     { f: 's', key: 'mouse_invert_y', label: 'Invert mouse Y', def: false },
-                    { f: 's', key: 'join_ip', label: 'Host address (network play)', def: '', type: 'text', help: 'A co-op host past your network that the system link search also asks.' },
+                ],
+            },
+            {
+                title: 'Network play (LAN and online)', items: [
+                    { f: 's', key: 'netplay', label: 'Network play at start', def: '', options: pick(['', 'Off (choose in the game’s Netplay menu)'], ['host', 'Host a game'], ['join', 'Join the host address below']) },
+                    { f: 's', key: 'join_ip', label: 'Host address', def: '', type: 'text', help: 'The host to join (an IP address); also asked by the LAN search.' },
+                    { f: 's', key: 'netplay_players', label: 'Players (host)', def: 2, type: 'range', min: 2, max: 4, step: 1 },
+                    { f: 's', key: 'netplay_delay', label: 'Input delay', def: 2, type: 'range', min: 0, max: 8, step: 1, unit: ' frames', help: 'More hides lag on slow networks; every player uses the host’s.' },
+                    { f: 's', key: 'publish_server', label: 'List my games online', def: false, help: 'A hosted lobby shows on the master server (masterserver.dankelsoft.dk) for others to join.' },
                 ],
             },
             {
@@ -137,6 +145,6 @@ window.SCHEMA_AUF = [
                 ],
             },
         ],
-        note: 'Keys and pad buttons: in the game, F1 > Controls.',
+        note: 'Keys, pad buttons and the wheel’s buttons: in the game, Settings > More Settings.',
     },
 ];
