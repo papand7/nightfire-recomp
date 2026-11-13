@@ -69,6 +69,60 @@ X86_FUNC(sub_00168D69) {
     __imp__sub_00168D69(ctx, base);
 }
 
+// The game's frame (its main loop at 0x269E0: a state change's enter function, which loads a level and presents loading
+// frames of its own, then 0x25CA0 measures the frame's time, then the state's frame draws and presents): Tick here keeps
+// a loading screen's presents out of the lockstep, as each PC presents its own number of them (core/netplay.h).
+X86_EXTERN_FUNC(__imp__sub_00025CA0);
+X86_FUNC(sub_00025CA0) {
+    netplay::Tick();
+    __imp__sub_00025CA0(ctx, base);
+}
+
+// Each player sees only their own view in LAN play. The split screen's views (0x26DA1 calls 0x263D0 for each local
+// player, edi the player) are set up by 0x15E140 (cdecl: view, views, player): 2 views halve the height, 3 or 4 the width
+// too. This copy's player gets the whole screen (views 1); the others' views are still made (their HUD and the pause
+// menu's tick run there, the game's logic) but drawn into a single pixel: 0x15E050 (esi the rect x, y, w, h floats, edi
+// the player) makes the camera and the viewport from that rect.
+X86_EXTERN_FUNC(__imp__sub_0015E080);
+static bool g_pixel_view = false;  // the view being made is another player's split screen view
+X86_FUNC(sub_0015E080) {
+    const bool split = netplay::Active() && netplay::Players() > 1 && kernel::R32(ctx.esp + 8) > 1;
+    const bool mine = kernel::R32(ctx.esp + 12) == uint32_t(netplay::Me());
+    if (split && mine) kernel::W32(ctx.esp + 8, 1);
+    g_pixel_view = split && !mine;
+    __imp__sub_0015E080(ctx, base);
+    g_pixel_view = false;
+}
+X86_EXTERN_FUNC(__imp__sub_0015DF90);
+X86_FUNC(sub_0015DF90) {
+    if (g_pixel_view) {
+        kernel::G<float>(ctx.esi + 8) = 1.0f;
+        kernel::G<float>(ctx.esi + 12) = 1.0f;
+    }
+    __imp__sub_0015DF90(ctx, base);
+}
+// This copy's view last, over what the others' views drew (the host's, player 1, was the first, and the second view's
+// drawing covered the lower half of it): 0x263D0 for this copy's player is put off until after the last player's.
+X86_EXTERN_FUNC(__imp__sub_000263D0);
+X86_FUNC(sub_000263D0) {
+    const uint32_t views = kernel::R32(A(0x205408)), me = uint32_t(netplay::Me());
+    if (!netplay::Active() || netplay::Players() < 2 || views < 2 || me + 1 >= views) return __imp__sub_000263D0(ctx, base);
+    static uint32_t my_view = 0;  // the argument this copy's player's call had
+    if (ctx.edi == me) {
+        my_view = kernel::R32(ctx.esp + 4);
+        return;
+    }
+    __imp__sub_000263D0(ctx, base);
+    if (ctx.edi + 1 != views) return;
+    const uint32_t edi = ctx.edi, esi = ctx.esi;
+    ctx.edi = me;
+    X86_PUSH32(my_view);
+    X86_PUSH32(0x26DEDu);  // the loop's own return address (the callee's ret takes it)
+    __imp__sub_000263D0(ctx, base);
+    ctx.esp += 4;
+    ctx.edi = edi, ctx.esi = esi;
+}
+
 namespace auf {
 // bond_eng.xbe each frame (hooks.cpp): the hash handed over once
 void NetplayBond() {

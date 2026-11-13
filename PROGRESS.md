@@ -35,6 +35,25 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-13 - LAN play: two copies agree through a match; each sees only their own view; Netplay rows, online list
+- SDK bd43709: netplay::Tick (src/bond/netplay_hash.cpp calls it from 0x25CA0, the main loop's frame timing): a
+  present between two game frames (the level's loading screen at a state's enter, a PC-dependent count) is no lockstep
+  frame. Evidence (scratch np6, two copies, 127.0.0.1): the match's srand at frame 1801 on both (1798/1799 before), the
+  hash agrees at frames 1860 and 5460 (a minute later), no desync, 114 entities.
+- Own view: 0x15E140 (view, views, player) gets views 1 for this copy's player; the others' rects (0x15E050, esi)
+  shrink to a pixel, their HUD and pause-menu tick still run. Player 2's window: its own view, full screen, its HUD
+  (np6 c_70). Player 1's window: its view's lower half covered by the second view's drawing (red); 0x263D0 for this
+  copy's player is now put off until after the last view (built, not yet run: runs were on hold).
+- Online list as NightFire's (SDK): publish_server / master_url settings, the host's first lobby announced to
+  api.php?a=announce&game=auf&port=27015 every 30 s and removed as it closes; the list read with
+  a=list&game=auf&format=lines. The master asks the lobby with the LAN discovery packet (protocol word 87D55804).
+- src/common/netplay_page.{h,cpp}: the Netplay rows as NightFire's page (Host Game, Players, Input Delay, Publish
+  Online, Game (this network), Join Game, Online, Join Online, Refresh Online, Join Address; in a session: Leave);
+  Host and Join restart the game linked (netplay::Restart). Shown as a Netplay page of the settings menu
+  (settings_page.cpp, three small hunks left in the working tree beside that file's rework, not committed here).
+- Not done: the host view fix run, a session started from the menu rather than XBE_NETPLAY, two PCs, the online
+  list against the live master.
+
 ### 2026-11-13 - Sight tuner (debug), from NightFire's
 - settings.toml `sight_tuner = true` (off by default; not on the menus' pages): player 1 aims down the sights all the time
   and is given every single-player gun whose model the level has loaded, with ammo; switched with the game's own keys

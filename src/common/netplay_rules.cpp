@@ -48,6 +48,7 @@ void Started() {
 }  // namespace
 
 void NetplayInit() {
+    netplay::SetMasterGame("auf", "1");  // the online list's id (the shared master server's api.php)
     if (!netplay::Configured()) return;
     netplay::SetSessionRules(Mine());
     netplay::OnStart(Started);
