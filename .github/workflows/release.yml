@@ -70,12 +70,22 @@ jobs:
         with:
           submodules: true
 
+      # Agent Under Fire's source (this repository's agentunderfire branch): its launcher service, and its source the
+      # launcher carries (source_bundles.js)
+      - uses: actions/checkout@v4
+        with:
+          ref: agentunderfire
+          path: auf
+          submodules: true
+
       - name: Packages
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends clang lld cmake ninja-build
 
       - name: Build the launcher service
+        env:
+          AUF_REPO: ${{ github.workspace }}/auf
         run: bash launcher/electron/build_service.sh
 
       - uses: actions/setup-node@v4
@@ -84,6 +94,8 @@ jobs:
 
       - name: Build the AppImage
         working-directory: launcher/electron
+        env:
+          AUF_REPO: ${{ github.workspace }}/auf
         run: |
           npm ci
           npm run dist:linux
@@ -110,10 +122,20 @@ jobs:
         with:
           submodules: true
 
+      # Agent Under Fire's source (this repository's agentunderfire branch): its launcher service, and its source the
+      # launcher carries (source_bundles.js)
+      - uses: actions/checkout@v4
+        with:
+          ref: agentunderfire
+          path: auf
+          submodules: true
+
       - name: Packages
         run: brew install ninja
 
       - name: Build the launcher service
+        env:
+          AUF_REPO: ${{ github.workspace }}/auf
         run: bash launcher/electron/build_service.sh
 
       - uses: actions/setup-node@v4
@@ -122,6 +144,8 @@ jobs:
 
       - name: Build the app
         working-directory: launcher/electron
+        env:
+          AUF_REPO: ${{ github.workspace }}/auf
         run: |
           # macOS wants a 512x512 icon at least: icon.png (256) scaled up
           sips -z 512 512 ../icon.png --out ../icon-512.png

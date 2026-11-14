@@ -474,7 +474,7 @@ async function switchGame(id) {
     if (S) SS[id] = S;
     logEl.textContent = LOGS[id] || '';
     logEl.scrollTop = logEl.scrollHeight;
-    setMsg($('build-msg'), r && r.missing ? (navigator.platform.startsWith('Win') ? 'This launcher was made without this game: get the full 007 Remastered launcher.' : 'Agent Under Fire runs on Windows for now: Linux, macOS and Android are being worked on.') : '', false);
+    setMsg($('build-msg'), r && r.missing ? 'This launcher was made without this game: get the full 007 Remastered launcher.' : '', false);
     $('progress').hidden = true;
     $('pack-log').textContent = '';
     setMsg($('pack-msg'), ''); setMsg($('collect-msg'), ''); setMsg($('music-msg'), '');

@@ -57,6 +57,10 @@
         {
           "from": "../../out/source-bundles",
           "to": "source"
+        },
+        {
+          "from": "../../out/source-bundles-auf",
+          "to": "source-auf"
         }
       ]
     },
@@ -77,8 +81,16 @@
           "to": "NightFireLauncherService"
         },
         {
+          "from": "../../out/launcher-svc-auf/AgentUnderFireLauncherService",
+          "to": "AgentUnderFireLauncherService"
+        },
+        {
           "from": "../../out/source-bundles",
           "to": "source"
+        },
+        {
+          "from": "../../out/source-bundles-auf",
+          "to": "source-auf"
         }
       ]
     },
@@ -95,8 +107,16 @@
           "to": "NightFireLauncherService"
         },
         {
+          "from": "../../out/launcher-svc-auf/AgentUnderFireLauncherService",
+          "to": "AgentUnderFireLauncherService"
+        },
+        {
           "from": "../../out/source-bundles",
           "to": "source"
+        },
+        {
+          "from": "../../out/source-bundles-auf",
+          "to": "source-auf"
         },
         {
           "from": "../icon.png",

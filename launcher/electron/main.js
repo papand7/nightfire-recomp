@@ -22,9 +22,9 @@ const LAUNCHER_DIR = process.env.PORTABLE_EXECUTABLE_DIR ||
 const SVC_DIR = name => app.isPackaged ? path.join(process.resourcesPath, name + EXE)
                                        : path.resolve(__dirname, '../../out', name === 'NightFireLauncherService' ? 'launcher-svc' : 'launcher-svc-auf', name + EXE);
 const GAMES = {
-    nightfire: { root: 'NightFire', service: SVC_DIR('NightFireLauncherService'), exe: 'Nightfire',
+    nightfire: { root: 'NightFire', service: SVC_DIR('NightFireLauncherService'), exe: 'Nightfire', source: 'source',
                  exes: ['Nightfire', 'NightfireDriving'], collect: true, android: true },
-    auf: { root: 'AgentUnderFire', service: SVC_DIR('AgentUnderFireLauncherService'), exe: 'AgentUnderFire',
+    auf: { root: 'AgentUnderFire', service: SVC_DIR('AgentUnderFireLauncherService'), exe: 'AgentUnderFire', source: 'source-auf',
            exes: ['AgentUnderFire', 'AgentUnderFireBond', 'AgentUnderFireBondFre', 'AgentUnderFireBondGer', 'AgentUnderFireDriving'],
            collect: false, android: false },
 };
@@ -50,8 +50,10 @@ function startService(g) {
         return;
     }
     fs.mkdirSync(g.dir, { recursive: true });
-    // the game's source the launcher carries (git bundles of the game and its runtime): installs need no download of it
-    const bundles = app.isPackaged ? path.join(process.resourcesPath, 'source') : path.resolve(__dirname, '../../out/source-bundles');
+    // the game's source the launcher carries (git bundles of the game and its runtime, source_bundles.js): installs need
+    // no download of it. A folder each: both games' repositories are named nightfire-recomp
+    const bundles = app.isPackaged ? path.join(process.resourcesPath, g.source)
+                                   : path.resolve(__dirname, '../../out', g.source === 'source' ? 'source-bundles' : 'source-bundles-auf');
     const svc = g.svc = spawn(g.service, ['--games', LAUNCHER_DIR, '--root', g.dir],
                 { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, NF_SOURCE_BUNDLES: bundles } });
     readline.createInterface({ input: svc.stdout }).on('line', line => {
