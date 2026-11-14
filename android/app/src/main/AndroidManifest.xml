@@ -10,7 +10,7 @@
     <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
-        android:label="NightFire"
+        android:label="007"
         android:icon="@drawable/ic_launcher"
         android:allowBackup="false"
         android:hardwareAccelerated="true"

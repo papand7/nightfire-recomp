@@ -23,10 +23,10 @@ const SVC_DIR = name => app.isPackaged ? path.join(process.resourcesPath, name +
                                        : path.resolve(__dirname, '../../out', name === 'NightFireLauncherService' ? 'launcher-svc' : 'launcher-svc-auf', name + EXE);
 const GAMES = {
     nightfire: { root: 'NightFire', service: SVC_DIR('NightFireLauncherService'), exe: 'Nightfire', source: 'source',
-                 exes: ['Nightfire', 'NightfireDriving'], collect: true, android: true },
+                 exes: ['Nightfire', 'NightfireDriving'], collect: true, android: true, short: 'NightFire' },
     auf: { root: 'AgentUnderFire', service: SVC_DIR('AgentUnderFireLauncherService'), exe: 'AgentUnderFire', source: 'source-auf',
            exes: ['AgentUnderFire', 'AgentUnderFireBond', 'AgentUnderFireBondFre', 'AgentUnderFireBondGer', 'AgentUnderFireDriving'],
-           collect: false, android: false },
+           collect: false, android: true, short: 'AgentUnderFire' },
 };
 for (const [id, g] of Object.entries(GAMES)) Object.assign(g, { id, dir: path.join(LAUNCHER_DIR, g.root), svc: null, state: null });
 let active = 'nightfire';  // the game tab the window shows: the settings and texture calls are about it
@@ -42,6 +42,13 @@ function send(channel, data) {
     if (win && !win.isDestroyed()) win.webContents.send(channel, data);
 }
 
+// the game's source the launcher carries (git bundles of the game and its runtime, source_bundles.js): installs need
+// no download of it. A folder each: both games' repositories are named nightfire-recomp
+function bundlesDir(g) {
+    return app.isPackaged ? path.join(process.resourcesPath, g.source)
+                          : path.resolve(__dirname, '../../out', g.source === 'source' ? 'source-bundles' : 'source-bundles-auf');
+}
+
 function startService(g) {
     const emit = ev => send('svc', { ...ev, game: g.id });
     if (!fs.existsSync(g.service)) {
@@ -50,10 +57,7 @@ function startService(g) {
         return;
     }
     fs.mkdirSync(g.dir, { recursive: true });
-    // the game's source the launcher carries (git bundles of the game and its runtime, source_bundles.js): installs need
-    // no download of it. A folder each: both games' repositories are named nightfire-recomp
-    const bundles = app.isPackaged ? path.join(process.resourcesPath, g.source)
-                                   : path.resolve(__dirname, '../../out', g.source === 'source' ? 'source-bundles' : 'source-bundles-auf');
+    const bundles = bundlesDir(g);
     const svc = g.svc = spawn(g.service, ['--games', LAUNCHER_DIR, '--root', g.dir],
                 { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, NF_SOURCE_BUNDLES: bundles } });
     readline.createInterface({ input: svc.stdout }).on('line', line => {
@@ -253,22 +257,27 @@ ipcMain.handle('textures:collect', async () => {
 });
 
 // ---- Android package: the same Linux build on Linux and in Windows' WSL.
+// The game's source is its install's (source/), else, for a game installed from its prebuilt Windows package (Agent
+// Under Fire), the launcher's source bundles, which android-package.sh checks out in Linux.
 ipcMain.handle('android:run', async (_, options = {}) => {
-    const nf = GAMES.nightfire, state = nf.state;
-    if (active !== 'nightfire') return { ok: false, message: "The Android package is NightFire's only." };
+    const nf = G(), state = nf.state;
+    if (!nf.android) return { ok: false, message: 'This game has no Android package yet.' };
     if (android || (state && state.busy)) return { ok: false, message: 'Another job is running.' };
-    const repo = path.join(nf.dir, 'source');
-    if (!state || !state.built || !fs.existsSync(path.join(repo, 'sdk/scripts/android/package.sh')))
+    let repo = path.join(nf.dir, 'source');
+    const bundles = bundlesDir(nf);
+    if (!fs.existsSync(path.join(repo, 'sdk/scripts/android/package.sh')))
+        repo = fs.existsSync(path.join(bundles, 'nightfire-recomp.bundle')) ? '' : null;
+    if (!state || !state.built || repo === null)
         return { ok: false, message: 'Install the game on the Mission page first. If the source was removed, rebuild it.' };
     const output = await dialog.showSaveDialog(win, { title: 'Save Android game package',
-        defaultPath: path.join(LAUNCHER_DIR, 'NightFire-android-package.zip'),
+        defaultPath: path.join(LAUNCHER_DIR, `${nf.short}-android-package.zip`),
         filters: [{ name: 'Android game package', extensions: ['zip'] }] });
     if (output.canceled) return { ok: false, cancelled: true };
     // Check again after the native dialog: a service job may have started while it was open.
     if (android || (nf.state && nf.state.busy)) return { ok: false, message: 'Another job is running.' };  // (its state now, not the one before)
     const args = [repo, path.join(playDir(nf), 'assets'), output.filePath,
         options.textures === true ? path.join(playDir(nf), 'mods', 'textures') : '',
-        options.abi === 'x86_64' ? 'x86_64' : 'arm64-v8a'];
+        options.abi === 'x86_64' ? 'x86_64' : 'arm64-v8a', repo ? '' : bundles, nf.short];
     const child = spawn(WINDOWS ? 'wsl.exe' : 'bash', WINDOWS
         ? ['--exec', 'bash', '-s', '--', ...args] : ['-s', '--', ...args],
         { windowsHide: true, detached: !WINDOWS, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -283,7 +292,7 @@ ipcMain.handle('android:run', async (_, options = {}) => {
         android = null;
         if (!failed && code === 0) androidOutput = output.filePath;
         emit({ done: true, ok: !failed && code === 0, path: output.filePath,
-            line: code === 0 ? 'Package ready. Copy it to your Android device and import it in the NightFire app.'
+            line: code === 0 ? 'Package ready. Copy it to your Android device and import it in the 007 app.'
                 : 'Packaging failed. Check the log and the build requirements above.' });
     });
     child.stdin.end(fs.readFileSync(path.join(__dirname, 'android-package.sh'), 'utf8').replace(/\r\n/g, '\n'));
@@ -293,7 +302,7 @@ ipcMain.handle('android:reveal', () => { if (androidOutput) shell.showItemInFold
 // ---- the rest
 ipcMain.on('svc', (_, cmd) => command(cmd));
 ipcMain.handle('svc:state', (_, id) => (GAMES[id] || G()).state);
-ipcMain.handle('game:set', (_, id) => { if (GAMES[id]) active = id; return { missing: !!G().missing }; });
+ipcMain.handle('game:set', (_, id) => { if (GAMES[id]) active = id; return { missing: !!G().missing, android: !!G().android }; });
 ipcMain.handle('paths', () => ({ launcher: LAUNCHER_DIR, root: G().dir, platform: process.platform }));
 
 // a newer launcher: the latest release on GitHub, else the mirror's latest.json; null when this one is the newest or

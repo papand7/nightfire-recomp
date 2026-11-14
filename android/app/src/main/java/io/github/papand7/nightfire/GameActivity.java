@@ -18,11 +18,19 @@ public class GameActivity extends SDLActivity {
     static final String EXTRA_LIB = "lib";
     static final String EXTRA_ENV = "env";
     static final String EXTRA_PID = "pid";
+    static final String EXTRA_GAME = "game";
+
+    /** the game (its package's folder) this activity runs: from the intent, else the launcher's current one */
+    private String game() {
+        String id = getIntent() != null ? getIntent().getStringExtra(EXTRA_GAME) : null;
+        return id != null ? id : PackageStore.current(this);
+    }
 
     private String library() {
+        String id = game();
         String lib = getIntent() != null ? getIntent().getStringExtra(EXTRA_LIB) : null;
-        if (lib == null || lib.contains("/")) lib = PackageStore.mainLibrary(this);
-        return new File(PackageStore.gameDir(this), lib).getAbsolutePath();
+        if (lib == null || lib.contains("/")) lib = PackageStore.mainLibrary(this, id);
+        return new File(PackageStore.gameDir(this, id), lib).getAbsolutePath();
     }
 
     @Override
@@ -58,6 +66,7 @@ public class GameActivity extends SDLActivity {
     public void relaunch(String lib, String[] env) {
         Log.v(TAG, "relaunch into " + lib);
         Intent i = new Intent(this, RestartActivity.class);
+        i.putExtra(EXTRA_GAME, game());
         i.putExtra(EXTRA_LIB, lib);
         i.putExtra(EXTRA_ENV, env);
         i.putExtra(EXTRA_PID, android.os.Process.myPid());

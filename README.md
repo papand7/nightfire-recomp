@@ -170,9 +170,9 @@ The **007 Remastered launcher** sets up both games, each on its own tab (Agent U
   fixed; expect more problems and please report them with the game's log. Ray tracing and DLSS are off on the Mac;
   the HD texture pack tool is built but untested.
 
-- **Android (beta, NightFire):** `NightFire-Android.apk`, sideloaded. The game itself is built on your PC: in the
+- **Android (beta, NightFire and Agent Under Fire):** `NightFire-Android.apk` (the app is named 007), sideloaded. The game itself is built on your PC: in the
   Windows or Linux launcher's **Android** page choose **Build Android package**, copy the zip to the phone and import
-  it in the app.
+  it in the app. Each game's package is kept apart; **Switch game** picks the one to play.
 
 Building it yourself instead: see [BUILDING.md](BUILDING.md).
 

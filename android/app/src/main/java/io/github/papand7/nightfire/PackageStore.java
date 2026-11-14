@@ -19,13 +19,18 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
- * The game package in the app's private storage (files/game): its libraries, the disc's files in assets/, and what the
- * game keeps beside them as beside an exe (settings.toml, hdd/ with the saves, logs/, the shader caches). Imported from
- * a .zip or a folder the player picks; the player's own data stays across imports.
+ * The game packages in the app's private storage, a folder a game (files/games/<short>, short from the package's
+ * package.json: NightFire, AgentUnderFire): its libraries, the disc's files in assets/, and what the game keeps beside
+ * them as beside an exe (settings.toml, hdd/ with the saves, logs/, the shader caches). Imported from a .zip or a folder
+ * the player picks; the player's own data stays across imports of the same game. The launcher shows one game at a time
+ * (the current one: the last imported or picked).
  */
 final class PackageStore {
     private PackageStore() {}
@@ -38,12 +43,74 @@ final class PackageStore {
         void update(long done, long total, String what);
     }
 
+    private static final String PREFS = "packages", CURRENT = "current";
+
+    private static File gamesDir(Context c) {
+        File games = new File(c.getFilesDir(), "games");
+        // the single package of earlier versions (files/game, NightFire's): moved to its game's folder
+        File legacy = new File(c.getFilesDir(), "game");
+        if (legacy.isDirectory()) {
+            JSONObject m = read(new File(legacy, "package.json"));
+            String id = idOf(m != null ? m.optString("short", "") : "");
+            games.mkdirs();
+            File to = new File(games, id.isEmpty() ? "NightFire" : id);
+            if (!to.exists() && legacy.renameTo(to)) setCurrent(c, to.getName());
+        }
+        games.mkdirs();
+        return games;
+    }
+
+    /** a package's folder name: its short name, letters, digits, - and _ only */
+    private static String idOf(String shortName) {
+        return shortName.replaceAll("[^A-Za-z0-9_-]", "");
+    }
+
+    /** the installed games (their folders' names), each with a package.json */
+    static List<String> games(Context c) {
+        ArrayList<String> ids = new ArrayList<>();
+        File[] dirs = gamesDir(c).listFiles();
+        if (dirs != null)
+            for (File d : dirs)
+                if (d.isDirectory() && new File(d, "package.json").isFile()) ids.add(d.getName());
+        Collections.sort(ids);
+        return ids;
+    }
+
+    /** the game the launcher shows: the one picked or imported last, else the first installed, else null */
+    static String current(Context c) {
+        List<String> ids = games(c);
+        String id = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(CURRENT, null);
+        if (id != null && ids.contains(id)) return id;
+        return ids.isEmpty() ? null : ids.get(0);
+    }
+
+    static void setCurrent(Context c, String id) {
+        c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(CURRENT, id).commit();
+    }
+
+    /** the current game's folder (files/games/none while none is installed) */
     static File gameDir(Context c) {
-        return new File(c.getFilesDir(), "game");
+        return gameDir(c, current(c));
+    }
+
+    static File gameDir(Context c, String id) {
+        return new File(gamesDir(c), id == null || id.isEmpty() || id.contains("/") || id.startsWith(".") ? "none" : id);
     }
 
     static JSONObject manifest(Context c) {
-        File f = new File(gameDir(c), "package.json");
+        return read(new File(gameDir(c), "package.json"));
+    }
+
+    static JSONObject manifest(Context c, String id) {
+        return read(new File(gameDir(c, id), "package.json"));
+    }
+
+    /** a game removed: its package and the player's data beside it (saves, settings) */
+    static void remove(Context c, String id) {
+        if (games(c).contains(id)) deleteTree(gameDir(c, id));
+    }
+
+    private static JSONObject read(File f) {
         if (!f.isFile()) return null;
         try (InputStream in = new FileInputStream(f)) {
             byte[] b = new byte[(int) Math.min(f.length(), 1 << 20)];
@@ -55,8 +122,8 @@ final class PackageStore {
         }
     }
 
-    static String mainLibrary(Context c) {
-        JSONObject m = manifest(c);
+    static String mainLibrary(Context c, String id) {
+        JSONObject m = manifest(c, id);
         String lib = m != null ? m.optString("main", "") : "";
         return lib.isEmpty() || lib.contains("/") ? "libNightfire.so" : lib;
     }
@@ -130,7 +197,7 @@ final class PackageStore {
     }
 
     private static File fresh(Context c) throws IOException {
-        File work = new File(c.getFilesDir(), "game.import");
+        File work = new File(c.getFilesDir(), "games.import");
         deleteTree(work);
         if (!work.mkdirs()) throw new IOException("no room for the import in the app's storage");
         return work;
@@ -157,7 +224,10 @@ final class PackageStore {
         if (files != null)
             for (File f : files)
                 if (f.getName().endsWith(".so")) f.setReadOnly();
-        File game = gameDir(c);
+        // its game's folder: the package's short name (the first NightFire packages had none)
+        String id = idOf(m.optString("short", ""));
+        if (id.isEmpty()) id = "NightFire";
+        File game = gameDir(c, id);
         if (game.isDirectory())
             for (String k : KEPT) {
                 File from = new File(game, k), to = new File(work, k);
@@ -165,6 +235,7 @@ final class PackageStore {
             }
         deleteTree(game);
         if (!work.renameTo(game)) throw new IOException("could not put the package in place");
+        setCurrent(c, id);
     }
 
     private static File inside(File dir, String name) throws IOException {

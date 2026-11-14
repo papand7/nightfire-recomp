@@ -39,9 +39,9 @@ public class LauncherActivity extends Activity {
     private static final int PICK_ZIP = 1, PICK_FOLDER = 2;
     private static final int NAVY = 0xFF080F1C, PANEL = 0xFF101F34, BORDER = 0xFF253B56,
             ACCENT = 0xFF438DFF, CYAN = 0xFF87CFFF, TEXT = 0xFFF0F5FF, DIM = 0xFFABBDD3;
-    private TextView status, packageTitle, badge, importStatus;
+    private TextView status, packageTitle, badge, importStatus, header, tagline;
     private ProgressBar progress;
-    private Button play, importZip, importFolder, settings;
+    private Button play, importZip, importFolder, settings, switchGame;
     private boolean resumed;
     private final Runnable importObserver = this::renderImport;
 
@@ -73,7 +73,8 @@ public class LauncherActivity extends Activity {
         LinearLayout mission = card();
         add(mission, text("MISSION CONTROL", 11, CYAN, true), 0);
         add(mission, text("Your next mission awaits.", 30, TEXT, true), 12);
-        add(mission, text("007: NightFire, ready for a new screen.", 15, DIM, false), 10);
+        tagline = text("", 15, DIM, false);
+        add(mission, tagline, 10);
         badge = text("", 11, CYAN, true);
         badge.setPadding(dp(12), dp(7), dp(12), dp(7));
         badge.setBackground(shape(0xFF192E49, BORDER, 8));
@@ -85,14 +86,18 @@ public class LauncherActivity extends Activity {
         status = text("", 14, DIM, false);
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         add(mission, status, 8);
-        play = button("Play NightFire", true);
+        play = button("Play", true);
         play.setOnClickListener(v -> {
             if (ImportTask.active) return;
-            if (PackageStore.problem(this) == null) startActivity(new Intent(this, GameActivity.class));
+            if (PackageStore.problem(this) == null)
+                startActivity(new Intent(this, GameActivity.class).putExtra(GameActivity.EXTRA_GAME, PackageStore.current(this)));
             else pick(PICK_ZIP);
         });
         add(mission, play, 24);
         add(mission, text("Touch controls and gamepad supported.", 12, DIM, false), 12);
+        switchGame = button("Switch game", false);
+        switchGame.setOnClickListener(v -> switchGame());
+        add(mission, switchGame, 18);
 
         LinearLayout setup = card();
         add(setup, text("Your game", 21, TEXT, true), 0);
@@ -118,7 +123,8 @@ public class LauncherActivity extends Activity {
         add(setup, settings, 18);
 
         ResponsivePage page = new ResponsivePage(columns, mission, setup);
-        add(page, text("007 / NIGHTFIRE", 24, TEXT, true), 0);
+        header = text("007", 24, TEXT, true);
+        add(page, header, 0);
         TextView edition = text("ANDROID EDITION", 11, CYAN, true);
         edition.setLetterSpacing(0.16f);
         add(page, edition, 6);
@@ -180,12 +186,17 @@ public class LauncherActivity extends Activity {
         boolean ready = why == null && m != null;
         badge.setText(ready ? "READY TO PLAY" : m == null ? "SETUP REQUIRED" : "PACKAGE NEEDS ATTENTION");
         badge.setTextColor(ready ? 0xFFA0E5CB : CYAN);
-        packageTitle.setText(ready ? m.optString("title", "NightFire") : m == null ? "Add your game" : "Check your package");
+        String title = m != null ? m.optString("title", "007: NightFire") : null;
+        header.setText(title != null ? title.toUpperCase(java.util.Locale.ROOT).replace(": ", " / ") : "007");
+        tagline.setText(title != null ? title + ", ready for a new screen." : "Your 007 games, ready for a new screen.");
+        packageTitle.setText(ready ? title : m == null ? "Add your game" : "Check your package");
         String date = m != null ? m.optString("built", "") : "";
         if (date.length() >= 10) date = date.substring(0, 10);
         status.setText(ready ? "Installed on this device" + (date.isEmpty() ? "." : " \u00b7 Built " + date)
                 : m == null ? "Import the package you created on your PC to get started." : why);
-        play.setText(ready ? "Play NightFire" : "Import game package");
+        play.setText(ready ? "Play " + title.replaceFirst("^007: *", "") : "Import game package");
+        switchGame.setVisibility(PackageStore.games(this).size() > 1 ? View.VISIBLE : View.GONE);
+        enable(switchGame, true);
         enable(play, true);
         enable(settings, ready);
         importZip.setText(ready ? "Import an updated package" : "Import game package");
@@ -198,7 +209,7 @@ public class LauncherActivity extends Activity {
         progress.setVisibility(busy ? View.VISIBLE : View.GONE);
         importStatus.setVisibility(busy ? View.VISIBLE : View.GONE);
         if (busy) {
-            enable(play, false); enable(settings, false);
+            enable(play, false); enable(settings, false); enable(switchGame, false);
             play.setText("Importing...");
             badge.setText("IMPORT IN PROGRESS");
             packageTitle.setText("Getting your game ready");
@@ -269,6 +280,42 @@ public class LauncherActivity extends Activity {
                 UI.post(() -> { active = false; finished = true; error = result; notifyUi(); });
             }, "game-import").start();
         }
+    }
+
+    /** the installed games: one picked as the current one, or the current one removed */
+    private void switchGame() {
+        if (ImportTask.active) return;
+        java.util.List<String> ids = PackageStore.games(this);
+        if (ids.isEmpty()) return;
+        String[] titles = new String[ids.size()];
+        String current = PackageStore.current(this);
+        int checked = 0;
+        for (int i = 0; i < ids.size(); i++) {
+            JSONObject m = PackageStore.manifest(this, ids.get(i));
+            titles[i] = m != null ? m.optString("title", ids.get(i)) : ids.get(i);
+            if (ids.get(i).equals(current)) checked = i;
+        }
+        new AlertDialog.Builder(this).setTitle("Your games")
+            .setSingleChoiceItems(titles, checked, (d, w) -> {
+                PackageStore.setCurrent(this, ids.get(w));
+                d.dismiss();
+                refresh();
+            })
+            .setNeutralButton("Remove current game", (d, w) -> removeGame())
+            .setNegativeButton("Close", null).show();
+    }
+
+    private void removeGame() {
+        String id = PackageStore.current(this);
+        JSONObject m = PackageStore.manifest(this);
+        if (id == null || ImportTask.active) return;
+        String title = m != null ? m.optString("title", id) : id;
+        new AlertDialog.Builder(this).setTitle("Remove " + title + "?")
+            .setMessage("Its package, saves and settings are deleted from this device. Import its package again to play it.")
+            .setPositiveButton("Remove", (d, w) -> {
+                PackageStore.remove(this, id);
+                refresh();
+            }).setNegativeButton("Cancel", null).show();
     }
 
     private void settings() {

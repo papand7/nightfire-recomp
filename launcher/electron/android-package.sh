@@ -5,8 +5,11 @@ assets=$2
 output=$3
 pack=$4
 abi=$5
+bundles=${6:-}  # no source in the install (a prebuilt Windows package): the launcher's source bundles of the game
+short=${7:-game}
 if command -v wslpath >/dev/null 2>&1; then
-    repo=$(wslpath -u "$repo")
+    [ -z "$repo" ] || repo=$(wslpath -u "$repo")
+    [ -z "$bundles" ] || bundles=$(wslpath -u "$bundles")
     assets=$(wslpath -u "$assets")
     output=$(wslpath -u "$output")
     [ -z "$pack" ] || pack=$(wslpath -u "$pack")
@@ -16,6 +19,26 @@ for tool in clang clang++ cmake ninja git python3 zip; do
 done
 # WSL's noninteractive shell may not inherit Android Studio's environment.
 export ANDROID_HOME=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}
+# the game's source from the bundles, checked out in Linux (kept for the next package, updated from newer bundles)
+if [ -z "$repo" ] && [ -n "$bundles" ]; then
+    repo=$HOME/.cache/xbe-android/source/$short
+    echo "Checking out the game's source in $repo"
+    if [ -d "$repo/.git" ]; then
+        git -C "$repo" fetch -q --no-recurse-submodules "$bundles/nightfire-recomp.bundle" HEAD && git -C "$repo" -c advice.detachedHead=false checkout -q -f FETCH_HEAD
+    else
+        rm -rf "$repo" && mkdir -p "$(dirname "$repo")"
+        git -c advice.detachedHead=false clone -q "$bundles/nightfire-recomp.bundle" "$repo"
+    fi
+    sdk_rev=$(git -C "$repo" ls-tree HEAD sdk | awk '{print $3}')
+    if [ ! -d "$repo/sdk/.git" ]; then
+        rm -rf "$repo/sdk"
+        git clone -q -n "$bundles/XboxXBERecomp.bundle" "$repo/sdk"
+    else
+        git -C "$repo/sdk" fetch -q "$bundles/XboxXBERecomp.bundle" HEAD
+    fi
+    git -C "$repo/sdk" -c advice.detachedHead=false checkout -q -f "${sdk_rev:-FETCH_HEAD}"
+    ln -sfn "$assets" "$repo/assets"
+fi
 [ -f "$repo/sdk/scripts/android/package.sh" ] || { echo "Rebuild the desktop game to restore its source." >&2; exit 1; }
 # the Android NDK: where Android Studio, a manual install or a distro puts it (the newest one found)
 find_ndk() {

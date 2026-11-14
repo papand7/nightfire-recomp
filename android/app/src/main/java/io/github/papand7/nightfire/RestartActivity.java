@@ -32,7 +32,8 @@ public class RestartActivity extends Activity {
                     return;
                 }
                 Intent i = new Intent(RestartActivity.this, GameActivity.class);
-                i.putExtra(GameActivity.EXTRA_LIB, getIntent().getStringExtra(GameActivity.EXTRA_LIB));
+                i.putExtra(GameActivity.EXTRA_GAME, getIntent().getStringExtra(GameActivity.EXTRA_GAME));
+                i.putExtra(GameActivity.EXTRA_LIB,getIntent().getStringExtra(GameActivity.EXTRA_LIB));
                 i.putExtra(GameActivity.EXTRA_ENV, getIntent().getStringArrayExtra(GameActivity.EXTRA_ENV));
                 i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                 startActivity(i);

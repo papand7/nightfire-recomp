@@ -469,7 +469,7 @@ async function switchGame(id) {
     const r = await nf.setGame(id);
     document.querySelectorAll('#gametabs button').forEach(b => b.classList.toggle('on', b.dataset.game === id));
     $('hero-title').textContent = GAME_INFO[id].title;
-    $('nav-android').hidden = !nightfire();
+    $('nav-android').hidden = !(r && r.android);
     S = SS[id] || await nf.state(id) || null;
     if (S) SS[id] = S;
     logEl.textContent = LOGS[id] || '';
@@ -481,7 +481,7 @@ async function switchGame(id) {
     files = null; edits = { s: {}, g: {} }; tab = schema()[0].id;
     $('savebar').hidden = true;
     const page = document.querySelector('#nav > button.active');
-    show(page && (page.dataset.page !== 'android' || nightfire()) ? page.dataset.page : 'home');
+    show(page && (page.dataset.page !== 'android' || (r && r.android)) ? page.dataset.page : 'home');
     render();
 }
 document.querySelectorAll('#gametabs button').forEach(b => b.onclick = () => switchGame(b.dataset.game));
