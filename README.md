@@ -5,8 +5,8 @@ Two Xbox Bond games, running natively on PC from one launcher:
 - **007: NightFire**, remastered: ray traced lighting, sharper and richer graphics, HD textures, story co-op, LAN
   multiplayer, a modern menu and full mouse, keyboard, controller and steering wheel support. For **Windows**, with
   **Linux**, **macOS** and **Android** in beta.
-- **007: Agent Under Fire** (new): aim down sights, story co-op and LAN multiplayer. For **Windows**, with Linux,
-  macOS and Android coming. See [Agent Under Fire](#007-agent-under-fire).
+- **007: Agent Under Fire** (new): aim down sights, story co-op and LAN multiplayer. For **Windows**, with
+  **Linux**, **macOS** and **Android** in beta. See [Agent Under Fire](#007-agent-under-fire).
 
 Everything is set from the games' own menus.
 
@@ -118,8 +118,9 @@ Everything is set from the games' own menus.
 
 ## 007: Agent Under Fire
 
-The original Xbox 007: Agent Under Fire, running natively on PC, in the same launcher as NightFire. **Windows** for
-now.
+The original Xbox 007: Agent Under Fire, running natively on PC, in the same launcher as NightFire. **Windows**,
+with **Linux**, **macOS** (untested) and **Android** (untested on a phone) in beta. The launcher builds it from your
+European (PAL) disc; the US disc is not supported in the launcher yet.
 
 ![Agent Under Fire: Original and Ultra graphics, the first mission](docs/images/auf/auf-compare-mission1.webp)
 
