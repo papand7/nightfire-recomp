@@ -25,16 +25,6 @@
 #include <ctime>
 #include <string>
 
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#endif
-
 #include "app/app.h"
 #include "common/auf.h"
 #include "common/settings_page.h"
@@ -61,14 +51,8 @@ bool InFrontend() {
 }
 
 bool KeyDown(uint32_t choice) {
-#ifdef _WIN32
     const int vk = auf::KeyOf(choice);
-    return vk && (GetAsyncKeyState(vk) & 0x8000) && GetForegroundWindow() == static_cast<HWND>(app::Window()) &&
-           !app::OverlayOpen();
-#else
-    (void)choice;
-    return false;
-#endif
+    return vk && input::KeyDown(vk) && input::GameFocused() && !app::OverlayOpen();
 }
 
 void Presence() {
@@ -143,12 +127,7 @@ uint32_t g_frame = 0;
 
 bool Held(int vk) {
     if (Injected(vk, g_frame)) return true;
-#ifdef _WIN32
-    return vk && (GetAsyncKeyState(vk) & 0x8000) && GetForegroundWindow() == static_cast<HWND>(app::Window()) && !app::OverlayOpen();
-#else
-    (void)vk;
-    return false;
-#endif
+    return vk && input::KeyDown(vk) && input::GameFocused() && !app::OverlayOpen();
 }
 
 void WeaponKeys(X86Context& ctx, uint32_t player) {

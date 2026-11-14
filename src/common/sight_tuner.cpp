@@ -4,16 +4,6 @@
 #include <chrono>
 #include <cstdio>
 
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#endif
-
 #include "common/auf.h"
 #include "core/input.h"
 
@@ -25,24 +15,21 @@ namespace auf {
 bool sight_tuner = false;
 SightTunerView sight_view;
 
-#ifdef _WIN32
 // the tuner's keys (src/bond/aim.cpp, as NightFire's input::HoldBackToolKeys): arrows, Home, End, Enter, Delete, comma,
-// full stop, I J K L U O
+// full stop, I J K L U O (Windows virtual keys)
 bool ToolKey(uint16_t k) {
     switch (k) {
-        case VK_LEFT: case VK_RIGHT: case VK_UP: case VK_DOWN: case VK_HOME: case VK_END: case VK_RETURN: case VK_DELETE:
-        case VK_OEM_COMMA: case VK_OEM_PERIOD: case 'I': case 'J': case 'K': case 'L': case 'U': case 'O': return true;
+        case 0x25: case 0x27: case 0x26: case 0x28: case 0x24: case 0x23: case 0x0D: case 0x2E:  // arrows, Home, End, Enter, Delete
+        case 0xBC: case 0xBE: case 'I': case 'J': case 'K': case 'L': case 'U': case 'O': return true;
         default: return false;
     }
 }
-#endif
 void SightTunerPad(int port, input::Pad& p) {
-#ifdef _WIN32
     if (port != 0 || !sight_tuner || !sight_view.on) return;
     // each control bound to a tool key that is held now gives the game nothing
     for (int c = 0; c < input::kControls; c++) {
         bool held = false;
-        for (uint16_t k : input::ControlKeys(c)) held |= k && ToolKey(k) && (GetAsyncKeyState(k) & 0x8000);
+        for (uint16_t k : input::ControlKeys(c)) held |= k && ToolKey(k) && input::KeyDown(k);
         if (!held) continue;
         if (c < 8) p.buttons &= uint16_t(~(1u << c));
         else if (c < input::kLSLeft) p.analog[c - input::kA] = 0;
@@ -51,9 +38,6 @@ void SightTunerPad(int port, input::Pad& p) {
         else if (c <= input::kRSRight) p.rx = 0;
         else p.ry = 0;
     }
-#else
-    (void)port, (void)p;
-#endif
 }
 
 void SightTunerUi(double) {

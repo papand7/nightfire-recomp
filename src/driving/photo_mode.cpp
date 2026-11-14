@@ -18,17 +18,7 @@
 #include <cstring>
 #include <chrono>
 
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#else
-constexpr int VK_F10 = 0x79, VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_SPACE = 0x20;
-#endif
+constexpr int VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_SPACE = 0x20;  // Windows virtual keys (core/input.h's KeyDown)
 
 #include "app/app.h"
 #include "common/auf.h"
@@ -68,14 +58,7 @@ struct Photo {
     std::chrono::steady_clock::time_point last{};
 } g;
 
-bool Key(int vk) {
-#ifdef _WIN32
-    return (GetAsyncKeyState(vk) & 0x8000) != 0 && GetForegroundWindow() == static_cast<HWND>(app::Window());
-#else
-    (void)vk;
-    return false;
-#endif
-}
+bool Key(int vk) { return input::KeyDown(vk) && input::GameFocused(); }
 
 void Leave() {
     kernel::G<uint32_t>(kState) = g.state_before;

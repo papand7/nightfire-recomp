@@ -40,19 +40,10 @@
 #include <map>
 #include <string>
 
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#endif
-
 #include "app/app.h"
 #include "bond/ragdoll.h"
 #include "common/auf.h"
+#include "core/input.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
 #include "xdk/hle.h"
@@ -283,21 +274,8 @@ int64_t NowMs() {
     using namespace std::chrono;
     return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
-bool Key(int vk) {
-#ifdef _WIN32
-    return (GetAsyncKeyState(vk) & 0x8000) != 0;
-#else
-    (void)vk;
-    return false;
-#endif
-}
-bool Focused() {
-#ifdef _WIN32
-    return GetForegroundWindow() == static_cast<HWND>(app::Window()) && !app::OverlayOpen();
-#else
-    return false;
-#endif
-}
+bool Key(int vk) { return input::KeyDown(vk); }
+bool Focused() { return input::GameFocused() && !app::OverlayOpen(); }
 // player 1's frame while tuning: true when it aims all the time
 bool SightTunerFrame(X86Context& ctx, uint32_t p, float dt) {
     auf::SightTunerView& v = auf::sight_view;

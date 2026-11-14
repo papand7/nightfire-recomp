@@ -30,6 +30,15 @@
 #include "kernel/kernel.h"
 
 namespace {
+// names compared without case (_stricmp, which is Windows' own)
+bool SameName(const char* a, const char* b) {
+    for (; *a && *b; a++, b++)
+        if (std::tolower(static_cast<unsigned char>(*a)) != std::tolower(static_cast<unsigned char>(*b))) return false;
+    return *a == *b;
+}
+}  // namespace
+
+namespace {
 uint32_t U32(const uint8_t* p) { uint32_t v; std::memcpy(&v, p, 4); return v; }
 uint32_t BE32(const uint8_t* p) { return uint32_t(p[0]) << 24 | uint32_t(p[1]) << 16 | uint32_t(p[2]) << 8 | p[3]; }
 uint16_t U16(const uint8_t* p) { uint16_t v; std::memcpy(&v, p, 2); return v; }
@@ -65,7 +74,11 @@ bool ReadRange(const std::string& rel, uint64_t offset, uint32_t len, std::vecto
         out.resize(n);
         return disc->Read(*e, offset, out.data(), n) == n;
     }
-    std::ifstream f(app::GameDir() / rel, std::ios::binary);
+    std::string host = rel;
+#ifndef _WIN32
+    std::replace(host.begin(), host.end(), '\\', '/');  // the disc's separators, a folder's off Windows
+#endif
+    std::ifstream f(app::GameDir() / host, std::ios::binary);
     if (!f) return false;
     f.seekg(0, std::ios::end);
     const uint64_t size = uint64_t(f.tellg());
@@ -93,7 +106,7 @@ bool ReadFromViv(const std::string& viv, const std::string& file, std::vector<ui
         std::string s(name, n);
         at += n + 1;
         std::replace(s.begin(), s.end(), '/', '\\');
-        if (_stricmp(s.c_str(), file.c_str()) == 0) return ReadRange(viv, off, len, out);
+        if (SameName(s.c_str(), file.c_str())) return ReadRange(viv, off, len, out);
     }
     return false;
 }
@@ -116,7 +129,7 @@ bool LoadFont(const std::vector<uint8_t>& xbc, const std::string& name, GameFont
     for (uint32_t i = 0, n = U32(table); i < n; i++) {
         const uint8_t* e = table + 0x10 + i * 16;
         const char* rn = reinterpret_cast<const char*>(table + U32(e));
-        if (_stricmp(rn, xbf.c_str()) == 0) data = table + U32(e + 4), data_size = U32(e + 8);
+        if (SameName(rn, xbf.c_str())) data = table + U32(e + 4), data_size = U32(e + 8);
     }
     if (!data || data_size < 0x20 || std::memcmp(data, "TNOF", 4)) return false;
     f.line = int32_t(U32(data + 0x18)) + 2;

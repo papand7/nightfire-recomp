@@ -5,6 +5,11 @@ project(game LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# x86 builds assume SSE4.2 (NightFire's way: no flag for Apple Silicon or other ARM); a build folder configured when the
+# presets passed it in CMAKE_CXX_FLAGS keeps that
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$" AND NOT CMAKE_CXX_FLAGS MATCHES "-march=")
+    add_compile_options(-march=x86-64-v2)
+endif()
 
 # the disc in assets chooses the programs: the USA disc is default.xbe, bond.xbe and Driving.xbe, each the same game at its own
 # addresses (src/*_usa and config/*_usa*.toml, written by tools/map_bond.py)

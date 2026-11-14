@@ -2,8 +2,9 @@
 #include <array>
 #include <cstdlib>
 #include <string>
+#include <vector>
 
-#ifdef _WIN32
+#ifndef XBE_HEADLESS  // the headless harness has no settings file (nor toml++)
 #include <toml++/toml.hpp>
 #endif
 
@@ -161,7 +162,7 @@ std::array<uint16_t, 2> DrivingKeys(int c) {
 }
 std::array<uint16_t, 2> Keys(int c) { return kDrv ? DrivingKeys(c) : ShooterKeys(c); }
 
-#ifdef _WIN32  // the settings file (the headless harness has none)
+#ifndef XBE_HEADLESS  // the settings file (the headless harness has none)
 // One settings file for the exes, each with its own keys: the runtime reads and writes [keys] as this exe's (only
 // what differs from its defaults); DRIVING.XBE's are kept as [driving_keys] instead, and each exe writes the other's
 // table back as it read it (EoN's way)
@@ -202,6 +203,23 @@ void SaveKeys(void* table) {
 constexpr void (*LoadKeys)(const void*) = nullptr;
 constexpr void (*SaveKeys)(void*) = nullptr;
 #endif
+
+// the on-screen touch buttons (Android; Windows with touch_controls): on foot the keyboard's layout above (R fire, L aim,
+// A action and reload, X crouch, Y jump, B gadget, White next weapon, Black alt. fire, Back center view), driving the
+// car's (R gas, L brake, A fire, B handbrake, Y camera, X gadget, Black next weapon); A and B select and go back in the menus
+std::vector<app::TouchButton> TouchButtons() {
+    using namespace input;
+    if (kDrv)
+        return {{kRT, "Gas", "OK", 0.17f, 0.30f, 0.11f},    {kLT, "Brake", nullptr, 0.40f, 0.14f, 0.08f},
+                {kA, "Fire", "OK", 0.17f, 0.60f, 0.075f},   {kB, "Handbrake", "Back", 0.38f, 0.36f, 0.06f},
+                {kY, "Cam", nullptr, 0.06f, 0.76f, 0.045f}, {kX, "Gadget", nullptr, 0.06f, 0.48f, 0.05f},
+                {kBlack, "Weapon", nullptr, 0.30f, 0.62f, 0.05f}, {kStart, "Pause", nullptr, 0.06f, 0.93f, 0.04f}};
+    return {{kRT, "Fire", nullptr, 0.18f, 0.32f, 0.11f},     {kLT, "Aim", nullptr, 0.18f, 0.60f, 0.07f},
+            {kY, "Jump", nullptr, 0.38f, 0.30f, 0.065f},     {kA, "Action", "OK", 0.38f, 0.10f, 0.065f},
+            {kX, "Crouch", nullptr, 0.06f, 0.50f, 0.055f},   {kB, "Gadget", "Back", 0.06f, 0.14f, 0.06f},
+            {kWhite, "Weapon", nullptr, 0.30f, 0.62f, 0.05f}, {kBlack, "Alt", nullptr, 0.40f, 0.52f, 0.045f},
+            {kBack, "View", nullptr, 0.17f, 0.93f, 0.04f},   {kStart, "Pause", nullptr, 0.06f, 0.93f, 0.04f}};
+}
 }  // namespace
 
 // what the runtime asks of the game; strings must be set, hooks may stay null
@@ -272,4 +290,5 @@ const app::GameInfo app::kGame = {
     .style_from_settings = true,          // the look is the Settings pages' own rows (fx, color_style ...), not graphics.toml
     .rt_gun_left_out = true,              // the hands and gadgets left out of the traced occlusion (they darkened in patches)
     .settings_window = false,             // no F1 window: every setting is in the menus' Settings pages (src/common/settings_page.cpp)
+    .touch_buttons = TouchButtons(),      // the on-screen controls
 };

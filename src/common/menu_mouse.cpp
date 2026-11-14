@@ -25,21 +25,16 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#endif
 
 #include "app/app.h"
-#endif
 
 namespace auf {
 namespace {
 int g_test_key = 0;  // a test's key (AUF_PAD's esc, enter), held this poll
 bool KeyHeld(int vk) {
     if (vk == g_test_key) return true;
-#ifdef _WIN32
-    return GetForegroundWindow() == static_cast<HWND>(app::Window()) && (GetAsyncKeyState(vk) & 0x8000);
-#else
-    (void)vk;
-    return false;
-#endif
+    return input::GameFocused() && input::KeyDown(vk);
 }
 
 // AUF_POINTER=frame:x:y:buttons,... headless: the pointer from each frame of polls on, in 640x480
@@ -203,8 +198,12 @@ bool PointerAt(float& x, float& y) {
     y = 480 * float(c.y) / r.bottom;
     return true;
 #else
-    (void)x, (void)y;
-    return false;
+    // the runtime's cursor in the 2D's 4:3 (the frame's letterbox and wide squeeze taken out), as above
+    float u, v;
+    if (!input::UsingKeyboard() || !input::GameFocused() || !app::FramePoint(u, v)) return false;
+    x = 640 * u;
+    y = 480 * v;
+    return true;
 #endif
 }
 

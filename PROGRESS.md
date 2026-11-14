@@ -35,6 +35,26 @@ Newest first. Each entry: date, what changed, what was learned, what's next.
 
 ## Log
 
+### 2026-11-14 - Linux: builds and plays (WSL2, WSLg), the src portable, touch buttons
+- src: GetAsyncKeyState / GetForegroundWindow gone from src/bond (aim, pc_extras, photo_mode), src/driving/photo_mode,
+  src/common/menu_mouse and sight_tuner: input::KeyDown and input::GameFocused instead (on Windows the same calls).
+  menu_mouse's pointer off Windows is app::FramePoint (the same 640x480 of the 4:3 as the Windows code); its arrow
+  cursor stays Windows' own (main_sdl.cpp shows SDL's). game_info.cpp's settings-file key tables are on unless
+  XBE_HEADLESS (were Windows only). game_font.cpp: no _stricmp, the disc's backslashes made slashes for a folder off
+  Windows (the menu fonts were not found on Linux). GameInfo::touch_buttons (on foot as the keyboard layout, driving as
+  NightFire's). CMakePresets no longer Windows only; -march=x86-64-v2 from CMakeLists on x86 (NightFire's way; a
+  build folder whose cache has it keeps it).
+- SDK (auf-nf-merge): AUF-side code that only built on Windows: OverlayInit's Tahoma (ImGui's font off Windows),
+  system_info's display rate, input::MouseFree's ClipCursor, d3d_common's ShaderBlob (compat's ID3DBlob off Windows).
+- Linux, WSL2 (clang 18, /root/auf-game synced by .local/lx/sync.sh): `cmake -S . -B out/build/linux -G Ninja
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++`, then `cmake --build`: all five exes.
+  Under WSLg (.local/lx/run.sh, llvmpipe, about 27 ms a frame): default.xbe, exec into AgentUnderFireBond, the menus and
+  briefing (game fonts), AUF_MISSION=0 plays the first mission (shots like Windows'); AUF_MISSION=1 execs into
+  AgentUnderFireDriving and plays. No traps.
+- Windows: rebuilt, np_run smoke (AUF_MISSION=0) in the first mission as before.
+- Next: macOS (not built: no Mac), Android (no android/ app in this repo; sdk/scripts/android/package.sh reads
+  launcher/game.json's exes), the headless smoke on Linux.
+
 ### 2026-11-13 - Sight tuner finished (built-in sights), no sights on three guns, unlocks, LAN play not saved
 - The hands' idle sway: the arms are sampled at the animation clock [0x3B2288]; while tuning it stands still. The gun's
   lag behind the view (0x27D90, [view+0x340]) is off while tuning.
