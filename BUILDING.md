@@ -43,7 +43,7 @@ Sideloaded only. The app (`android/`, an APK with no game code or files) is a la
 **game package** built on your PC from your own disc and copied to the phone, where the app imports it (a `.zip` or a
 folder) into its private storage. Never share the package: it is your game. The same app plays Agent Under Fire: its
 package (built the same way from its repository, `libAgentUnderFire*.so`) is kept beside NightFire's, a folder a game
-(the package's `short`), and the app's **Switch game** picks the one shown.
+(the package's `short`), and the app's the game tabs at the top pick the one shown.
 
 **The package**: the Windows and Linux launchers have an **Android** page. Install the desktop game first (NightFire or Agent Under Fire; a game installed from its prebuilt Windows package is checked out from the launcher's source bundles in WSL), then choose **Build Android package** and a ZIP destination; optionally include your HD textures. Windows runs the builder in WSL. Install the following requirements inside Linux/WSL (the launcher also checks the default `~/Android/Sdk`):
 
